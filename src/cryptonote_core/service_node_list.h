@@ -61,6 +61,7 @@
 namespace cryptonote {
 class Blockchain;
 class BlockchainDB;
+class BlockchainSQLite;
 struct checkpoint_t;
 };  // namespace cryptonote
 
@@ -1080,8 +1081,13 @@ class service_node_list {
                 cryptonote::network_type nettype,
                 cryptonote::hf hf_version,
                 uint64_t block_height) const;
+
+        // oxen_chain_generator in core_tests does not have a Blockchain,
+        // but we can't include db_sqlite header here because it includes us,
+        // so this overload is necessary.
         block_add_result update_from_block(
-                cryptonote::BlockchainDB const& db,
+                const cryptonote::BlockchainDB& db,
+                cryptonote::BlockchainSQLite* sqlite_db_ptr,
                 cryptonote::network_type nettype,
                 state_set const& state_history,
                 state_set const& state_archive,
@@ -1089,7 +1095,7 @@ class service_node_list {
                 const cryptonote::block& block,
                 const std::vector<cryptonote::transaction>& txs,
                 const service_node_keys* my_keys,
-                const pulse_entropy_feeder* entropy_window);
+                const pulse_entropy_feeder* pulse_entropy_feed);
 
         // Returns true if there was a registration:
         bool process_registration_tx(

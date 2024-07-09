@@ -4388,15 +4388,17 @@ bool Blockchain::check_tx_inputs(
                     }
                 }
 
-                uint64_t unlock_height = 0;
-                if (service_node_list.is_key_image_locked(in_to_key.k_image, &unlock_height)) {
-                    log::error(
-                            log::Cat("verify"),
-                            "Key image: {} is locked in a stake until height: {}",
-                            in_to_key.k_image,
-                            unlock_height);
-                    tvc.m_key_image_locked_by_snode = true;
-                    return false;
+                if (hf_version < hf::hf21_eth) {
+                    uint64_t unlock_height = 0;
+                    if (service_node_list.is_key_image_locked(in_to_key.k_image, &unlock_height)) {
+                        log::error(
+                                log::Cat("verify"),
+                                "Key image: {} is locked in a stake until height: {}",
+                                in_to_key.k_image,
+                                unlock_height);
+                        tvc.m_key_image_locked_by_snode = true;
+                        return false;
+                    }
                 }
             }
         }
@@ -4690,14 +4692,16 @@ bool Blockchain::check_tx_inputs(
 
             service_nodes::service_node_info::contribution_t contribution = {};
             uint64_t unlock_height = 0;
-            if (!service_node_list.is_key_image_locked(
-                        unlock.key_image, &unlock_height, &contribution)) {
-                log::error(
-                        log::Cat("verify"),
-                        "Requested key image: {} to unlock is not locked",
-                        unlock.key_image);
-                tvc.m_invalid_input = true;
-                return false;
+            if (hf_version < hf::hf21_eth) {
+                if (!service_node_list.is_key_image_locked(
+                            unlock.key_image, &unlock_height, &contribution)) {
+                    log::error(
+                            log::Cat("verify"),
+                            "Requested key image: {} to unlock is not locked",
+                            unlock.key_image);
+                    tvc.m_invalid_input = true;
+                    return false;
+                }
             }
 
             if (!crypto::check_signature(

@@ -93,27 +93,43 @@ TEST(SQLITE, CalculateRewards)
   block.reward = 200;
 
   // Check that a single contributor receives 100% of the block reward
-  service_nodes::service_node_info single_contributor{};
-  single_contributor.portions_for_operator = 0;
+  cryptonote::block_payments rewards;
   cryptonote::address_parse_info first_address{};
   cryptonote::get_account_address_from_str(first_address, cryptonote::network_type::TESTNET, "T6TzkJb5EiASaCkcH7idBEi1HSrpSQJE1Zq3aL65ojBMPZvqHNYPTL56i3dncGVNEYCG5QG5zrBmRiVwcg6b1cRM1SRNqbp44");
-  single_contributor.contributors.emplace_back(0, first_address.address);
-  single_contributor.contributors.back().amount = block.reward;
+  {
+    service_nodes::service_node_info single_contributor{};
+    single_contributor.version = service_nodes::service_node_info::version_t::v7_decommission_reason;
+    auto& contributor = single_contributor.contributors.emplace_back();
+    single_contributor.portions_for_operator = 0;
+    contributor.address = first_address.address;
+    contributor.reserved = 0;
+    contributor.amount = block.reward;
+    sqliteDB.add_rewards(block.major_version, block.reward, single_contributor, rewards);
+    EXPECT_EQ(rewards[first_address.address], 200);
+  }
   auto hf_version = block.major_version;
 
   // Check that 3 contributor receives their portion of the block reward
   service_nodes::service_node_info multiple_contributors{};
-  multiple_contributors.contributors.emplace_back(0, first_address.address);
-  multiple_contributors.contributors.back().amount = 33;
+  multiple_contributors.version = service_nodes::service_node_info::version_t::v7_decommission_reason;
+  auto& contributor1 = multiple_contributors.contributors.emplace_back();
+  contributor1.address = first_address.address;
+  contributor1.reserved = 0;
+  contributor1.amount = 33;
   cryptonote::address_parse_info second_address{};
   cryptonote::get_account_address_from_str(second_address, cryptonote::network_type::TESTNET, "T6SjALssDNvPZnTnV7vr459SX632c4X5qjLKfHfzvS32RPuhH3vnJmP9fyiD6ZiMu4XPk8ofH95mNRDg5bUPWkmq1LGAnyP3B");
-  multiple_contributors.contributors.emplace_back(0, second_address.address);
-  multiple_contributors.contributors.back().amount = 33;
+  auto& contributor2 = multiple_contributors.contributors.emplace_back();
+  contributor2.address = second_address.address;
+  contributor2.reserved = 0;
+  contributor2.amount = 33;
   cryptonote::address_parse_info third_address{};
   cryptonote::get_account_address_from_str(third_address, cryptonote::network_type::TESTNET, "T6SkkovCyLWViVDMgeJoF7X4vFrHnKX5jXyktaoGmRuNTdoFEx1xXu1joXdmeH9mx2LLNPq998fKKcsAHwdRJWhk126SapptR");
-  multiple_contributors.contributors.emplace_back(0, third_address.address);
-  multiple_contributors.contributors.back().amount = 34;
-  cryptonote::block_payments rewards;
+  auto& contributor3 = multiple_contributors.contributors.emplace_back();
+  contributor3.address = third_address.address;
+  contributor3.reserved = 0;
+  contributor3.amount = 34;
+
+  rewards.clear();
   sqliteDB.add_rewards(block.major_version, block.reward, multiple_contributors, rewards);
 
   auto& a1 = first_address.address;

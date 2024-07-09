@@ -56,6 +56,7 @@ target_link_libraries(cryptonote_core
     SQLite::SQLite3
     bls_aggregator
     l2_tracker
+    sent_transition
     ethyl
   PRIVATE
     SQLiteCpp
