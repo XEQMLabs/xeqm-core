@@ -3,6 +3,9 @@
 #include <string>
 #include <unordered_map>
 
+#include "crypto/crypto.h"
+#include "crypto/eth.h"
+
 namespace oxen::sent::devnet {
 
 using namespace std::literals;
@@ -19,6 +22,9 @@ const std::unordered_map<std::string, std::string> addresses{
          "0xB7649B5A5DfABAA0713ACFB3040945035b0bBD9e"s},
 
 };
+
+const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys {};
+extern const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys {};
 
 const std::pair<std::uint8_t, std::uint8_t> conv_ratio{2, 3};
 

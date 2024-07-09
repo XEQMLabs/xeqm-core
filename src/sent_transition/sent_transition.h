@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 #include "blockchain_db/sqlite/db_sqlite.h"
-#include "crypto/crypto.h"
+#include "crypto/eth.h"
 #include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core/service_node_list.h"
@@ -42,7 +42,7 @@ static_assert(
         std::numeric_limits<uint64_t>::max() / 100'000000000);
 
 /// Returns the mapping of OXEN -> SENT addresses for the given network type.
-const std::unordered_map<cryptonote::account_public_address, eth::address>& addresses(
+const std::unordered_map<std::string, eth::address>& addresses(
         network_type net);
 
 /// Returns the OXEN -> SENT conversion ratio to apply to conversion-registered wallets at the
@@ -54,6 +54,12 @@ const std::pair<uint8_t, uint8_t>& conversion_ratio(network_type net);
 /// Returns SENT SN contributor transition bonus amounts (from the SN bonus program) as a map of eth
 /// address -> atomic (1e-9) value.
 const std::unordered_map<eth::address, uint64_t>& transition_bonus(network_type net);
+
+/// Returns old not-quite-ed-key to proper ed key mapping, for nodes which were registered before
+/// we switched to proper ed25519.
+const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys(network_type net);
+
+const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys(network_type net);
 
 /// Performs the SENT service node transition, updating the service node list to replace OXEN
 /// addresses with ETH addresses, updating stakes to reflect the SENT staking requirement, and
@@ -67,6 +73,8 @@ const std::unordered_map<eth::address, uint64_t>& transition_bonus(network_type 
 /// or has some nodes that are being disbanded or some combination of both) are added to the
 /// batching database as a one-time transition "reward" that can be redeemed by the wallet.
 ///
+/// Any OXEN staked to nodes which are being kept (i.e. not "zombies") will be permanently locked.
+///
 /// Non-converting pending OXEN rewards balances (i.e. unregistered wallets) are not updated by
 /// this; they will be paid in final batching reward calculations over the regular 3.5-day payout
 /// schedule following the fork.
@@ -74,7 +82,6 @@ const std::unordered_map<eth::address, uint64_t>& transition_bonus(network_type 
 /// Additionally we replace the primary pubkey of any old Oxen nodes with differing "pubkey" and
 /// "ed25519_pubkey" values (generally: SNs set up before Oxen 8) with the ed25519 pubkey; as of the
 /// SENT HF these are unifed, and SNs will start ignoring a non-ed25519 service node pubkey.
-void transition(
-        service_nodes::service_node_list& sns, cryptonote::BlockchainSQLite& sql, network_type net);
+void transition(service_nodes::service_node_list::state_t& sns, cryptonote::BlockchainSQLite& sql, network_type net);
 
 }  // namespace oxen::sent

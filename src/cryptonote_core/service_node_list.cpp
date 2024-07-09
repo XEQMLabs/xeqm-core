@@ -74,6 +74,7 @@
 #include "ringct/rctTypes.h"
 #include "serialization/deque.h"
 #include "serialization/string.h"
+#include "sent_transition/sent_transition.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
@@ -1742,6 +1743,7 @@ bool service_node_list::state_t::process_registration_tx(
     crypto::public_key key;
     auto info_ptr = std::make_shared<service_node_info>();
     service_node_info& info = *info_ptr;
+
     if (!is_registration_tx(
                 nettype,
                 hf_version,
@@ -3502,6 +3504,7 @@ static bool is_expired_node_hf10_onwards(
 
 block_add_result service_node_list::state_t::update_from_block(
         cryptonote::BlockchainDB const& db,
+        cryptonote::BlockchainSQLite* sqlite_db_ptr,
         cryptonote::network_type nettype,
         state_set const& state_history,
         state_set const& state_archive,
@@ -3692,11 +3695,52 @@ block_add_result service_node_list::state_t::update_from_block(
     }
     TracyCZoneEnd(remove_incomplete_oxen_regs_at_hf20);
 
+    // On first block of hf21, do hf21 transition.
+    // TODO: chaingen doesn't have a BlockchainSQLite so it can't test this correctly.
+    auto hf21_height = hard_fork_begins(nettype, hf::hf21_eth);
+    if (hf21_height && height == *hf21_height && sqlite_db_ptr) {
+        auto print_sns = [&]() {
+            log::warning(logcat, "Printing service node list:\n\n");
+            for (const auto& info : service_nodes_infos) {
+                std::string op_addr;
+                std::string op_addr_eth;
+                std::vector<std::string> contributors;
+                for (const auto& c : info.second->contributors) {
+                    auto a = cryptonote::get_account_address_as_str(nettype, 0, c.address);
+                    contributors.emplace_back(fmt::format("{} eth ({}) bene ({}): {}", a, c.ethereum_address, c.ethereum_beneficiary, c.amount));
+                }
+                op_addr = cryptonote::get_account_address_as_str(nettype, 0, info.second->operator_address);
+                op_addr += fmt::format(" eth({})", info.second->operator_ethereum_address);
+
+                auto f = fmt::format("\noperator: {}\ncontributors:[", op_addr);
+                for (const auto& c : contributors) {
+                    f += "\n\t";
+                    f += c;
+                }
+                f += "\n]";
+                f += fmt::format("\ntotal_contributed: {}", info.second->total_contributed);
+                f += fmt::format("\nstaking_requirement: {}", info.second->staking_requirement);
+                f += fmt::format("\ned_pubkey: {}", info.first);
+                f += fmt::format("\nbls_pubkey: {}", info.second->bls_public_key);
+                log::warning(logcat, "{}", f);
+            }
+            log::warning(logcat, "\n\nFinished printing service node list.");
+        };
+
+        log::warning(logcat, "Beginning hf21 transition, height = {}, nettype = {}", height, (uint8_t)nettype);
+        print_sns();
+        auto& sqlite_db = *sqlite_db_ptr;
+        oxen::sent::transition(*this, sqlite_db, nettype);
+        print_sns();
+    }
+
     //
     // Remove expired blacklisted key images
+    // Starting at hf21, blacklist represents permanent stakes converted to SENT
+    // and do not get removed.
     //
     TracyCZoneN(expire_blacklisted_key_images, "Expire blacklisted key images", true);
-    if (hf_version >= hf::hf11_infinite_staking) {
+    if (hf_version >= hf::hf11_infinite_staking && hf_version < hf::hf21_eth) {
         for (auto entry = key_image_blacklist.begin(); entry != key_image_blacklist.end();) {
             if (height >= entry->unlock_height)
                 entry = key_image_blacklist.erase(entry);
@@ -4139,6 +4183,7 @@ block_add_result service_node_list::process_block(
     pulse_entropy_feed.add_block(blockchain.db(), block);
     result = m_state.update_from_block(
             blockchain.db(),
+            blockchain.maybe_sqlite_db(),
             blockchain.nettype(),
             m_transient->state_history,
             m_transient->state_archive,
@@ -4855,6 +4900,7 @@ void service_node_list::alt_block_add(const cryptonote::block_add_info& info) {
     state_t alt_state = *starting_state;
     alt_state.update_from_block(
             blockchain.db(),
+            blockchain.maybe_sqlite_db(),
             blockchain.nettype(),
             m_transient->state_history,
             m_transient->state_archive,
@@ -5862,6 +5908,7 @@ service_node_list::state_t::state_t(service_node_list& snl, state_serialized&& s
             // Nothing to do here (leave consensus reasons as 0s)
             info.version = version_t::v7_decommission_reason;
         }
+
         if (info.version < version_t::v8_ethereum_address) {
             // Nothing to do here
             info.version = version_t::v8_ethereum_address;
@@ -6653,6 +6700,11 @@ bool service_node_info::can_transition_to_state(
 payout service_node_payout_portions(const crypto::public_key& key, const service_node_info& info) {
     service_nodes::payout result = {};
     result.key = key;
+
+    // FIXME: this function shouldn't be called on "zombie" post-eth-bls nodes,
+    //        but early return here if it is
+    if (info.staking_requirement == 0)
+        return result;
 
     // Add contributors and their portions to winners.
     result.payouts.reserve(info.contributors.size());
