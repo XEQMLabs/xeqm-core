@@ -408,6 +408,12 @@ class SNNetwork:
             time.sleep(0.25)
             h = self.eth_sns[0].height()
 
+        rewards_response = self.eth_sns[0].get_accrued_rewards([transition_eth_addr_no_0x])[0]
+        # FIXME: this expected value needs to be recomputed with respect to changes made in preparation for HF21
+        #transition_balance_expected = 40840330916 # 40840330916520 but RPC divides by 1000
+        #assert rewards_response.address == transition_eth_addr_no_0x, "Expected one SENT address with a balance, {}".format(transition_eth_addr_no_0x)
+        #assert rewards_response.balance == transition_balance_expected, "Expected {} to have balance {}, not {}".format(transition_eth_addr_no_0x, transition_balance_expected, rewards_response.balance)
+
         # Wait for all nodes to sync up
         self.sync_nodes(172, timeout=120)
 
