@@ -33,6 +33,7 @@
 #include <cryptonote_config.h>
 #include <cryptonote_core/blockchain.h>
 #include <cryptonote_core/cryptonote_tx_utils.h>
+#include <sent_transition/sent_transition.h>
 #include <fmt/core.h>
 #include <sodium.h>
 #include <sqlite3.h>
@@ -614,9 +615,21 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
             static_cast<int>(block_height % conf.BATCHING_INTERVAL),
             static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
 
+    // The block before HF21, addresses which have not registered an ETH address for the
+    // SENT transition will have their balances paid out, regardless of balance.
+    bool pre_hf21_final_payout = false;
+    if (block_height == *cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth) - 1) {
+        bool pre_hf21_final_payout = true;
+        auto accrued_amounts = prepared_results<std::string_view, int64_t>(
+                "SELECT address, amount FROM batched_payments_accrued ");
+    }
+
     std::vector<cryptonote::batch_sn_payment> payments;
 
+    const auto& sent_addr_map = oxen::sent::addresses(m_nettype);
     for (auto [address, amount] : accrued_amounts) {
+        if (pre_hf21_final_payout && sent_addr_map.contains(std::string{address}))
+            continue;
         auto& p = payments.emplace_back();
         p.amount = reward_money::db_amount(
                 amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR); /* truncate to atomic OXEN */

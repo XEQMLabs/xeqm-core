@@ -31,8 +31,11 @@ const std::unordered_map<std::string, eth::address> addresses{
                 tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
         {"dV3P5VFBT3CE3ZfoJ7K6fWRF79ayXbMNfNFzNebouyY3b3e1cyLdTbHJLj1JGPyuu3YFu31gBWT9NfyeJ1UwxFfR26LWQCXGs"s,
                 tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
+        /* commented out for testing block-before-hf21 payout, but leaving here just to note that this
+         * is one of the staking wallets in the static-startup local-devnet setup
         {"dV2zbppA4YQaDxLyFX19CudHBPyZThzcHLRADpqKLTzpWx6ngtduEk6WXmsxsoEG1p99GzHkqF5oug4g2veWJ47S1mGeDkN9f"s,
                 tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
+        */
         {"dV3corcZMiUJWigoy8yrSGcLYUMQL5qauJwznmxMfeWTAnQMH44C6kqfetXD6dpohCChPnY4tAqBCHGciJjQjipc38AGptqJT"s,
                 tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
         {"dV1xdJpAVHj4gcp58UFrYaT6KGDG6HLTHBsWbvBvHZ4KTdjcfhjphyf4DWLSmV92AiFP3gqSwwx8Y1C3jVLixcaV1ngahEAih"s,
