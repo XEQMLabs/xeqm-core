@@ -628,8 +628,11 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
     const auto& sent_addr_map = oxen::sent::addresses(m_nettype);
     for (auto [address, amount] : accrued_amounts) {
-        if (pre_hf21_final_payout && sent_addr_map.contains(std::string{address}))
-            continue;
+        if (pre_hf21_final_payout) {
+            if (sent_addr_map.contains(std::string{address}))
+                continue;
+            log::debug(logcat, "pre_hf21_final_payout, paying out address {}", address);
+        }
         auto& p = payments.emplace_back();
         p.amount = reward_money::db_amount(
                 amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR); /* truncate to atomic OXEN */
