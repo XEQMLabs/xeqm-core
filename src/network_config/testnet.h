@@ -30,7 +30,7 @@ inline constexpr network_config config{
                 0x61,
                 0x64,
                 0x15,
-                0xbe,
+                0xbf,
         }},
         .GENESIS_TX =
                 "04011e1e01ff00018080c9db97f4fb2702fa27e905f604faa4eb084ee675faca77b0cfea9adec152"
