@@ -9,7 +9,8 @@ add_library(sent_transition
 
 add_library(sent_transition
   sent_transition.cpp
-  localdev.cpp)
+  localdev.cpp
+  testnet.cpp)
 
 target_link_libraries(sent_transition
     PUBLIC
