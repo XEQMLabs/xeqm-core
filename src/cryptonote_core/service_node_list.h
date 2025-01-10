@@ -336,7 +336,8 @@ struct service_node_info  // registration information
     bool is_payable(uint64_t at_height, cryptonote::network_type nettype) const {
         auto& netconf = get_config(nettype);
         return is_active() &&
-               at_height >= active_since_height + netconf.SERVICE_NODE_PAYABLE_AFTER_BLOCKS;
+               at_height >= active_since_height + netconf.SERVICE_NODE_PAYABLE_AFTER_BLOCKS &&
+               staking_requirement > 0;
     }
 
     bool can_transition_to_state(
