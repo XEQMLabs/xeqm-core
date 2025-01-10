@@ -328,9 +328,6 @@ void transition(
 
 
         if (!zombie) {
-            // Compress the [0, 18446744073709551612] value into a [0, 10000] value:
-            sn.portions_for_operator = sni->portions_for_operator / 184467440737095;
-
             auto& stakers = sn.contributors;
             stakers.clear();
 
