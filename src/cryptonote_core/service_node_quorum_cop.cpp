@@ -519,7 +519,10 @@ void quorum_cop::process_quorums(cryptonote::block const& block) {
                                 height - *cryptonote::get_hard_fork_heights(
                                                   m_core.get_nettype(), hf_version)
                                                         .first <
-                                        netconf.HARDFORK_DEREGISTRATION_GRACE_PERIOD) {
+                                                        netconf.HARDFORK_DEREGISTRATION_GRACE_PERIOD &&
+                                                        // 0 stake is a HF21 zombie, so don't apply the grace period.  (Can
+                                                        // remove this after the HF21 is passed and dust settled).
+                                                        info.staking_requirement) {
                                 log::debug(
                                         logcat,
                                         "Decommissioned service node {} is still not passing "
