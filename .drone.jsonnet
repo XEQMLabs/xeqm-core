@@ -208,7 +208,7 @@ local mac_builder(name,
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fcolor-diagnostics -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
         '-DOXEN_LOGGING_FORCE_SUBMODULES=ON ' +
         '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps -DUSE_LTO=' + (if lto then 'ON ' else 'OFF ') +
-        (if werror then '-DWARNINGS_AS_ERRORS=ON ' else '') +
+        '-DWARNINGS_AS_ERRORS=' + (if werror then 'ON ' else 'OFF ') +
         (if build_tests || run_tests then '-DBUILD_TESTS=ON ' else '') +
         cmake_extra,
         'ninja -j' + jobs + ' -v',
@@ -338,7 +338,7 @@ local gui_wallet_step_darwin = {
                   build_tests=false,
                   cmake_extra='-DARCH_ID=armhf'),
 
-  // Static build (on bionic) which gets uploaded to builds.lokinet.dev:
+  // Static build (on focal) which gets uploaded to builds.lokinet.dev:
   debian_pipeline(
     'Static (focal amd64)',
     docker_base + 'ubuntu-focal',
