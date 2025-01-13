@@ -128,7 +128,6 @@ set(SQLITE_OMIT_LOAD_EXTENSION ON CACHE BOOL "" FORCE)
 add_subdirectory(SQLiteCpp EXCLUDE_FROM_ALL)
 oxen_install_library(SQLiteCpp)
 
-
 add_subdirectory(Catch2)
 
 if(BUILD_PYBIND)
@@ -158,3 +157,6 @@ endif()
 # switch to a more primitive method, addr2line which does work.
 set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON CACHE BOOL "")
 add_subdirectory(cpptrace EXCLUDE_FROM_ALL)
+
+option(TRACY_ENABLE "" ON)
+add_subdirectory(tracy)

@@ -11,6 +11,7 @@
 #include <logging/oxen_logger.h>
 #include <oxenc/bt_producer.h>
 #include <oxenmq/oxenmq.h>
+#include <tracy/Tracy.hpp>
 
 #include <chrono>
 #include <ethyl/utils.hpp>
@@ -523,6 +524,7 @@ namespace {
                 std::string_view endpoint,
                 std::string_view message,
                 std::chrono::milliseconds timeout) {
+            ZoneScoped;
             ++active_requests;  // Dummy "request" to avoid potential races with responses arriving
                                 // before we're done sending requests.
 
@@ -810,7 +812,7 @@ void bls_aggregator::rewards_request(
         const address& addr,
         uint64_t height,
         std::function<void(std::shared_ptr<const bls_rewards_response>)> callback) {
-
+    ZoneScoped;
     auto maybe_amount = core.blockchain.sqlite_db().get_accrued_rewards(addr, height);
     auto amount = maybe_amount.value_or(0);
 
@@ -1046,7 +1048,7 @@ void bls_aggregator::exit_liquidation_request(
         const std::variant<crypto::public_key, eth::bls_public_key>& pubkey,
         bls_exit_type type,
         std::function<void(std::shared_ptr<const bls_exit_liquidation_response>)> callback) {
-
+    ZoneScoped;
     const auto* sn_pubkey = std::get_if<crypto::public_key>(&pubkey);
     const auto* bls_pubkey = std::get_if<eth::bls_public_key>(&pubkey);
 
