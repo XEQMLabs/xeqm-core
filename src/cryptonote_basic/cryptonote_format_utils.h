@@ -30,6 +30,7 @@
 
 #pragma once
 #include <unordered_map>
+#include <tracy/Tracy.hpp>
 
 #include "account.h"
 #include "common/guts.h"
@@ -80,6 +81,7 @@ bool is_v1_tx(const std::string_view tx_blob);
 template <typename T>
 bool find_tx_extra_field_by_type(
         const std::vector<tx_extra_field>& tx_extra_fields, T& field, size_t skip_fields = 0) {
+    ZoneScoped;
     if (skip_fields >= tx_extra_fields.size())
         return false;
 

@@ -37,6 +37,7 @@
 #include <shared_mutex>
 #include <string_view>
 #include <type_traits>
+#include <tracy/Tracy.hpp>
 
 #include "common/util.h"
 #include "crypto/crypto.h"
@@ -333,6 +334,7 @@ struct service_node_info  // registration information
 
     template <class Archive>
     void serialize_object(Archive& ar) {
+        ZoneScoped;
         field_varint(
                 ar, "version", version, [](auto& version) { return version < version_t::_count; });
         field_varint(ar, "registration_height", registration_height);

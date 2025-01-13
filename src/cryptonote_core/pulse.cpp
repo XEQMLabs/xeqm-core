@@ -19,6 +19,8 @@ extern "C" {
 #include <sodium/crypto_generichash.h>
 };
 
+#include <tracy/Tracy.hpp>
+
 namespace pulse {
 
 namespace log = oxen::log;
@@ -1110,6 +1112,7 @@ namespace {
 
     round_state wait_for_next_block(
             round_context& context, cryptonote::Blockchain const& blockchain) {
+        ZoneScoped;
         //
         // NOTE: If the top hash stored in the pulse context is the same as the top block's hash
         // then we've already attempted Pulse with the current state of the blockchain and
@@ -1381,6 +1384,7 @@ namespace {
             round_context& context,
             void* quorumnet_state,
             service_nodes::service_node_keys const& key) {
+        ZoneScoped;
         //
         // NOTE: Send
         //
@@ -1451,6 +1455,7 @@ namespace {
     }
 
     round_state wait_for_handshake_bitsets(round_context& context, void* quorumnet_state) {
+        ZoneScoped;
         handle_messages_received_early_for(
                 context.transient.wait_for_handshake_bitsets.stage, quorumnet_state);
         pulse_wait_stage const& stage = context.transient.wait_for_handshake_bitsets.stage;
@@ -1549,6 +1554,7 @@ namespace {
             void* quorumnet_state,
             service_nodes::service_node_keys const& key,
             cryptonote::Blockchain& blockchain) {
+        ZoneScoped;
         assert(context.prepare_for_round.participant == sn_type::producer);
         std::vector<service_nodes::service_node_pubkey_info> list_state =
                 blockchain.service_node_list.get_service_node_list_state({key.pub});
@@ -1628,6 +1634,7 @@ namespace {
             round_context& context,
             service_nodes::service_node_list& node_list,
             void* quorumnet_state) {
+        ZoneScoped;
         handle_messages_received_early_for(
                 context.transient.wait_for_block_template.stage, quorumnet_state);
         pulse_wait_stage const& stage = context.transient.wait_for_block_template.stage;
@@ -1744,6 +1751,7 @@ namespace {
             service_nodes::service_node_list& node_list,
             void* quorumnet_state,
             service_nodes::service_node_keys const& key) {
+        ZoneScoped;
         assert(context.prepare_for_round.participant == sn_type::validator);
 
         //
@@ -1797,6 +1805,7 @@ namespace {
             service_nodes::service_node_list& node_list,
             void* quorumnet_state,
             service_nodes::service_node_keys const& key) {
+        ZoneScoped;
         //
         // NOTE: Send
         //
@@ -1901,6 +1910,7 @@ namespace {
             void* quorumnet_state,
             service_nodes::service_node_keys const& key,
             cryptonote::core& core) {
+        ZoneScoped;
         assert(context.prepare_for_round.participant == sn_type::validator);
 
         //
@@ -2021,8 +2031,8 @@ void main(void* quorumnet_state, cryptonote::core& core) {
     auto& node_list = core.service_node_list;
     for (auto last_state = round_state::null_state;
          last_state != context.state || last_state == round_state::null_state;) {
+        ZoneScoped;
         last_state = context.state;
-
         switch (context.state) {
             case round_state::null_state: context.state = round_state::wait_for_next_block; break;
 

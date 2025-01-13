@@ -806,6 +806,7 @@ add_library(extra INTERFACE)
 target_link_libraries(extra INTERFACE ${CMAKE_DL_LIBS})
 target_link_libraries(extra INTERFACE Boost::boost)
 target_link_libraries(extra INTERFACE Threads::Threads)
+target_link_libraries(extra INTERFACE Tracy::TracyClient)
 
 if(APPLE AND BUILD_SHARED_LIBS)
   # Don't crap out on circular dependencies between internal libs on macOS when doing a shared build

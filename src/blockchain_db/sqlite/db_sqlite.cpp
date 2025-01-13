@@ -36,6 +36,7 @@
 #include <fmt/core.h>
 #include <sodium.h>
 #include <sqlite3.h>
+#include <tracy/Tracy.hpp>
 
 #include <cassert>
 
@@ -476,6 +477,7 @@ void BlockchainSQLite::reset_database() {
 }
 
 void BlockchainSQLite::update_height(uint64_t new_height, bool commit) {
+    ZoneScoped;
     log::trace(
             logcat,
             "BlockchainDB_SQLITE::{} Changing to height: {}, prev: {}",
@@ -488,6 +490,7 @@ void BlockchainSQLite::update_height(uint64_t new_height, bool commit) {
 }
 
 void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t new_height) {
+    ZoneScoped;
     const auto& netconf = get_config(m_nettype);
 
     // NOTE: Execute detach
@@ -539,6 +542,7 @@ void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t ne
 
 // Must be called with the address_str_cache_mutex held!
 std::string BlockchainSQLite::get_address_str(const cryptonote::batch_sn_payment& addr) {
+    ZoneScoped;
     auto& address_str = address_str_cache[addr.address_info.address];
     if (address_str.empty())
         address_str =
@@ -548,6 +552,7 @@ std::string BlockchainSQLite::get_address_str(const cryptonote::batch_sn_payment
 std::pair<int, std::string> BlockchainSQLite::get_address_str(
         const std::variant<eth::address, cryptonote::account_public_address>& addr,
         uint64_t batching_interval) {
+    ZoneScoped;
     std::pair<int, std::string> result;
     auto& [offset, address_str] = result;
     if (auto* eth_addr = std::get_if<eth::address>(&addr)) {
@@ -566,6 +571,7 @@ std::pair<int, std::string> BlockchainSQLite::get_address_str(
 }
 
 void BlockchainSQLite::add_sn_rewards(const block_payments& payments) {
+    ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
     batched_payments_accrued_staging[height + 1] = payments;
 }
@@ -650,6 +656,7 @@ bool BlockchainSQLite::commit()
 
 size_t BlockchainSQLite::batch_payments_accrued_row_count(
         PaymentTableType type, std::optional<uint64_t> height) {
+    ZoneScoped;
     size_t result = 0;
     switch (type) {
         case PaymentTableType::Nil:
@@ -681,6 +688,7 @@ size_t BlockchainSQLite::batch_payments_accrued_row_count(
 }
 
 std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_pre_eth_bls_sn_payments(uint64_t block_height) {
+    ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
     // <= here because we might have crap in the db that we don't clear until we actually add the HF
@@ -804,6 +812,7 @@ void BlockchainSQLite::add_rewards(
         uint64_t distribution_amount,
         const service_nodes::service_node_info& sn_info,
         block_payments& payments) const {
+    ZoneScoped;
     // Find out how much is due for the operator: fee_portions/PORTIONS * reward
     assert(sn_info.portions_for_operator <= old::STAKING_PORTIONS);
     uint64_t operator_fee =
@@ -859,6 +868,7 @@ void BlockchainSQLite::reward_handler(
         const cryptonote::block& block,
         const service_nodes::service_node_list::state_t& service_nodes_state,
         block_payments payments) {
+    ZoneScoped;
     assert(block.major_version >= hf::hf19_reward_batching);
 
     // From here on we calculate everything in milli-atomic OXEN/SENT (i.e. thousanths of an atomic
@@ -925,6 +935,7 @@ void BlockchainSQLite::reward_handler(
 }
 
 block_payments BlockchainSQLite::get_delayed_payments(uint64_t height) {
+    ZoneScoped;
     block_payments result;
     for (auto it : delayed_payments_staging) {
         const std::vector<delayed_payment>& payments = it.second;
@@ -940,6 +951,7 @@ block_payments BlockchainSQLite::get_delayed_payments(uint64_t height) {
 bool BlockchainSQLite::add_block(
         const cryptonote::block& block,
         const service_nodes::service_node_list::state_t& service_nodes_state) {
+    ZoneScoped;
     auto block_height = block.get_height();
     log::trace(logcat, "BlockchainDB_SQLITE::{} called on height: {}", __func__, block_height);
 
@@ -996,6 +1008,7 @@ bool BlockchainSQLite::add_block(
 
 void BlockchainSQLite::add_delayed_payments(
         std::span<const exit_stake> payments, uint64_t at_height, uint64_t delay_blocks) {
+    ZoneScoped;
     log::trace(logcat, "BlockchainSQLite::{} called", __func__);
 
     const int64_t payout_height = at_height + (delay_blocks > 0 ? delay_blocks : 1);
@@ -1009,6 +1022,7 @@ bool BlockchainSQLite::validate_batch_payment(
         const std::vector<std::pair<crypto::public_key, uint64_t>>& miner_tx_vouts,
         const std::vector<cryptonote::batch_sn_payment>& calculated_payments_from_batching_db,
         uint64_t block_height) {
+    ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
     if (miner_tx_vouts.size() != calculated_payments_from_batching_db.size()) {
@@ -1071,6 +1085,7 @@ bool BlockchainSQLite::validate_batch_payment(
 
 bool BlockchainSQLite::save_payments(
         uint64_t block_height, const std::vector<batch_sn_payment>& paid_amounts) {
+    ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
     block_payments& payments = batched_payments_accrued_staging[block_height];

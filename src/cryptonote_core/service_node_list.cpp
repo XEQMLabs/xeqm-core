@@ -34,6 +34,8 @@
 #include <oxenc/endian.h>
 #include <oxenc/hex.h>
 #include <sodium.h>
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyC.h>
 
 #include <algorithm>
 #include <chrono>
@@ -283,6 +285,7 @@ static std::vector<service_nodes::pubkey_and_sninfo> sort_and_filter(
 }
 
 std::vector<pubkey_and_sninfo> service_node_list::state_t::active_service_nodes_infos() const {
+    ZoneScoped;
     return sort_and_filter(
             service_nodes_infos,
             [](const service_node_info& info) { return info.is_active(); },
@@ -483,6 +486,7 @@ bool service_node_list::is_key_image_locked(
 }
 
 std::optional<registration_details> reg_tx_extract_fields(const cryptonote::transaction& tx) {
+    ZoneScoped;
     cryptonote::tx_extra_service_node_register registration;
     if (!get_field_from_tx_extra(tx.extra, registration))
         return std::nullopt;
@@ -597,6 +601,7 @@ void validate_registration(
         uint64_t staking_requirement,
         uint64_t block_timestamp,
         const registration_details& reg) {
+    ZoneScoped;
     if (hf_version == feature::ETH_TRANSITION)
         throw invalid_registration{
                 "New registrations are disabled during OXEN->SENT transition period"};
@@ -784,6 +789,7 @@ bool tx_get_staking_components(
         cryptonote::transaction_prefix const& tx,
         staking_components* contribution,
         crypto::hash const& txid) {
+    ZoneScoped;
     staking_components contribution_unused_ = {};
     if (!contribution)
         contribution = &contribution_unused_;
@@ -808,6 +814,7 @@ bool tx_get_staking_components(
 
 bool tx_get_staking_components(
         cryptonote::transaction const& tx, staking_components* contribution) {
+    ZoneScoped;
     bool result = tx_get_staking_components(tx, contribution, cryptonote::get_transaction_hash(tx));
     return result;
 }
@@ -818,9 +825,13 @@ bool tx_get_staking_components_and_amounts(
         cryptonote::transaction const& tx,
         uint64_t block_height,
         staking_components* contribution) {
+    ZoneScoped;
+
+    TracyCZoneN(setup_dummy_staking_component, "Setup dummy staking component", true);
     staking_components contribution_unused_ = {};
     if (!contribution)
         contribution = &contribution_unused_;
+    TracyCZoneEnd(setup_dummy_staking_component);
 
     if (!tx_get_staking_components(tx, contribution))
         return false;
@@ -839,6 +850,7 @@ bool tx_get_staking_components_and_amounts(
     // r := TX Secret Key   (we pack secret key into tx extra,  'parsed_contribution.tx_key`)
 
     // Calulate 'Derivation := Hs(Ar)G'
+    TracyCZoneN(calc_derivation, "Calc derivation Hs(Ar)G", true);
     crypto::key_derivation derivation;
     if (!crypto::generate_key_derivation(
                 contribution->address.m_view_public_key, contribution->tx_key, derivation)) {
@@ -849,6 +861,7 @@ bool tx_get_staking_components_and_amounts(
                 cryptonote::get_transaction_hash(tx));
         return false;
     }
+    TracyCZoneEnd(calc_derivation);
 
     hw::device& hwdev = hw::get_device("default");
     contribution->transferred = 0;
@@ -865,6 +878,7 @@ bool tx_get_staking_components_and_amounts(
         // as you need the recipients private keys to generate the key image that
         // would be generated, when they want to spend it in the future.
 
+        TracyCZoneN(key_image_proofs_zone, "Get key image proofs", true);
         cryptonote::tx_extra_tx_key_image_proofs key_image_proofs;
         if (!get_field_from_tx_extra(tx.extra, key_image_proofs)) {
             log::info(
@@ -875,6 +889,7 @@ bool tx_get_staking_components_and_amounts(
                     cryptonote::get_transaction_hash(tx));
             stake_decoded = false;
         }
+        TracyCZoneEnd(key_image_proofs_zone);
 
         for (size_t output_index = 0; stake_decoded && output_index < tx.vout.size();
              ++output_index) {
@@ -899,6 +914,7 @@ bool tx_get_staking_components_and_amounts(
 
             crypto::public_key ephemeral_pub_key;
             {
+                TracyCZoneN(derive_public_key, "Derive ephemeral public key", true);
                 // P' := Derivation + B
                 if (!hwdev.derive_public_key(
                             derivation,
@@ -914,6 +930,7 @@ bool tx_get_staking_components_and_amounts(
                             output_index);
                     continue;
                 }
+                TracyCZoneEnd(derive_public_key);
 
                 // Stealth address public key should match the public key referenced in the TX only
                 // if valid information is given.
@@ -941,6 +958,7 @@ bool tx_get_staking_components_and_amounts(
             // The signer can try falsify the key image, but the equation used to
             // construct the key image is re-derived by the verifier, false key
             // images will not match the re-derived key image.
+            TracyCZoneN(check_key_image_proofs, "Check key image proofs", true);
             for (auto proof = key_image_proofs.proofs.begin();
                  proof != key_image_proofs.proofs.end();
                  proof++) {
@@ -957,10 +975,12 @@ bool tx_get_staking_components_and_amounts(
                 key_image_proofs.proofs.erase(proof);
                 break;
             }
+            TracyCZoneEnd(check_key_image_proofs);
         }
     }
 
     if (hf_version < hf::hf11_infinite_staking) {
+        ZoneScopedN("Check unlock time");
         // Pre Infinite Staking, we only need to prove the amount sent is
         // sufficient to become a contributor to the Service Node and that there
         // is sufficient lock time on the staking output.
@@ -991,6 +1011,7 @@ bool tx_get_staking_components_and_amounts(
 /// copy. Returns the non-const service_node_info (which is now held by the passed-in shared_ptr
 /// lvalue ref).
 static service_node_info& duplicate_info(std::shared_ptr<const service_node_info>& info_ptr) {
+    ZoneScoped;
     auto new_ptr = std::make_shared<service_node_info>(*info_ptr);
     info_ptr = new_ptr;
     return *new_ptr;
@@ -1004,6 +1025,7 @@ bool service_node_list::state_t::process_state_change_tx(
         const cryptonote::block& block,
         const cryptonote::transaction& tx,
         const service_node_keys* my_keys) {
+    ZoneScoped;
     if (tx.type != cryptonote::txtype::state_change)
         return false;
 
@@ -1286,7 +1308,7 @@ bool service_node_list::state_t::process_key_image_unlock_tx(
         cryptonote::hf hf_version,
         uint64_t block_height,
         const cryptonote::transaction& tx) {
-
+    ZoneScoped;
     if (hf_version >= feature::ETH_BLS) {
         log::warning(
                 logcat,
@@ -1386,6 +1408,7 @@ bool service_node_list::state_t::is_premature_unlock(
         cryptonote::hf hf_version,
         uint64_t block_height,
         const cryptonote::transaction& tx) const {
+    ZoneScoped;
     if (hf_version != hf::hf19_reward_batching)
         return false;
     crypto::public_key snode_key;
@@ -1432,6 +1455,7 @@ bool is_registration_tx(
         uint64_t staking_requirement,
         crypto::public_key& key,
         service_node_info& info) {
+    ZoneScoped;
     auto maybe_reg = reg_tx_extract_fields(tx);
     if (!maybe_reg)
         return false;
@@ -1598,6 +1622,7 @@ validate_ethereum_registration(
         uint64_t block_height,
         uint32_t index,
         uint64_t staking_requirement) {
+    ZoneScoped;
     auto reg = eth_reg_v2_details(hf_version, new_sn);
 
     validate_registration(
@@ -1649,6 +1674,7 @@ bool service_node_list::state_t::process_registration_tx(
         const cryptonote::transaction& tx,
         uint32_t index,
         const service_node_keys* my_keys) {
+    ZoneScoped;
     const auto hf_version = block.major_version;
     uint64_t const block_timestamp = block.timestamp;
     uint64_t const block_height = block.get_height();
@@ -1737,6 +1763,7 @@ bool service_node_list::state_t::process_registration_tx(
 
 static eth::event::StateChangeVariant get_event_from_tx(const cryptonote::transaction& tx) {
     using namespace eth::event;
+    ZoneScoped;
     StateChangeVariant result;
     bool success = false;
     if (tx.type == cryptonote::txtype::ethereum_new_service_node_v2)
@@ -1761,6 +1788,7 @@ static eth::event::StateChangeVariant get_event_from_tx(const cryptonote::transa
 // change
 static std::tuple<crypto::public_key, std::string, uint64_t> eth_tx_info(
         hf hf_version, const service_node_list& snl, const cryptonote::transaction& tx) {
+    ZoneScoped;
     auto result = std::make_tuple(crypto::null<crypto::public_key>, "unknown"s, uint64_t{0});
     auto& [pk, type, val] = result;
     if (tx.type == cryptonote::txtype::ethereum_new_service_node_v2) {
@@ -1802,6 +1830,7 @@ void service_node_list::state_t::process_new_ethereum_tx(
         const cryptonote::block& block,
         const cryptonote::transaction& tx,
         const service_node_keys* my_keys) {
+    ZoneScoped;
     const auto hf_version = block.major_version;
     uint64_t const block_height = block.get_height();
     auto tx_hash = get_transaction_hash(tx);
@@ -1849,6 +1878,7 @@ void service_node_list::state_t::process_new_ethereum_tx(
 
 bool service_node_list::state_t::process_confirmed_event(
         const eth::event::NewServiceNodeV2& new_sn, const confirm_metadata& confirm) {
+    ZoneScoped;
     if (service_nodes_infos.count(new_sn.sn_pubkey)) {
         log::warning(
                 logcat,
@@ -1907,7 +1937,7 @@ bool service_node_list::state_t::process_confirmed_event(
 
 bool service_node_list::state_t::process_confirmed_event(
         const eth::event::ServiceNodeExitRequest& remreq, const confirm_metadata& confirm) {
-
+    ZoneScoped;
     crypto::public_key snode_pk = find_public_key(remreq.bls_pubkey);
     if (!snode_pk) {
         log::info(
@@ -1968,7 +1998,7 @@ bool service_node_list::state_t::process_confirmed_event(
 
 bool service_node_list::state_t::process_confirmed_event(
         const eth::event::ServiceNodeExit& exit, const confirm_metadata& confirm) {
-
+    ZoneScoped;
     // NOTE: Retrieve node from the staging area
     auto node = std::find_if(
             recently_removed_nodes.begin(),
@@ -2123,6 +2153,7 @@ bool service_node_list::state_t::process_confirmed_event(
 
 bool service_node_list::state_t::process_confirmed_event(
         const eth::event::StakingRequirementUpdated& req_change, const confirm_metadata& confirm) {
+    ZoneScoped;
     auto old_staking_requirement = get_staking_requirement(confirm.nettype);
     staking_requirement = req_change.staking_requirement;
     auto new_staking_requirement = get_staking_requirement(confirm.nettype);
@@ -2149,7 +2180,7 @@ bool service_node_list::state_t::process_confirmed_event(
 
 bool service_node_list::state_t::process_confirmed_event(
         const eth::event::ServiceNodePurge& purge, const confirm_metadata& confirm) {
-
+    ZoneScoped;
     auto pk = find_public_key(purge.bls_pubkey);
     if (!pk) {
         log::info(
@@ -2205,6 +2236,7 @@ bool service_node_list::state_t::process_contribution_tx(
         const cryptonote::block& block,
         const cryptonote::transaction& tx,
         uint32_t index) {
+    ZoneScoped;
     uint64_t const block_height = block.get_height();
     const auto hf_version = block.major_version;
 
@@ -2464,6 +2496,7 @@ static bool verify_block_components(
         pulse::timings& timings,
         std::shared_ptr<const quorum> pulse_quorum,
         std::vector<std::shared_ptr<const quorum>>& alt_pulse_quorums) {
+    ZoneScoped;
     std::string_view block_type = alt_block ? "alt block"sv : "block"sv;
     uint64_t height = block.get_height();
     crypto::hash hash = cryptonote::get_block_hash(block);
@@ -2682,6 +2715,7 @@ void service_node_list::verify_block(
         const cryptonote::block& block,
         bool alt_block,
         cryptonote::checkpoint_t const* checkpoint) const {
+    ZoneScoped;
     if (block.major_version < hf::hf9_service_nodes)
         return;
 
@@ -2727,6 +2761,7 @@ void service_node_list::verify_block(
     pulse::timings timings = {};
     uint64_t height = block.get_height();
     if (block.major_version >= hf::hf16_pulse) {
+        ZoneScopedN("Get pulse block timing info");
         uint64_t prev_timestamp = 0;
         if (alt_block) {
             cryptonote::block prev_block;
@@ -2828,7 +2863,7 @@ void service_node_list::block_add(
         const std::vector<cryptonote::transaction>& txs,
         cryptonote::checkpoint_t const* checkpoint,
         bool skip_verify) {
-
+    ZoneScoped;
     if (block.major_version < hf::hf9_service_nodes) {
         m_state.height = block.get_height();
     } else {
@@ -2978,6 +3013,7 @@ std::vector<crypto::hash> get_pulse_entropy_for_next_block(
         cryptonote::BlockchainDB const& db,
         cryptonote::block const& top_block,
         uint8_t pulse_round) {
+    ZoneScoped;
     uint64_t const top_height = top_block.get_height();
     if (top_height < PULSE_QUORUM_ENTROPY_LAG) {
         log::error(
@@ -3023,6 +3059,7 @@ std::vector<crypto::hash> get_pulse_entropy_for_next_block(
 
 std::vector<crypto::hash> get_pulse_entropy_for_next_block(
         cryptonote::BlockchainDB const& db, crypto::hash const& top_hash, uint8_t pulse_round) {
+    ZoneScoped;
     cryptonote::block top_block;
     if (!find_block_in_db(db, top_hash, top_block)) {
         log::error(
@@ -3045,6 +3082,7 @@ service_nodes::quorum generate_pulse_quorum(
         std::vector<pubkey_and_sninfo> const& active_snode_list,
         std::vector<crypto::hash> const& pulse_entropy,
         uint8_t pulse_round) {
+    ZoneScoped;
     service_nodes::quorum result = {};
     const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
     if (active_snode_list.size() < MIN_NODE_COUNT) {
@@ -3062,15 +3100,18 @@ service_nodes::quorum generate_pulse_quorum(
         return result;
     }
 
+    TracyCZoneN(gen_pulse_candidates, "Generate pulse candidates", true);
     std::vector<pubkey_and_sninfo const*> pulse_candidates;
     pulse_candidates.reserve(active_snode_list.size());
     for (auto& node : active_snode_list) {
         if (node.first != block_leader || pulse_round > 0)
             pulse_candidates.push_back(&node);
     }
+    TracyCZoneEnd(gen_pulse_candidates);
 
     // NOTE: Sort ascending in height i.e. sort preferring the longest time since the validator was
     // in a Pulse quorum.
+    TracyCZoneN(sort_pulse_candidates, "Sort pulse candidates", true);
     std::sort(
             pulse_candidates.begin(),
             pulse_candidates.end(),
@@ -3081,6 +3122,7 @@ service_nodes::quorum generate_pulse_quorum(
                                   sizeof(a->first)) < 0;
                 return a->second->pulse_sorter < b->second->pulse_sorter;
             });
+    TracyCZoneEnd(sort_pulse_candidates);
 
     crypto::public_key block_producer;
     if (pulse_round == 0) {
@@ -3096,6 +3138,7 @@ service_nodes::quorum generate_pulse_quorum(
     // round.
     // - Divide the list in half, select validators from the first half of the list.
     // - Swap the chosen validator into the moving first half of the list.
+    TracyCZoneN(pick_pulse_candidates, "Pick pulse quorum members", true);
     auto running_it = pulse_candidates.begin();
     size_t const partition_index = (pulse_candidates.size() - 1) / 2;
     if (partition_index == 0) {
@@ -3111,6 +3154,7 @@ service_nodes::quorum generate_pulse_quorum(
             running_it++;
         }
     }
+    TracyCZoneEnd(pick_pulse_candidates);
 
     result.workers.push_back(block_producer);
     result.validators.reserve(PULSE_QUORUM_NUM_VALIDATORS);
@@ -3126,6 +3170,7 @@ static void generate_other_quorums(
         std::vector<pubkey_and_sninfo> const& active_snode_list,
         cryptonote::network_type nettype,
         hf hf_version) {
+    ZoneScoped;
     assert(state.block_hash);
 
     // The two quorums here have different selection criteria: the entire checkpoint quorum and the
@@ -3271,6 +3316,7 @@ void service_node_list::state_t::update_from_block(
         const cryptonote::block& block,
         const std::vector<cryptonote::transaction>& txs,
         const service_node_keys* my_keys) {
+    ZoneScoped;
     log::trace(
             logcat,
             "Updating state_t{} from block for height {}",
@@ -3285,6 +3331,7 @@ void service_node_list::state_t::update_from_block(
     // Generate Pulse Quorum and winner before we make any changes to the state because changing the
     // height, processing state changes, and so on can affect the block leader and pulse quorums.
     //
+    TracyCZoneN(get_winner_and_gen_pulse_quorum, "Get winner and generate pulse quorum", true);
     crypto::public_key winner_pubkey = get_next_block_leader().key;
     if (hf_version >= hf::hf16_pulse) {
         if (auto quorum = get_next_pulse_quorum(hf_version, block.pulse.round, db, nettype)) {
@@ -3297,15 +3344,19 @@ void service_node_list::state_t::update_from_block(
                 new_info.pulse_sorter.quorum_index = quorum_index;
             }
 
+            TracyCZoneN(alloc_quorum, "Shared pointer alloc quorum", true);
             quorums.pulse = std::make_shared<service_nodes::quorum>(std::move(*quorum));
+            TracyCZoneEnd(alloc_quorum);
         }
     }
+    TracyCZoneEnd(get_winner_and_gen_pulse_quorum);
 
     ++height;
     block_hash = cryptonote::get_block_hash(block);
 
     // Remove incomplete oxen registrations at hf20, as oxen contributions are no
     // longer allowed at this point.  Contributions to these nodes will be unlocked.
+    TracyCZoneN(remove_incomplete_oxen_regs_at_hf20, "Remove incomplete Oxen regs at HF20", true);
     auto hf20_height = hard_fork_begins(nettype, hf::hf20_eth_transition);
     if (hf20_height && height == *hf20_height) {
         auto info_iter = service_nodes_infos.begin();
@@ -3325,10 +3376,12 @@ void service_node_list::state_t::update_from_block(
             info_iter++;
         }
     }
+    TracyCZoneEnd(remove_incomplete_oxen_regs_at_hf20);
 
     //
     // Remove expired blacklisted key images
     //
+    TracyCZoneN(expire_blacklisted_key_images, "Expire blacklisted key images", true);
     if (hf_version >= hf::hf11_infinite_staking) {
         for (auto entry = key_image_blacklist.begin(); entry != key_image_blacklist.end();) {
             if (height >= entry->unlock_height)
@@ -3337,10 +3390,12 @@ void service_node_list::state_t::update_from_block(
                 entry++;
         }
     }
+    TracyCZoneEnd(expire_blacklisted_key_images);
 
     //
     // Expire Nodes
     //
+    TracyCZoneN(expire_nodes, "Expire nodes", true);
     for (const crypto::public_key& pubkey :
          get_expired_nodes(db, nettype, block.major_version, height)) {
         auto i = service_nodes_infos.find(pubkey);
@@ -3359,10 +3414,12 @@ void service_node_list::state_t::update_from_block(
         need_swarm_update += i->second->is_active();
         erase_info(i, recently_removed_node::type_t::voluntary_exit);
     }
+    TracyCZoneEnd(expire_nodes);
 
     //
     // Advance the list to the next candidate for a reward
     //
+    TracyCZoneN(advance_list_to_next_reward_candidate, "Advance list to next reward candidate", true);
     if (auto it = service_nodes_infos.find(winner_pubkey); it != service_nodes_infos.end()) {
         // set the winner as though it was re-registering at transaction index=UINT32_MAX for
         // this block
@@ -3370,10 +3427,12 @@ void service_node_list::state_t::update_from_block(
         info.last_reward_block_height = height;
         info.last_reward_transaction_index = UINT32_MAX;
     }
+    TracyCZoneEnd(advance_list_to_next_reward_candidate);
 
     // Process any votes to pending eth state changes (this has to be done before we process
     // transactions, because that might add new unconfirmed txes and make the vote index no longer
     // match up).
+    TracyCZoneN(process_pending_eth_state_changes, "Process pending ETH state changes", true);
     if (hf_version >= feature::ETH_BLS) {
         // Basic block validation (long before this) is responsible for ensuring this:
         assert(block.tx_eth_count <= block.tx_hashes.size());
@@ -3463,6 +3522,7 @@ void service_node_list::state_t::update_from_block(
             }
         }
     }
+    TracyCZoneEnd(process_pending_eth_state_changes);
 
     //
     // If our x25519/bls maps are empty then try populating it (which only does something if we're
@@ -3473,12 +3533,15 @@ void service_node_list::state_t::update_from_block(
     // registration in the block, then that'll seed the XPK map and make the `empty` check fail
     // hence failing to migrate over all the keys.
     //
+    TracyCZoneN(init_alt_pk_maps, "Init alt. public key maps", true);
     if (x25519_map.empty() && bls_map.empty())
         initialize_alt_pk_maps();
+    TracyCZoneEnd(init_alt_pk_maps);
 
     //
     // Process TXs in the Block
     //
+    TracyCZoneN(process_txs_in_block, "Process block TXs", true);
     cryptonote::txtype max_tx_type = cryptonote::transaction::get_max_type_for_hf(hf_version);
     cryptonote::txtype staking_tx_type = (max_tx_type < cryptonote::txtype::stake)
                                                ? cryptonote::txtype::standard
@@ -3516,12 +3579,15 @@ void service_node_list::state_t::update_from_block(
             case txtype::_count: break;
         }
     }
+    TracyCZoneEnd(process_txs_in_block);
 
     // Filtered pubkey-sorted vector of service nodes that are active (fully funded and *not*
     // decommissioned).
     std::vector<pubkey_and_sninfo> active_snode_list = sort_and_filter(
             service_nodes_infos, [](const service_node_info& info) { return info.is_active(); });
+
     if (need_swarm_update) {
+        ZoneScopedN("Swarm update");
         crypto::hash const block_hash = cryptonote::get_block_hash(block);
         uint64_t seed = 0;
         std::memcpy(&seed, block_hash.data(), sizeof(seed));
@@ -3543,6 +3609,7 @@ void service_node_list::state_t::update_from_block(
             }
         }
     }
+
     generate_other_quorums(*this, active_snode_list, nettype, hf_version);
     next_block_leader_cache.reset();
     log::debug(
@@ -3556,17 +3623,21 @@ void service_node_list::state_t::update_from_block(
 
 void service_node_list::process_block(
         const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs) {
+    ZoneScoped;
     auto hf_version = block.major_version;
     if (hf_version < hf::hf9_service_nodes)
         return;
 
     // NOTE: Store the state into the recent history
+    TracyCZoneN(store_state_into_recent, "Store recent state history", true);
     m_transient->state_history.insert(m_transient->state_history.end(), m_state);
+    TracyCZoneEnd(store_state_into_recent);
 
     // NOTE: Store the state into the archive if necessary
     const uint64_t keep_quorum_offset = VOTE_LIFETIME + VOTE_OR_TX_VERIFY_HEIGHT_BUFFER;
     const auto& netconf = get_config(blockchain.nettype());
     {
+        ZoneScopedN("Store state into archive");
         // NOTE: To verify the validity of the SNL at a given height, you need the previous N blocks
         // worth of quorum data.
         //
@@ -3618,12 +3689,15 @@ void service_node_list::process_block(
     }
 
     // NOTE: Store quorums from this height if requested (m_store_quorum_history is a CLI flag)
+    TracyCZoneN(store_quorum_history, "Store quorum history", true);
     if (m_store_quorum_history)
         m_transient->old_quorum_states.emplace_back(m_state.height, m_state.quorums);
+    TracyCZoneEnd(store_quorum_history);
 
     // NOTE: Cull recent history
     const uint64_t cull_recent_height = min_recent_height(blockchain.nettype(), m_state.height);
     {
+        ZoneScopedN("Cull recent history");
         state_set& set = m_transient->state_history;
         while (set.size() && set.begin()->height < cull_recent_height)
             set.erase(set.begin());
@@ -3634,6 +3708,7 @@ void service_node_list::process_block(
     // pruned. This ensures that when the blockchain detaches, both systems detach to the same
     // height and resync from the same starting point as they both must update in lockstep.
     {
+        ZoneScopedN("Cull archive history");
         uint64_t cull_height = m_state.height < netconf.HISTORY_ARCHIVE_KEEP_WINDOW
                                      ? 0
                                      : m_state.height - netconf.HISTORY_ARCHIVE_KEEP_WINDOW;
@@ -3652,6 +3727,7 @@ void service_node_list::process_block(
 
     // NOTE: Cull alt-chain state history
     {
+        ZoneScopedN("Cull alt-chain state history");
         std::unordered_map<crypto::hash, state_t>& map = m_transient->alt_state;
         while (map.size() && map.begin()->second.height < cull_recent_height)
             map.erase(map.begin());
@@ -3659,6 +3735,7 @@ void service_node_list::process_block(
 
     // NOTE: Cull old quorums stored
     {
+        ZoneScopedN("Cull old quorums");
         auto& old = m_transient->old_quorum_states;
         if (old.size() > m_store_quorum_history)
             old.erase(old.begin(), old.begin() + (old.size() - m_store_quorum_history));
@@ -3676,6 +3753,7 @@ void service_node_list::process_block(
 }
 
 void service_node_list::blockchain_detached(uint64_t height) {
+    ZoneScoped;
     std::lock_guard lock(m_sn_mutex);
 
     // NOTE: A SNL detach aims to detach to the requested 'height'. For
@@ -3900,6 +3978,7 @@ std::vector<crypto::public_key> service_node_list::state_t::get_expired_nodes(
 }
 
 service_nodes::payout service_node_list::state_t::get_next_block_leader() const {
+    ZoneScoped;
     if (!next_block_leader_cache) {
         crypto::public_key key{};
         service_node_info const* info = nullptr;
@@ -4061,6 +4140,7 @@ static void verify_coinbase_tx_output(
 }
 
 void service_node_list::validate_miner_tx(const cryptonote::miner_tx_info& info) const {
+    ZoneScoped;
     const auto& block = info.block;
     const auto& reward_parts = info.reward_parts;
     const auto& batched_sn_payments = info.batched_sn_payments;
@@ -4398,6 +4478,7 @@ void service_node_list::validate_miner_tx(const cryptonote::miner_tx_info& info)
 }
 
 void service_node_list::alt_block_add(const cryptonote::block_add_info& info) {
+    ZoneScoped;
     // NOTE: The premise is to search the main list and the alternative list for
     // the parent of the block we just received, generate the new Service Node
     // state with this alt-block and verify that the block passes all
@@ -4480,6 +4561,7 @@ static state_serialized serialize_service_node_state_object(
         hf hf_version,
         service_node_list::state_t const& state,
         bool only_serialize_quorums = false) {
+    ZoneScoped;
     state_serialized result = {};
     assert(static_cast<size_t>(result.version) ==
            (static_cast<size_t>(state_serialized::version_t::count) - 1));
@@ -4504,6 +4586,7 @@ static state_serialized serialize_service_node_state_object(
 }
 
 bool service_node_list::store() {
+    ZoneScoped;
     if (!blockchain.has_db())
         return false;  // Haven't been initialized yet
 
@@ -5249,10 +5332,12 @@ service_node_list::state_t::state_t(service_node_list& snl, state_serialized&& s
         recently_removed_nodes{std::move(state.recently_removed_nodes)},
         staking_requirement{state.staking_requirement},
         sn_list{&snl} {
+    ZoneScoped;
     if (state.version == state_serialized::version_t::version_0)
         block_hash = sn_list->blockchain.get_block_id_by_height(height);
 
     for (auto& pubkey_info : state.infos) {
+        ZoneScopedN("Load SN into SNL");
         using version_t = service_node_info::version_t;
         auto& info = const_cast<service_node_info&>(*pubkey_info.info);
         if (info.version < version_t::v1_add_registration_hf_version) {
@@ -5307,6 +5392,7 @@ void service_node_list::state_t::initialize_alt_pk_maps() {
     // Compute the x25519 -> pubkey mappings for this state for post-merged-pubkey hardforks.
     // (Before that the primary and Ed keys might differ, and we need the Ed key to get the correct
     // X key, which only happens once we get a proof).
+    ZoneScoped;
     assert(x25519_map.empty());
     if (!sn_list ||
         !cryptonote::is_hard_fork_at_least(sn_list->blockchain.nettype(), feature::ETH_BLS, height))
@@ -5338,6 +5424,7 @@ void service_node_list::state_t::insert_info(
 
 service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
         const service_nodes_infos_t::iterator& it, recently_removed_node::type_t exit_type) {
+    ZoneScoped;
     const auto& snpk = it->first;
 
     cryptonote::network_type nettype =
@@ -5383,9 +5470,10 @@ service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
 }
 
 bool service_node_list::load(const uint64_t current_height) {
+    ZoneScoped;
     log::info(logcat, "service_node_list::load()");
     reset(false);
-    if (!blockchain.has_db()) {
+    if (!blockchain.has_db() || true) {
         return false;
     }
 
@@ -5401,6 +5489,7 @@ bool service_node_list::load(const uint64_t current_height) {
     uint64_t archive_max_height = 0;
     uint64_t archive_with_quorums_only = 0;
     if (db.get_service_node_data(blob, true /*long_term*/)) {
+        ZoneScopedN("Load long term SNL blob");
         bytes_loaded += blob.size();
         try {
             data_for_serialization data_in = {};
@@ -5476,6 +5565,7 @@ bool service_node_list::load(const uint64_t current_height) {
     uint64_t recent_min_height = 0;
     assert(data_in.states.size());
     if (data_in.states.size()) {
+        ZoneScopedN("Deserialize SNL states");
         if (data_in.states.back().only_stored_quorums) {
             log::warning(logcat, "Unexpected last serialized state only has quorums loaded");
             return false;
@@ -5553,6 +5643,7 @@ bool service_node_list::load(const uint64_t current_height) {
 }
 
 void service_node_list::reset(bool delete_db_entry) {
+    ZoneScoped;
     m_transient = std::make_unique<service_node_list_transient_storage>();
     m_state = state_t{this};
 
