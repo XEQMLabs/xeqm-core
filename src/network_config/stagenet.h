@@ -70,8 +70,8 @@ inline constexpr network_config config{
         // Much shorter than mainnet so that you can test this more easily.
         .ETH_EXIT_BUFFER = 2h / mainnet::config.TARGET_BLOCK_TIME,
         .ETHEREUM_CHAIN_ID = 421614,
-        .ETHEREUM_REWARDS_CONTRACT = "0x4abfFB7f922767f22c7aa6524823d93FDDaB54b1"sv,
-        .ETHEREUM_POOL_CONTRACT = "0x38cD8D3F93d591C18cf26B3Be4CB2c872aC37953"sv,
+        .ETHEREUM_REWARDS_CONTRACT = "0x9d8aB00880CBBdc2Dcd29C179779469A82E7be35"sv,
+        .ETHEREUM_POOL_CONTRACT = "0xaAD853fE7091728dac0DAa7b69990ee68abFC636"sv,
         .L2_REWARD_POOL_UPDATE_BLOCKS = testnet::config.L2_REWARD_POOL_UPDATE_BLOCKS,
         .L2_TRACKER_SAFE_BLOCKS = mainnet::config.L2_TRACKER_SAFE_BLOCKS,
         .L2_NODE_LIST_PURGE_BLOCKS = testnet::config.L2_NODE_LIST_PURGE_BLOCKS,
