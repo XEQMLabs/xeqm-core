@@ -540,8 +540,7 @@ std::pair<int, std::string> BlockchainSQLite::get_address_str(
     } else {
         auto* oxen_addr = std::get_if<cryptonote::account_public_address>(&addr);
         assert(oxen_addr);
-        offset = batching_interval == 0 ? 0
-                                        : static_cast<int>(oxen_addr->modulus(batching_interval));
+        offset = static_cast<int>(oxen_addr->modulus(batching_interval));
         auto& cached = address_str_cache[*oxen_addr];
         if (cached.empty())
             cached = cryptonote::get_account_address_as_str(m_nettype, 0, *oxen_addr);
