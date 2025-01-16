@@ -796,7 +796,7 @@ void BlockchainSQLite::reward_handler(
     std::lock_guard a_s_lock{address_str_cache_mutex};
 
     if (block.major_version < feature::ETH_BLS) {
-        // Step 1 (pre-ETH only): Pay out the block producer their tx fees (note that, unlike the
+        // Step 1: Pay out the block producer their tx fees (note that, unlike the
         // below, this applies even if the SN isn't currently payable).
         constexpr uint64_t base_sn_reward = oxen::SN_REWARD_HF15 * BATCH_REWARD_FACTOR;
         if (block_reward < base_sn_reward)
@@ -819,9 +819,26 @@ void BlockchainSQLite::reward_handler(
                         payments);
         }
         block_reward = base_sn_reward;
+
+        // Step 2: Add Governance reward to the list
+        if (m_nettype != cryptonote::network_type::FAKECHAIN) {
+            if (parsed_governance_addr.first != block.major_version) {
+                cryptonote::get_account_address_from_str(
+                        parsed_governance_addr.second,
+                        m_nettype,
+                        cryptonote::get_config(m_nettype).governance_wallet_address(
+                                block.major_version));
+                parsed_governance_addr.first = block.major_version;
+            }
+
+            uint64_t foundation_reward =
+                    cryptonote::governance_reward_formula(block.major_version) *
+                    BATCH_REWARD_FACTOR;
+            payments[parsed_governance_addr.second.address] += foundation_reward;
+        }
     }
 
-    // Step 2: Iterate over the payable (active for >=24h) N service nodes and pay each node 1/N
+    // Step 3: Iterate over the payable (active for >=24h) N service nodes and pay each node 1/N
     // fraction of the total block reward.
     const auto payable_service_nodes =
             service_nodes_state.payable_service_nodes_infos(block.get_height(), m_nettype);
@@ -829,21 +846,6 @@ void BlockchainSQLite::reward_handler(
     for (const auto& [node_pubkey, node_info] : payable_service_nodes)
         add_rewards(block.major_version, block_reward / N, *node_info, payments);
 
-    // Step 3: Add Governance reward to the list
-    if (m_nettype != cryptonote::network_type::FAKECHAIN &&
-        block.major_version < feature::ETH_BLS) {
-        if (parsed_governance_addr.first != block.major_version) {
-            cryptonote::get_account_address_from_str(
-                    parsed_governance_addr.second,
-                    m_nettype,
-                    cryptonote::get_config(m_nettype).governance_wallet_address(
-                            block.major_version));
-            parsed_governance_addr.first = block.major_version;
-        }
-        uint64_t foundation_reward =
-                cryptonote::governance_reward_formula(block.major_version) * BATCH_REWARD_FACTOR;
-        payments[parsed_governance_addr.second.address] += foundation_reward;
-    }
     add_sn_rewards(payments);
 }
 
