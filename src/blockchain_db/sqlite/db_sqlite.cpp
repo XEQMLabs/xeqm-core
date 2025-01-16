@@ -388,6 +388,11 @@ void BlockchainSQLite::upgrade_schema() {
                   netconf.HISTORY_ARCHIVE_KEEP_WINDOW));
     }
 
+    // NOTE: Remove deprecated tables, this can be removed post HF21 as everyone
+    // will have upgraded.
+    db.exec(R"(DROP TABLE IF EXISTS batched_payments_accrued_raw;
+               DROP VIEW  IF EXISTS batched_payments_accrued_paid;)");
+
     transaction.commit();
 }
 
@@ -1023,6 +1028,7 @@ bool BlockchainSQLite::save_payments(
                     address_str);
             return false;
         }
+        select_sum->reset();
     }
     return true;
 }
