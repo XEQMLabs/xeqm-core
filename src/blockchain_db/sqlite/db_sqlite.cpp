@@ -49,11 +49,8 @@ BlockchainSQLite::BlockchainSQLite(
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
     height = 0;
 
-    if (!db.tableExists("batched_payments_accrued") || !db.tableExists("batched_payments_raw") ||
-        !db.tableExists("batch_db_info")) {
+    if (!table_exists("batched_payments_accrued"))
         create_schema();
-    }
-
     upgrade_schema();
 
     height = prepared_get<int64_t>("SELECT height FROM batch_db_info");
@@ -92,61 +89,31 @@ void BlockchainSQLite::create_schema() {
 
     auto& netconf = cryptonote::get_config(m_nettype);
 
-    db.exec(fmt::format(
-            R"(
-      CREATE TABLE batched_payments_accrued(
-        address VARCHAR NOT NULL,
-        amount BIGINT NOT NULL,
-        payout_offset INTEGER NOT NULL,
-        PRIMARY KEY(address),
-        CHECK(amount >= 0)
-      );
+    db.exec(R"(CREATE TABLE IF NOT EXISTS batched_payments_accrued(
+                 address VARCHAR NOT NULL,
+                 amount BIGINT NOT NULL,
+                 payout_offset INTEGER NOT NULL,
+                 PRIMARY KEY(address),
+                 CHECK(amount >= 0)
+               );
 
-      CREATE INDEX batched_payments_accrued_payout_offset_idx ON batched_payments_accrued(payout_offset);
+               CREATE INDEX IF NOT EXISTS batched_payments_accrued_payout_offset_idx ON batched_payments_accrued(payout_offset);
 
-      CREATE TRIGGER batch_payments_delete_empty AFTER UPDATE ON batched_payments_accrued
-      FOR EACH ROW WHEN NEW.amount = 0 BEGIN
-          DELETE FROM batched_payments_accrued WHERE address = NEW.address;
-      END;
+               -- For pre-ETH hardfork. Oxen SN's were paid and the amount paid was subtracted
+               -- from the accumulated amount in the DB. After the ETH hardfork the DB tracks
+               -- the lifetime rewards and instead the smart contract tracks how much has been paid
+               -- out. The delta in how much the DB has allocated and how much the smart contract
+               -- has paid is the amount owed.
+               --
+               -- In other words after hardforking, rewards amounts are strictly accumulative which
+               -- means this condition will never trigger.
+               CREATE TRIGGER IF NOT EXISTS batch_payments_delete_empty AFTER UPDATE ON batched_payments_accrued
+               FOR EACH ROW WHEN NEW.amount = 0 BEGIN
+                   DELETE FROM batched_payments_accrued WHERE address = NEW.address;
+               END;
 
-      CREATE TABLE batched_payments_raw(
-        address VARCHAR NOT NULL,
-        amount BIGINT NOT NULL,
-        height_paid BIGINT NOT NULL,
-        PRIMARY KEY(address, height_paid),
-        CHECK(amount >= 0)
-      );
-
-      CREATE INDEX batched_payments_raw_height_idx ON batched_payments_raw(height_paid);
-
-      CREATE TABLE batch_db_info(
-        height BIGINT NOT NULL
-      );
-
-      INSERT INTO batch_db_info(height) VALUES(0);
-
-      CREATE TRIGGER batch_payments_prune AFTER UPDATE ON batch_db_info
-      FOR EACH ROW BEGIN
-          DELETE FROM batched_payments_raw WHERE height_paid < (NEW.height - 10000);
-      END;
-
-      CREATE VIEW batched_payments_paid AS SELECT * FROM batched_payments_raw;
-
-      CREATE TRIGGER make_payment INSTEAD OF INSERT ON batched_payments_paid
-      FOR EACH ROW BEGIN
-          UPDATE batched_payments_accrued SET amount = (amount - NEW.amount) WHERE address = NEW.address;
-          SELECT RAISE(ABORT, 'Address not found') WHERE changes() = 0;
-          INSERT INTO batched_payments_raw(address, amount, height_paid) VALUES(NEW.address, NEW.amount, NEW.height_paid);
-      END;
-
-      CREATE TRIGGER rollback_payment INSTEAD OF DELETE ON batched_payments_paid
-      FOR EACH ROW BEGIN
-          DELETE FROM batched_payments_raw WHERE address = OLD.address AND height_paid = OLD.height_paid;
-          INSERT INTO batched_payments_accrued(address, payout_offset, amount) VALUES(OLD.address, OLD.height_paid % {}, OLD.amount)
-              ON CONFLICT(address) DO UPDATE SET amount = (amount + excluded.amount);
-      END;
-    )",
-            netconf.BATCHING_INTERVAL));
+               CREATE TABLE IF NOT EXISTS batch_db_info(height BIGINT NOT NULL);
+               INSERT INTO  batch_db_info(height) VALUES(0);)");
 
     log::debug(logcat, "Database setup complete");
 }
@@ -196,21 +163,8 @@ void BlockchainSQLite::upgrade_schema() {
         log::debug(logcat, "Adding payout_offset to batching db");
         auto& netconf = get_config(m_nettype);
 
-        db.exec(fmt::format(
-                R"(
-        ALTER TABLE batched_payments_accrued ADD COLUMN payout_offset INTEGER NOT NULL DEFAULT -1;
-
-        CREATE INDEX batched_payments_accrued_payout_offset_idx ON batched_payments_accrued(payout_offset);
-
-        DROP TRIGGER IF EXISTS rollback_payment;
-        CREATE TRIGGER rollback_payment INSTEAD OF DELETE ON batched_payments_paid
-        FOR EACH ROW BEGIN
-            DELETE FROM batched_payments_raw WHERE address = OLD.address AND height_paid = OLD.height_paid;
-            INSERT INTO batched_payments_accrued(address, payout_offset, amount) VALUES(OLD.address, OLD.height_paid % {}, OLD.amount)
-                ON CONFLICT(address) DO UPDATE SET amount = (amount + excluded.amount);
-        END;
-        )",
-                netconf.BATCHING_INTERVAL));
+        db.exec(R"(ALTER TABLE batched_payments_accrued ADD COLUMN payout_offset INTEGER NOT NULL DEFAULT -1;
+                   CREATE INDEX batched_payments_accrued_payout_offset_idx ON batched_payments_accrued(payout_offset);)");
 
         auto st = prepared_st(
                 "UPDATE batched_payments_accrued SET payout_offset = ? WHERE address = ?");
@@ -442,17 +396,9 @@ void BlockchainSQLite::reset_database() {
 
     db.exec(R"(
       DROP TABLE IF EXISTS delayed_payments;
-
       DROP TABLE IF EXISTS batched_payments_accrued;
-
       DROP TABLE IF EXISTS batched_payments_accrued_archive;
-
       DROP TABLE IF EXISTS batched_payments_accrued_recent;
-
-      DROP VIEW IF EXISTS batched_payments_paid;
-
-      DROP TABLE IF EXISTS batched_payments_raw;
-
       DROP TABLE IF EXISTS batch_db_info;
     )");
 
@@ -491,8 +437,7 @@ void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t ne
                     history == PaymentTableType::Archive ? "archive" : "recent");
             rows_restored = batch_payments_accrued_row_count(history, new_height);
 
-            db.exec(R"(DELETE FROM batched_payments_raw WHERE height_paid > {0};
-                       DELETE FROM batched_payments_accrued;
+            db.exec(R"(DELETE FROM batched_payments_accrued;
                        INSERT INTO batched_payments_accrued
                        SELECT address, amount, payout_offset
                        FROM {1} WHERE height = {0};
@@ -1038,14 +983,13 @@ bool BlockchainSQLite::save_payments(
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
     auto select_sum = prepared_st("SELECT amount from batched_payments_accrued WHERE address = ?");
-
     auto update_paid = prepared_st(
-            "INSERT INTO batched_payments_paid (address, amount, height_paid) VALUES (?,?,?)");
+            "UPDATE batched_payments_accrued SET amount = (amount - ?) WHERE address = ?");
 
-    std::lock_guard a_s_lock{address_str_cache_mutex};
-
+    std::lock_guard lock{address_str_cache_mutex};
     for (const auto& payment : paid_amounts) {
         const auto address_str = get_address_str(payment);
+
         if (auto maybe_amount = db::exec_and_maybe_get<int64_t>(select_sum, address_str)) {
             // Truncate the thousanths amount to an atomic OXEN:
             auto amount = static_cast<uint64_t>(*maybe_amount) / BATCH_REWARD_FACTOR *
@@ -1063,11 +1007,7 @@ bool BlockchainSQLite::save_payments(
                 return false;
             }
 
-            db::exec_query(
-                    update_paid,
-                    address_str,
-                    static_cast<int64_t>(amount),
-                    static_cast<int64_t>(block_height));
+            db::exec_query(update_paid, static_cast<int64_t>(payment.amount.to_db()), address_str);
             update_paid->reset();
         } else {
             // This shouldn't occur: we validate payout addresses much earlier in the block
@@ -1079,18 +1019,7 @@ bool BlockchainSQLite::save_payments(
                     address_str);
             return false;
         }
-
-        select_sum->reset();
     }
     return true;
 }
-
-bool BlockchainSQLite::delete_block_payments(uint64_t block_height) {
-    log::trace(logcat, "BlockchainDB_SQLITE::{} Called with height: {}", __func__, block_height);
-    prepared_exec(
-            "DELETE FROM batched_payments_paid WHERE height_paid >= ?",
-            static_cast<int64_t>(block_height));
-    return true;
-}
-
 }  // namespace cryptonote
