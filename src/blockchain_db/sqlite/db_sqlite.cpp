@@ -396,9 +396,13 @@ void BlockchainSQLite::reset_database() {
 
     db.exec(R"(
       DROP TABLE IF EXISTS delayed_payments;
+      DROP TABLE IF EXISTS delayed_payments_archive;
+      DROP TABLE IF EXISTS delayed_payments_recent;
+
       DROP TABLE IF EXISTS batched_payments_accrued;
       DROP TABLE IF EXISTS batched_payments_accrued_archive;
       DROP TABLE IF EXISTS batched_payments_accrued_recent;
+
       DROP TABLE IF EXISTS batch_db_info;
     )");
 
