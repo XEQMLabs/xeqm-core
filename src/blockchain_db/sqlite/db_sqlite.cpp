@@ -413,11 +413,11 @@ void BlockchainSQLite::reset_database() {
 
     create_schema();
     upgrade_schema();
-    update_height(0);
+    update_height(0, /*commit*/ false);
     log::debug(logcat, "Database reset complete");
 }
 
-void BlockchainSQLite::update_height(uint64_t new_height) {
+void BlockchainSQLite::update_height(uint64_t new_height, bool commit) {
     log::trace(
             logcat,
             "BlockchainDB_SQLITE::{} Changing to height: {}, prev: {}",
@@ -425,7 +425,8 @@ void BlockchainSQLite::update_height(uint64_t new_height) {
             new_height,
             height);
     height = new_height;
-    prepared_exec("UPDATE batch_db_info SET height = ?", static_cast<int64_t>(height));
+    if (commit)
+        prepared_exec("UPDATE batch_db_info SET height = ?", static_cast<int64_t>(height));
 }
 
 void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t new_height) {
@@ -462,7 +463,7 @@ void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t ne
         } break;
     }
 
-    update_height(new_height);
+    update_height(new_height, true /*commit*/);
     log::debug(
             logcat,
             "Detach request for SQL @ {} executed to {}{} (-{} rows deleted, +{} restored)",
@@ -820,7 +821,7 @@ bool BlockchainSQLite::add_block(
 
     auto hf_version = block.major_version;
     if (hf_version < hf::hf19_reward_batching) {
-        update_height(block_height);
+        update_height(block_height, false /*commit*/);
         return true;
     }
 
@@ -828,7 +829,7 @@ bool BlockchainSQLite::add_block(
         cryptonote::hard_fork_begins(m_nettype, hf::hf19_reward_batching).value_or(0)) {
         log::debug(logcat, "Batching of Service Node Rewards Begins");
         reset_database();
-        update_height(block_height - 1);
+        update_height(block_height - 1, true /*commit*/);
     }
 
     if (block_height != height + 1) {
@@ -864,7 +865,7 @@ bool BlockchainSQLite::add_block(
         if (!validate_batch_payment(miner_tx_vouts, calculated_rewards, block_height))
             return false;
         reward_handler(block, service_nodes_state, get_delayed_payments(block_height));
-        update_height(height + 1);
+        update_height(height + 1, true /*commit*/);
         transaction.commit();
     } catch (std::exception& e) {
         log::error(logcat, "Error adding reward payments: {}", e.what());
@@ -991,7 +992,7 @@ bool BlockchainSQLite::save_payments(
         uint64_t block_height, const std::vector<batch_sn_payment>& paid_amounts) {
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
-    auto select_sum = prepared_st("SELECT amount from batched_payments_accrued WHERE address = ?");
+    auto select_sum = prepared_st("SELECT amount FROM batched_payments_accrued WHERE address = ?");
     auto update_paid = prepared_st(
             "UPDATE batched_payments_accrued SET amount = (amount - ?) WHERE address = ?");
 
