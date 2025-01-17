@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <stdexcept>
 
 #include "blockchain.h"
@@ -3240,15 +3241,23 @@ static void generate_other_quorums(
     }
 }
 
+static std::unordered_map<crypto::public_key, crypto::x25519_public_key> snpk_xpk_cache;
+static std::mutex snpk_mut;
+
 // Converts an Ed25519 public key to an x25519 pubkey.  Only intended for use with hf >=
 // feature::SN_PK_IS_ED25519 (because before that we don't have a guarantee that a
 // crypto::public_key is actually the correct Ed25519 pubkeys that we want to convert to get the
 // X25519 pubkey).
-crypto::x25519_public_key snpk_to_xpk(const crypto::public_key& snpk) {
-    crypto::x25519_public_key xpk;
-    if (0 != crypto_sign_ed25519_pk_to_curve25519(xpk.data(), snpk.data()))
-        throw oxen::traced<std::runtime_error>{
-                "Unable to convert SN Ed25519 pubkey {} to X25519 pubkey"_format(snpk)};
+crypto::x25519_public_key snpk_to_xpk(const crypto::public_key& snpk, bool already_locked) {
+    std::unique_lock lock{snpk_mut, std::defer_lock};
+    if (!already_locked)
+        lock.lock();
+    auto& xpk = snpk_xpk_cache[snpk];
+    if (!xpk) {
+        if (0 != crypto_sign_ed25519_pk_to_curve25519(xpk.data(), snpk.data()))
+            throw oxen::traced<std::runtime_error>{
+                    "Unable to convert SN Ed25519 pubkey {} to X25519 pubkey"_format(snpk)};
+    }
     return xpk;
 }
 
@@ -5288,13 +5297,14 @@ void service_node_list::state_t::initialize_alt_pk_maps() {
         !cryptonote::is_hard_fork_at_least(sn_list->blockchain.nettype(), feature::ETH_BLS, height))
         return;
 
+    std::lock_guard lock{snpk_mut};
     for (const auto& [snpk, info] : service_nodes_infos) {
-        x25519_map.emplace(snpk_to_xpk(snpk), snpk);
+        x25519_map.emplace(snpk_to_xpk(snpk, true), snpk);
         bls_map.emplace(info->bls_public_key, snpk);
     }
 
     for (const auto& it : recently_removed_nodes) {
-        x25519_map.emplace(snpk_to_xpk(it.service_node_pubkey), it.service_node_pubkey);
+        x25519_map.emplace(snpk_to_xpk(it.service_node_pubkey, true), it.service_node_pubkey);
         bls_map.emplace(it.info.bls_public_key, it.service_node_pubkey);
     }
 }
