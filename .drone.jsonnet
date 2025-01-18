@@ -354,6 +354,7 @@ local gui_wallet_step_darwin = {
   snapshot_deb('bookworm'),
   snapshot_deb('bookworm', buildarch='arm64', debarch='arm64', jobs=1),
   snapshot_deb('bullseye'),
+  snapshot_deb('oracular'),
   snapshot_deb('noble'),
   snapshot_deb('noble', buildarch='arm64', debarch='arm64', jobs=1),
   snapshot_deb('jammy'),
