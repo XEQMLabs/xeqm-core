@@ -592,7 +592,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 snl_iteration_duration += clock::now() - snl_start;
             }
 
-            if (m_ons_db.db && (block_height >= ons_height)) {
+            if (m_ons_db.db) {
                 auto ons_start = clock::now();
                 if (!m_ons_db.add_block(blk, txs)) {
                     log::critical(
