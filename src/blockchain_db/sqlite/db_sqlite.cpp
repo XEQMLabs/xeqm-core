@@ -476,8 +476,6 @@ void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t ne
 
 // Must be called with the address_str_cache_mutex held!
 std::string BlockchainSQLite::get_address_str(const cryptonote::batch_sn_payment& addr) {
-    if (addr.eth_address)
-        return "0x{:x}"_format(addr.eth_address);
     auto& address_str = address_str_cache[addr.address_info.address];
     if (address_str.empty())
         address_str =

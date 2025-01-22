@@ -712,7 +712,10 @@ bool BlockchainLMDB::need_resize(uint64_t threshold_size) const {
 
     log::debug(logcat, "DB map size:     {}", tools::get_human_readable_bytes(mei.me_mapsize));
     log::debug(logcat, "Space used:      {}", tools::get_human_readable_bytes(size_used));
-    log::debug(logcat, "Space remaining: {}", tools::get_human_readable_bytes(mei.me_mapsize - size_used));
+    log::debug(
+            logcat,
+            "Space remaining: {}",
+            tools::get_human_readable_bytes(mei.me_mapsize - size_used));
     log::debug(logcat, "Size threshold:  {}", tools::get_human_readable_bytes(threshold_size));
     float resize_percent = RESIZE_PERCENT;
     log::debug(
