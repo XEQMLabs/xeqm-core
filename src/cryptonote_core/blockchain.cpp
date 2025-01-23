@@ -420,6 +420,11 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 next_chunk = {};
                 return next_chunk;
             }
+
+            // NOTE: Pre-assign the block/transaction hash. The SNL sometimes
+            // needs the hash which saves us a call to cn_fast_hash during
+            // rescan which is slow serial-dependency-heavy process
+            cryptonote::get_block_hash(blk);
             next_chunk.size += txs_size;
         }
         return next_chunk;
@@ -3342,6 +3347,8 @@ bool Blockchain::_get_transactions(
                     log::error(logcat, "Invalid transaction");
                     return false;
                 }
+                txs.back().set_hash(tx_hash);
+                txs.back().set_blob_size(tx.size());
             } else if (missed_txs)
                 missed_txs->insert(tx_hash);
         } catch (const std::exception& e) {
