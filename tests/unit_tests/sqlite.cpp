@@ -63,11 +63,11 @@ TEST(SQLITE, AddSNRewards)
 
   std::vector<cryptonote::batch_sn_payment> p1;
   const auto expected_payout = wallet_address.address.next_payout_height(0, cryptonote::config::mainnet::config.BATCHING_INTERVAL);
-  p1 = sqliteDB.get_sn_payments(expected_payout - 1);
+  p1 = sqliteDB.get_pre_eth_bls_sn_payments(expected_payout - 1);
   EXPECT_EQ(p1.size(), 0);
 
   std::vector<cryptonote::batch_sn_payment> p2;
-  p2 = sqliteDB.get_sn_payments(expected_payout);
+  p2 = sqliteDB.get_pre_eth_bls_sn_payments(expected_payout);
   EXPECT_EQ(p2.size(), 1);
   // We shouldn't get a fractional atomic OXEN amount in the payment amount:
   auto expected_amount = cryptonote::reward_money::coin_amount(8'250'000'000);

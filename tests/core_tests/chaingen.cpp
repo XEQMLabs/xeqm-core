@@ -1072,7 +1072,7 @@ bool oxen_chain_generator::block_begin(oxen_blockchain_entry &entry, oxen_create
   size_t target_block_weight = txs_weight + get_transaction_weight(blk.miner_tx);
   std::vector<cryptonote::batch_sn_payment> sn_rwds;
   if (hf_version_ < hf::hf21_eth)
-    sn_rwds = sqlite_db_->get_sn_payments(height);
+    sn_rwds = sqlite_db_->get_pre_eth_bls_sn_payments(height);
   if (hf_version_ < hf::hf19_reward_batching)
     CHECK_AND_ASSERT_MES(sn_rwds.empty(), false, "batch payments should be empty before hf19");
   uint64_t block_rewards = 0;
