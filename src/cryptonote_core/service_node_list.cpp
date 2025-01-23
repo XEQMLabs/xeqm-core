@@ -6608,4 +6608,27 @@ payout service_node_payout_portions(const crypto::public_key& key, const service
 
     return result;
 }
+
+service_node_list::hf21_transition_result service_node_list::hf21_dry_run(cryptonote::network_type nettype) const {
+    service_node_list::state_t state_copy = m_state;
+
+    cryptonote::BlockchainSQLite db_copy{nettype, ":memory:"};
+    auto insert_payment = db_copy.prepared_st(
+            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, ?)");
+    auto old_rewards = blockchain.sqlite_db().get_all_accrued_rewards();
+    for (size_t i=0; i < old_rewards.first.size(); i++) {
+        const auto& addr = old_rewards.first[i];
+        const auto& amt = old_rewards.second[i];
+
+        // amt * 1000 because get_all_accrued_rewards divides by 1000 before returning it
+        // this means we lose a bit of precision but it should be fine
+        db::exec_query(insert_payment, addr, 0, static_cast<int64_t>(amt * 1000));
+        insert_payment->reset();
+    }
+
+    oxen::sent::transition(state_copy, db_copy, nettype);
+
+    return {state_copy.service_nodes_infos, db_copy.get_all_accrued_rewards()};
+}
+
 }  // namespace service_nodes

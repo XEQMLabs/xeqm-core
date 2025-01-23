@@ -1300,6 +1300,13 @@ class service_node_list {
 
     cryptonote::Blockchain& blockchain;
 
+    struct hf21_transition_result {
+      service_nodes_infos_t sns_after;
+      std::pair<std::vector<std::string>, std::vector<uint64_t>> rewards_after;
+    };
+
+    hf21_transition_result hf21_dry_run(cryptonote::network_type nettype) const;
+
   private:
     bool m_rescanning = false; /* set to true when doing a rescan so we know not to reset proofs */
     block_add_result process_block(
