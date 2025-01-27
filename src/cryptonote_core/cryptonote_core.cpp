@@ -608,22 +608,31 @@ bool core::init(
         sqlite_db_file_path = ":memory:";
     }
 
-    if (m_nettype == network_type::STAGENET && db->height() > 1) {
-        // Hack to handle stagenet reboot by seeing if we have the old stagenet block at height 1:
+    if ((m_nettype == network_type::STAGENET || m_nettype == network_type::DEVNET) && db->height() > 1) {
+        // Hack to handle stage/devnet reboot by seeing if we have an old block at height 1:
         // if we do, we need to delete the blockchain database files and reinitialize the database.
         // (We can't properly pop blocks in such a case because the reboot changed the serialized
         // blockchain format, and even if we could, it's not worth the time because it'll pop all
         // the way back to empty anyway).
         auto block1_hash = get_block_hash(db->get_block_from_height(1));
-        constexpr std::array STAGENET_OLD_BLOCK1_HASHES = {
+        const std::vector<std::string_view> STAGENET_OLD_BLOCK1_HASHES = {
                 "13633f8335998fe174f12752ea86d25636c9f777f441e9fa205ae4b8868e1f03"sv,
                 "11597c2be5719701d8d1000cfccf46ef7b52a3d80573300d38aa5bf283b43b6a"sv,
                 "efd64cb09bd3cadb127731d2919769314100d85e6d09fdcd022327e65d43e9f2"sv};
+        const std::vector<std::string_view> DEVNET_OLD_BLOCK1_HASHES = {
+                "a9ef652d2867cc663388136c2e18c6d7f3bcaccd3c8615e8d8bc838aa8aae191"sv};
+
+        auto* hashes = m_nettype == network_type::STAGENET ? &STAGENET_OLD_BLOCK1_HASHES :
+                m_nettype == network_type::DEVNET ? &DEVNET_OLD_BLOCK1_HASHES : nullptr;
+
+        if (!hashes)
+            return false;
+
         if (std::find(
-                    STAGENET_OLD_BLOCK1_HASHES.begin(),
-                    STAGENET_OLD_BLOCK1_HASHES.end(),
-                    tools::hex_guts(block1_hash)) != STAGENET_OLD_BLOCK1_HASHES.end()) {
-            log::warning(globallogcat, "Detected old stagenet data; resetting databases...");
+                    hashes->begin(),
+                    hashes->end(),
+                    tools::hex_guts(block1_hash)) != hashes->end()) {
+            log::warning(globallogcat, "Detected old stage/devnet data; resetting databases...");
 
             db->close();
             log::warning(globallogcat, "Removing blockchain database");

@@ -5947,6 +5947,9 @@ bool Blockchain::add_new_block(
     crypto::hash id = get_block_hash(bl);
     auto lock = tools::unique_locks(tx_pool, *this);
     db_rtxn_guard rtxn_guard{*m_db};
+
+    if (tools::hex_guts(id) == "a9ef652d2867cc663388136c2e18c6d7f3bcaccd3c8615e8d8bc838aa8aae191"sv)
+        return false;
     if (have_block(id)) {
         log::trace(logcat, "block with id = {} already exists", id);
         bvc.m_already_exists = true;
