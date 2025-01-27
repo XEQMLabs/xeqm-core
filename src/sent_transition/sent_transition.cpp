@@ -239,19 +239,21 @@ void transition(
                     (SENT_STAKING_REQUIREMENT * 7 + 5) / 6 /* ceiling division */);
         }
 
+        bool bls_ok = true;
+
         // Nodes with old monero-style key which did not broadcast a proper ed25519 key
         // shouldn't make it this far, but check just in case and zombie if so
         if (!remapped.contains(pk)) {
             log::debug(logcat, "Node {} (monero-ed) not transitioning because there is no mapped proper ed25519 key", pk);
             zombie = true;
+            bls_ok = false;
         }
-
         // Nodes with no ed->bls key mapping do not get transitioned
         else if (!node_bls_keys.contains(remapped[pk])) {
             log::debug(logcat, "Node {} (ed) not transitioning because there is no mapped bls key", remapped[pk]);
             zombie = true;
+            bls_ok = false;
         }
-
         // Partially funded nodes at the time of transition just get dropped and will have to be
         // re-registered via a SENT multi-contributor contract.
         else if (!sni->is_fully_funded()) {
@@ -374,6 +376,13 @@ void transition(
             sn.total_reserved = 0;
             sn.staking_requirement = 0;
             sn.contributors.clear();
+
+            // if we made it this far and the node has supplied a bls key, we set it so that until
+            // the node is removed we can still at least try to request a bls signature from it,
+            // as its bls key will be in the contract until it is removed.
+            if (bls_ok)
+                sn.bls_public_key = node_bls_keys.at(remapped[pk]);
+
             post_transition_sns.emplace_back(pk, new_state);
         }
     }
