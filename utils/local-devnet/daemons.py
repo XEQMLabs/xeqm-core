@@ -108,7 +108,12 @@ class RPCDaemon:
             if params:
                 json["params"] = params
             print("  {}:{} => {}".format(self.listen_ip, self.rpc_port, json))
-            return requests.post('http://{}:{}/json_rpc'.format(self.listen_ip, self.rpc_port), json=json, timeout=timeout)
+            r = requests.post('http://{}:{}/json_rpc'.format(self.listen_ip, self.rpc_port), json=json, timeout=timeout)
+            j = r.json()
+            if 'error' in j and try_count < 3:
+                raise RuntimeError(j['error'])
+
+            return r
         except Exception as e:
             print(f"json_rpc exception on try {try_count+1}: {e}")
             if try_count < 3:
