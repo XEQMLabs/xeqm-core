@@ -31,7 +31,7 @@ inline constexpr network_config config{
                   0x7a,
                   0x57,
                   0xab,
-                  0xd5}},
+                  0xd6}},
         .GENESIS_TX =
                 "04011e1e01ff00018080c9db97f4fb2702fa27e905f604faa4eb084ee675faca77b0cfea9adec152"
                 "6da33cae5e286f31624201dae05bf3fa1662b7fd373c92426763d921cf3745e10ee43edb510f690c"
@@ -49,7 +49,7 @@ inline constexpr network_config config{
         .UPTIME_PROOF_VALIDITY = testnet::config.UPTIME_PROOF_VALIDITY,
         .MAX_DEACTIVATE_PER_BLOCK = testnet::config.MAX_DEACTIVATE_PER_BLOCK,
         .HAVE_STORAGE_AND_LOKINET = false,  // storage & lokinet
-        .TARGET_BLOCK_TIME = mainnet::TARGET_BLOCK_TIME,
+        .TARGET_BLOCK_TIME = 10s,
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
         .PULSE_MAX_START_ADJUSTMENT = mainnet::config.PULSE_MAX_START_ADJUSTMENT,
