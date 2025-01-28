@@ -375,17 +375,6 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 ons_height);
     }
 
-    // NOTE: Timers
-    using clock = std::chrono::steady_clock;
-    using dseconds = std::chrono::duration<double>;
-    auto work_start = clock::now();
-    auto scan_start = work_start;
-    dseconds ons_duration{}, snl_duration{}, ons_iteration_duration{}, snl_iteration_duration{};
-
-    // NOTE: Stats
-    uint64_t work_blocks = 0;
-    uint64_t total_bytes = 0, work_bytes = 0;
-
     block_load_context load_context = {};
     load_context.height = start_height;
 
@@ -540,8 +529,24 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
         }
     });
 
+    // NOTE: Timers
+    using clock = std::chrono::steady_clock;
+    using dseconds = std::chrono::duration<double>;
+
+    auto work_start = clock::now();
+    auto scan_start = work_start;
+    dseconds ons_duration{}, ons_interval_duration{};
+    dseconds snl_duration{}, snl_interval_duration{};
+    dseconds get_block_data_duration{}, get_block_data_interval_duration{};
+
+    // NOTE: Stats
+    uint64_t work_blocks = 0;
+    uint64_t total_bytes = 0, work_bytes = 0;
+
     while (true) {
         ZoneScopedN("Load blocks into subsystem");
+
+        auto get_block_data_start = clock::now();
         block_data chunk;
         if (use_threaded_load) {
             {
@@ -568,29 +573,28 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
             load_context.height += block_load_context::CHUNK_SIZE;
         }
 
-        uint64_t height = chunk.height;
-
-        // NOTE: Log progress every 10s
         auto now = clock::now();
-        dseconds duration{now - work_start};
-        bool every_10s = duration >= 10s;
+        get_block_data_interval_duration += now - get_block_data_start;
+        dseconds interval_duration = now - work_start;
 
+        bool every_10s = interval_duration >= 10s;  // NOTE: Log progress every 10s
+        uint64_t height = chunk.height;
         if (height + chunk.blocks.size() >= end_height || every_10s) {
             ZoneScopedN("Rescan progress update");
             service_node_list.store();
 
-            float blocks_per_s = work_blocks / duration.count();
-            float bytes_per_s = work_bytes / duration.count();
+            float blocks_per_s = static_cast<float>(work_blocks) / interval_duration.count();
+            float bytes_per_s = static_cast<float>(work_bytes) / interval_duration.count();
 
             log::info(
                     globallogcat,
-                    "... scanning height {}/{} ({:.2f}s) (snl: {:.2f}s; ons: {:.2f}s; {:.1f} "
-                    "blks/s; {}/s)",
+                    "... scanning height {}/{} ({:.2f}s) (get blks: {:.2f}s; snl: {:.2f}s; ons: {:.2f}s; {:.1f} blks/s; {}/s)",
                     height,
                     end_height,
-                    duration.count(),
-                    snl_iteration_duration.count(),
-                    ons_iteration_duration.count(),
+                    interval_duration.count(),
+                    get_block_data_interval_duration.count(),
+                    snl_interval_duration.count(),
+                    ons_interval_duration.count(),
                     blocks_per_s,
                     tools::get_human_readable_bytes(bytes_per_s));
 #ifdef ENABLE_SYSTEMD
@@ -602,24 +606,21 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                             height)
                             .c_str());
 #endif
-            work_start = now;
-            ons_duration += ons_iteration_duration;
-            snl_duration += snl_iteration_duration;
-            ons_iteration_duration = 0s;
-            snl_iteration_duration = 0s;
+            // NOTE: Accumulate stats
+            ons_duration += ons_interval_duration;
+            snl_duration += snl_interval_duration;
+            get_block_data_duration += get_block_data_interval_duration;
+            total_bytes += work_bytes;
 
-            if (every_10s) {  // NOTE: Reset iteration stats
-                total_bytes += work_bytes;
-                work_blocks = work_bytes = 0;
-            }
+            // NOTE: Reset interval stats
+            work_start = now;
+            ons_interval_duration = snl_interval_duration = get_block_data_interval_duration = 0s;
+            work_blocks = work_bytes = 0;
         }
 
         // NOTE: Load blocks into subsystems
         work_blocks += chunk.blocks.size();
         work_bytes += chunk.size;
-
-        std::vector<cryptonote::transaction> txs;
-        std::unordered_set<crypto::hash> missed_txs;
 
         TracyCZoneN(add_block_chunk_to_subsystems, "Add block chunk to subsystems", true);
         for (size_t i = 0; i < chunk.blocks.size(); i++) {
@@ -648,7 +649,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                             e.what());
                     return false;
                 }
-                snl_iteration_duration += clock::now() - snl_start;
+                snl_interval_duration += clock::now() - snl_start;
             }
 
             if (m_ons_db.db) {
@@ -660,7 +661,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                             cryptonote::get_block_hash(blk));
                     return false;
                 }
-                ons_iteration_duration += clock::now() - ons_start;
+                ons_interval_duration += clock::now() - ons_start;
             }
         }
         TracyCZoneEnd(add_block_chunk_to_subsystems);
@@ -691,8 +692,9 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
 
         log::info(
                 globallogcat,
-                "Loaded subsystems in {:.2f}s (snl: {:.2f}s; ons: {:.2f}s; {:.1f} blks/s; {}/s)",
+                "Loaded subsystems in {:.2f}s (get blks: {:.2f}s; snl: {:.2f}s; ons: {:.2f}s; {:.1f} blks/s; {}/s)",
                 duration.count(),
+                get_block_data_duration.count(),
                 snl_duration.count(),
                 ons_duration.count(),
                 blocks_per_s,
