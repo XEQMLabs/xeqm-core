@@ -2396,7 +2396,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
     auto nettype = cryptonote::network_type_from_string(info["nettype"].get<std::string_view>());
     auto& netconf = get_config(nettype);
 
-    if (!netconf.HAVE_STORAGE_AND_LOKINET)  // Devnet/stagenet don't run storage-server / lokinet
+    if (netconf.HAVE_STORAGE_AND_LOKINET)  // Devnet/stagenet don't run storage-server / lokinet
     {
         auto now = std::chrono::system_clock::now();
         auto last_lokinet_ping_timet = info.value<std::time_t>("last_lokinet_ping", 0);
