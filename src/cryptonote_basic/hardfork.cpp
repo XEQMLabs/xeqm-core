@@ -168,11 +168,10 @@ static constexpr std::array devnet_hard_forks = {
         hard_fork{hf::hf7, 0, 0, 1716310007},
         hard_fork{hf::hf14_blink, 0, 1, 1716310014},
         hard_fork{hf::hf16_pulse, 0, 500, 1716310016},
-        /*
-        hard_fork{hf::hf19_reward_batching, 0, 257, 1716310019},
-        hard_fork{hf::hf20_eth_transition, 0, 379, 1716310020},
-        hard_fork{hf::hf21_eth, 0, 444, 1716310021},
-        */
+        hard_fork{hf::hf19_reward_batching, 0, 630, 1716310019},
+        hard_fork{hf::hf19_reward_batching, 1, 1'000'000'000, 1716310019},
+        hard_fork{hf::hf20_eth_transition, 0, 1'000'000'001, 1716310020},
+        hard_fork{hf::hf21_eth, 0, 1'000'000'002, 1716310021},
 };
 
 static constexpr std::array local_devnet_hard_forks = {
