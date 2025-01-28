@@ -891,7 +891,7 @@ class Blockchain {
   private:
     // Private, non-lock-obtaining implementing code of get_transactions()
     bool _get_transactions(
-            const std::vector<crypto::hash>& txs_ids,
+            std::span<const crypto::hash> txs_ids,
             std::vector<transaction>& txs,
             std::unordered_set<crypto::hash>* missed_txs,
             size_t* total_size) const;

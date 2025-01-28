@@ -391,50 +391,92 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
 
     auto get_block_data = [&](uint64_t height, uint64_t end_height) -> block_data {
         ZoneScopedN("Get block chunk data");
+
         block_data next_chunk{};
         next_chunk.height = height;
-        size_t blocks_size;
+
         // We call the internal non-locking version of _get_blocks here because our companion
         // thread already holds a lock on this, and does not call anything that can change the
         // LMDB, which is all the lock in get_blocks is meant to achieve.
-        TracyCZoneN(get_blocks, "Get blocks", true);
-        if (!_get_blocks(height, block_load_context::CHUNK_SIZE, next_chunk.blocks, &blocks_size)) {
-            log::critical(
-                    logcat,
-                    "Unable to get checkpointed historical blocks [{}-{}] for updating oxen "
-                    "subsystems",
-                    height,
-                    std::min(height + block_load_context::CHUNK_SIZE - 1, end_height));
-            next_chunk = {};
-            return next_chunk;
-        }
-        next_chunk.size += blocks_size;
-        TracyCZoneEnd(get_blocks);
-
-        TracyCZoneN(get_txs, "Get txs", true);
-        next_chunk.txs.resize(next_chunk.blocks.size());
-        for (size_t i = 0; i < next_chunk.blocks.size(); i++) {
-            const auto& blk = next_chunk.blocks[i];
-            size_t txs_size;
-            std::unordered_set<crypto::hash> missed_txs;
-            // Non-locking version; see comment about _get_blocks, above, re: safety.
-            if (!_get_transactions(blk.tx_hashes, next_chunk.txs[i], &missed_txs, &txs_size) ||
-                !missed_txs.empty()) {
+        {
+            size_t blocks_size;
+            ZoneScopedN("Get blocks");
+            if (!_get_blocks(
+                        height, block_load_context::CHUNK_SIZE, next_chunk.blocks, &blocks_size)) {
                 log::critical(
                         logcat,
-                        "Unable to get all transactions for subsystem updating from block: {}",
-                        cryptonote::get_block_hash(blk));
+                        "Unable to get checkpointed historical blocks [{}-{}] for updating oxen "
+                        "subsystems",
+                        height,
+                        std::min(height + block_load_context::CHUNK_SIZE - 1, end_height));
                 next_chunk = {};
                 return next_chunk;
             }
-
-            // NOTE: Pre-assign the block/transaction hash. The SNL sometimes
-            // needs the hash which saves us a call to cn_fast_hash during
-            // rescan which is slow serial-dependency-heavy process
-            cryptonote::get_block_hash(blk);
-            next_chunk.size += txs_size;
+            next_chunk.size += blocks_size;
         }
-        TracyCZoneEnd(get_txs);
+
+        tools::threadpool::waiter tpool_waiter;
+        tools::threadpool& tpool = tools::threadpool::getInstance();
+
+        {
+            ZoneScopedN("Get txs");
+            std::atomic<size_t> bytes_loaded = 0;
+            std::atomic<uint64_t> failed_height = 0;
+            next_chunk.txs.resize(next_chunk.blocks.size());
+
+            // NOTE: Paralellise the loading of TXs (1-7~ms per tx to deserialise)
+            for (size_t blk_index = 0; blk_index < next_chunk.blocks.size(); blk_index++) {
+                const auto& blk = next_chunk.blocks[blk_index];
+                uint64_t blk_height = blk.get_height();
+
+                std::vector<transaction>& txs = next_chunk.txs[blk_index];
+                txs.resize(blk.tx_hashes.size());
+
+                // NOTE: Dispatch 1 thread pool job per TX
+                for (size_t tx_index = 0; tx_index < blk.tx_hashes.size(); tx_index++) {
+                    const crypto::hash& tx_hash = blk.tx_hashes[tx_index];
+                    cryptonote::transaction& tx = txs[tx_index];
+
+                    tpool.submit(
+                            &tpool_waiter,
+                            [this, &tx, tx_hash, &bytes_loaded, blk_height, &failed_height]() {
+                                std::vector<transaction> get_tx_result;
+                                auto tx_list = std::span<const crypto::hash>(&tx_hash, 1);
+                                // Non-locking version; see comment about _get_blocks, above, re:
+                                // safety.
+                                _get_transactions(tx_list, get_tx_result, nullptr, nullptr);
+                                if (get_tx_result.size()) {
+                                    bytes_loaded += get_tx_result[0].blob_size;
+                                    tx = std::move(get_tx_result[0]);
+                                } else {
+                                    if (failed_height == 0)
+                                        failed_height = blk_height;
+                                }
+                            });
+
+                    if (failed_height)
+                        break;
+                }
+                tpool_waiter.wait(&tpool);
+
+                // NOTE: Handle errors
+                if (failed_height) {
+                    log::critical(
+                            logcat,
+                            "Unable to get all transactions for subsystem updating from block: {}",
+                            failed_height);
+                    next_chunk = {};
+                    return next_chunk;
+                }
+
+                next_chunk.size += bytes_loaded;
+                // NOTE: Pre-assign the block/transaction hash. The SNL sometimes
+                // needs the hash which saves us a call to cn_fast_hash during
+                // rescan which is slow serial-dependency-heavy process
+                cryptonote::get_block_hash(blk);
+            }
+
+        }
         return next_chunk;
     };
 
@@ -3352,7 +3394,7 @@ bool Blockchain::get_split_transactions_blobs(
 }
 //------------------------------------------------------------------
 bool Blockchain::_get_transactions(
-        const std::vector<crypto::hash>& txs_ids,
+        std::span<const crypto::hash> txs_ids,
         std::vector<transaction>& txs,
         std::unordered_set<crypto::hash>* missed_txs,
         size_t* total_size) const {
@@ -3363,24 +3405,24 @@ bool Blockchain::_get_transactions(
     txs.reserve(txs_ids.size());
     TracyCZoneEnd(alloc);
 
-    std::string tx;
+    std::string blob;
     if (total_size)
         *total_size = 0;
 
     TracyCZoneN(load_txs, "Load transactions", true);
     for (const auto& tx_hash : txs_ids) {
-        tx.clear();
+        blob.clear();
         try {
-            if (m_db->get_tx_blob(tx_hash, tx)) {
+            if (m_db->get_tx_blob(tx_hash, blob)) {
                 if (total_size)
-                    *total_size += tx.size();
+                    *total_size += blob.size();
                 txs.emplace_back();
-                if (!parse_and_validate_tx_from_blob(tx, txs.back())) {
+                if (!parse_and_validate_tx_from_blob(blob, txs.back())) {
                     log::error(logcat, "Invalid transaction");
                     return false;
                 }
                 txs.back().set_hash(tx_hash);
-                txs.back().set_blob_size(tx.size());
+                txs.back().set_blob_size(blob.size());
             } else if (missed_txs)
                 missed_txs->insert(tx_hash);
         } catch (const std::exception& e) {
