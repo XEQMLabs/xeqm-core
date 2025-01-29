@@ -538,6 +538,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
     dseconds ons_duration{}, ons_interval_duration{};
     dseconds snl_duration{}, snl_interval_duration{};
     dseconds get_block_data_duration{}, get_block_data_interval_duration{};
+    dseconds store_accumulator{};
 
     // NOTE: Stats
     uint64_t work_blocks = 0;
@@ -581,7 +582,21 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
         uint64_t height = chunk.height;
         if (height + chunk.blocks.size() >= end_height || every_10s) {
             ZoneScopedN("Rescan progress update");
-            service_node_list.store();
+
+            // TODO: Storing is very slow as the chain progresses because of full serialisation of
+            // SNL state. On a block-to-block basis, there's typically not many events however we
+            // currently store the entire SNL state per block. We can save a lot of serialisation
+            // compute and space required by optimising for the common case which is storing SNL
+            // deltas between heights and a full state every defined interval.
+            //
+            // That's a big change but would be worthwhile on the next pass over speeding up
+            // rescans. For now a cheaper lever we can tweak is storing data much less frequently
+            // to avoid this serial bottleneck in the rescanning process.
+            store_accumulator += interval_duration;
+            if (store_accumulator >= 60s) {
+                store_accumulator -= 60s;
+                service_node_list.store();
+            }
 
             float blocks_per_s = static_cast<float>(work_blocks) / interval_duration.count();
             float bytes_per_s = static_cast<float>(work_bytes) / interval_duration.count();
