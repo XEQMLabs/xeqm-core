@@ -5644,7 +5644,7 @@ bool Blockchain::handle_block_to_main_chain(
         log::info(
                 logcat,
                 "\n+++++ PULSE BLOCK SUCCESSFULLY ADDED\n\tid: {}\n\tHEIGHT: {}, v{}.{}\n\tblock "
-                "reward: {}({} + {}) , coinbase_weight: {}, cumulative weight: {}, {}ms",
+                "reward: {}({} + {}) , coinbase_weight: {}, cumulative weight: {}, {}",
                 id,
                 new_height - 1,
                 static_cast<int>(bl.major_version),
