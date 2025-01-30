@@ -547,6 +547,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
     while (true) {
         ZoneScopedN("Load blocks into subsystem");
 
+        TracyCZoneN(get_block_data_zone, "Get block data (contend on lock)", true);
         auto get_block_data_start = clock::now();
         block_data chunk;
         if (use_threaded_load) {
@@ -573,6 +574,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 break;
             load_context.height += block_load_context::CHUNK_SIZE;
         }
+        TracyCZoneEnd(get_block_data_zone);
 
         auto now = clock::now();
         get_block_data_interval_duration += now - get_block_data_start;

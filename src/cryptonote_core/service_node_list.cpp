@@ -51,6 +51,7 @@
 #include "common/lock.h"
 #include "common/random.h"
 #include "common/util.h"
+#include "common/threadpool.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/cryptonote_basic.h"
@@ -73,6 +74,8 @@
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
+#include "serialization/string.h"
+#include "serialization/deque.h"
 #include "uptime_proof.h"
 
 using cryptonote::hf;
@@ -80,6 +83,7 @@ namespace feature = cryptonote::feature;
 
 namespace service_nodes {
 
+// TODO: This is deprecated after HF20 w/ the new direct serialisation method
 // Internal intermediate structure to store runtime quorum data in a format suitable for
 // serialisation to binary.
 struct quorum_for_serialization {
@@ -98,6 +102,25 @@ struct quorum_for_serialization {
     }
 };
 
+template <typename Archive>
+static void serialize_quorum_ptr_directly(Archive& ar, std::string_view key, std::shared_ptr<const quorum>& ptr)
+{
+    if constexpr (Archive::is_deserializer) {
+        quorum dummy = {};
+        field(ar, key, dummy);
+        if (dummy.validators.size())
+            ptr = std::make_shared<quorum>(std::move(dummy));
+    } else {
+        if (ptr) {
+            auto& item = const_cast<quorum&>(*ptr);
+            field(ar, key, item);
+        } else {
+            quorum empty = {};
+            field(ar, key, empty);
+        }
+    }
+}
+
 // Internal intermediate structure to store runtime quorum data in a format suitable for
 // serialisation to binary
 struct quorums_by_height {
@@ -106,8 +129,17 @@ struct quorums_by_height {
             height(height), quorums(std::move(quorums)) {}
     uint64_t height;
     quorum_manager quorums;
+
+    template <class Archive>
+    void serialize_value(Archive& ar) {
+        uint32_t version = 0;
+        field(ar, "version", version);
+        field(ar, "height", height);
+        field(ar, "quorums", quorums);
+    }
 };
 
+// TODO: This is deprecated after HF20 w/ the new direct serialisation method
 // Internal intermediate structure to store runtime SNL data in a format suitable for serialisation
 // to binary
 struct state_serialized {
@@ -157,6 +189,7 @@ struct state_serialized {
     }
 };
 
+// TODO: This is deprecated after HF20 w/ the new direct serialisation method
 // Internal intermediate structure to store runtime SNL data in a format suitable for serialisation
 // to binary
 struct data_for_serialization {
@@ -201,11 +234,10 @@ struct service_node_list_transient_storage {
     // STORE_LONG_TERM_STATE_INTERVAL))
     service_node_list::state_set state_archive;
 
+    std::vector<std::string> archive_blob_list;
+    std::vector<std::string> history_blob_list;
+
     std::unordered_map<crypto::hash, service_node_list::state_t> alt_state;
-
-    data_for_serialization long_term_data;
-
-    data_for_serialization short_term_data;
 
     // SNL historical data is stored at intervals like a checkpoint. This flag is set if there's
     // new historical data that has to be stored into the DB.
@@ -4545,43 +4577,78 @@ void service_node_list::alt_block_add(const cryptonote::block_add_info& info) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Serialise the hash table of SNs to the archive `ar`
+template <typename Archive>
+static void serialize_service_node_infos_directly(Archive& ar, std::string_view key, service_nodes_infos_t& sn_infos)
+{
+    ZoneScoped;
+    if constexpr (Archive::is_serializer)
+        ar.tag(key);
 
-static quorum_for_serialization serialize_quorum_state(
-        hf /*hf_version*/, uint64_t height, quorum_manager const& quorums) {
-    quorum_for_serialization result = {};
-    result.height = height;
-    if (quorums.obligations)
-        result.quorums[static_cast<uint8_t>(quorum_type::obligations)] = *quorums.obligations;
-    if (quorums.checkpointing)
-        result.quorums[static_cast<uint8_t>(quorum_type::checkpointing)] = *quorums.checkpointing;
-    return result;
+    size_t count = sn_infos.size();
+    auto array = ar.begin_array(count);
+    if (Archive::is_serializer) {
+        for (auto it : sn_infos) {
+            field(ar, "pubkey", const_cast<crypto::public_key&>(it.first));
+            field(ar, "info", const_cast<service_node_info&>(*it.second));
+        }
+    } else {
+        for (size_t index = 0; index < count; index++) {
+            crypto::public_key key = {};
+            service_node_info info = {};
+            field(ar, "pubkey", key);
+            field(ar, "info", info);
+            sn_infos[key] = std::make_shared<service_node_info>(std::move(info));
+        }
+    }
 }
 
-static state_serialized serialize_service_node_state_object(
-        hf hf_version,
-        service_node_list::state_t const& state,
-        bool only_serialize_quorums = false) {
+// Serialize the list of blobs and quorums into a blob suitable for the DB and
+// vice versa for deserialising.
+template <typename Archive>
+static std::string serialize_db_blob(Archive& ar, std::vector<std::string>& blob_list, std::deque<quorums_by_height>* quorums)
+{
+    uint32_t version = 0;
+    field(ar, "version", version);
+    field(ar, "data", blob_list);
+    if (quorums)
+        field(ar, "quorum_states", *quorums);
+
+    std::string result;
+    if constexpr (Archive::is_serializer)
+        result = ar.str();
+    return result;
+
+}
+
+// Serialise the service node state into the archive `ar`. If a serializer is passed in the function
+// produces the binary string and returns it. If it's deserializing the `state` object is populated
+// and an empty string is returned.
+template <typename Archive>
+static std::string serialize_snl_directly(Archive& ar, service_node_list::state_t& state)
+{
     ZoneScoped;
-    state_serialized result = {};
-    assert(static_cast<size_t>(result.version) ==
-           (static_cast<size_t>(state_serialized::version_t::count) - 1));
-    result.height = state.height;
-    result.staking_requirement = state.staking_requirement;
-    result.unconfirmed_l2_txes = state.unconfirmed_l2_txes;
-    result.recently_removed_nodes = state.recently_removed_nodes;
-    result.block_leader = state.block_leader;
-    result.quorums = serialize_quorum_state(hf_version, state.height, state.quorums);
-    result.only_stored_quorums = state.only_loaded_quorums || only_serialize_quorums;
+    uint32_t version = 0;
+    field_varint(ar, "version", version);
+    field_varint(ar, "height", state.height);
+    // NOTE: Serialization code struggles with the SN info stored behind a const
+    // shared_ptr. We can be explicit and serialise it ourselves.
+    serialize_service_node_infos_directly(ar, "infos", state.service_nodes_infos);
+    field(ar, "key_image_blacklist", state.key_image_blacklist);
+    field(ar, "quorums", state.quorums);
+    field(ar, "only_stored_quorums", state.only_loaded_quorums);
+    field(ar, "block_hash", state.block_hash);
+    field(ar, "unconfirmed_l2", state.unconfirmed_l2_txes);
+    field(ar, "block_leader", state.block_leader);
+    field_varint(ar, "staking_requirement", state.staking_requirement);
+    field(ar, "recently_removed_nodes", state.recently_removed_nodes);
 
-    if (only_serialize_quorums)
-        return result;
+    if constexpr (Archive::is_deserializer)
+        state.initialize_alt_pk_maps();
 
-    result.infos.reserve(state.service_nodes_infos.size());
-    for (const auto& kv_pair : state.service_nodes_infos)
-        result.infos.emplace_back(kv_pair);
-
-    result.key_image_blacklist = state.key_image_blacklist;
-    result.block_hash = state.block_hash;
+    std::string result;
+    if constexpr (!Archive::is_deserializer)
+        result = ar.str();
     return result;
 }
 
@@ -4594,69 +4661,70 @@ bool service_node_list::store() {
     if (hf_version < hf::hf9_service_nodes)
         return true;
 
-    // NOTE: Data storage is kept around to reuse heap memory allocated from prior 'store'
-    // invocations, cleared on entry and results in faster syncing of the chain.
-    m_transient->long_term_data.clear();
-    m_transient->short_term_data.clear();
-
     // NOTE: Convert the runtime SNL data into a format suitable for serialization into the DB
     std::lock_guard lock(m_sn_mutex);
 
-    // NOTE: Serialize quorum data
-    m_transient->short_term_data.quorum_states.reserve(m_transient->old_quorum_states.size());
-    for (const quorums_by_height& entry : m_transient->old_quorum_states)
-        m_transient->short_term_data.quorum_states.push_back(
-                serialize_quorum_state(hf_version, entry.height, entry.quorums));
+    m_transient->archive_blob_list.clear();
+    m_transient->history_blob_list.clear();
+    m_transient->archive_blob_list.resize(m_transient->state_archive.size());
+    m_transient->history_blob_list.resize(m_transient->state_history.size() + 1 /*curr*/);
 
-    // NOTE: Serialize archive SNL state (but only if the dirty flag was set)
+    tools::threadpool& tpool = tools::threadpool::getInstance();
+    tools::threadpool::waiter tpool_waiter = {};
+
+    // NOTE: Serialize archive
     if (m_transient->long_term_data_dirty) {
-        for (const auto& it : m_transient->state_archive)
-            m_transient->long_term_data.states.push_back(
-                    serialize_service_node_state_object(hf_version, it));
+        size_t archive_index = 0;
+        for (auto& it : m_transient->state_archive) {
+            std::string& dest = m_transient->archive_blob_list[archive_index++];
+            tpool.submit(&tpool_waiter, [&dest, &it]() {
+                serialization::binary_string_archiver ba;
+                dest = serialize_snl_directly(ba, const_cast<state_t&>(it));
+            });
+        }
     }
 
     // NOTE: Serialize recent SNL state(s)
-    for (const auto& it : m_transient->state_history)
-        m_transient->short_term_data.states.push_back(
-                serialize_service_node_state_object(hf_version, it));
-
-    // NOTE: Serialize current state into the recent store
-    m_transient->short_term_data.states.push_back(
-            serialize_service_node_state_object(hf_version, m_state));
-
-    // NOTE: Write archive SNL state blob(s) to DB
-    if (m_transient->long_term_data_dirty) {
-        serialization::binary_string_archiver ba;
-        try {
-            serialization::serialize(ba, m_transient->long_term_data);
-        } catch (const std::exception& e) {
-            log::error(
-                    logcat,
-                    "Failed to store service node info: failed to serialize long term data: {}",
-                    e.what());
-            return false;
-        }
-
-        auto& db = blockchain.db();
-        cryptonote::db_wtxn_guard txn_guard{db};
-        db.set_service_node_data(ba.str(), true /*long_term*/);
-    }
-
     {
-        serialization::binary_string_archiver ba;
-        try {
-            serialization::serialize(ba, m_transient->short_term_data);
-        } catch (const std::exception& e) {
-            log::error(
-                    logcat,
-                    "Failed to store service node info: failed to serialize short term data: {}",
-                    e.what());
-            return false;
+        size_t history_index = 0;
+        for (auto& it : m_transient->state_history) {
+            std::string& dest = m_transient->history_blob_list[history_index++];
+            tpool.submit(&tpool_waiter, [&dest, &it]() {
+                serialization::binary_string_archiver ba;
+                dest = serialize_snl_directly(ba, const_cast<state_t&>(it));
+            });
         }
 
+        // NOTE: Serialize current state into the recent store
+        std::string& curr = m_transient->history_blob_list[history_index++];
+        tpool.submit(&tpool_waiter, [&curr, this]() {
+            serialization::binary_string_archiver ba;
+            curr = serialize_snl_directly(ba, m_state);
+        });
+    }
+    tpool_waiter.wait(&tpool);
+
+    // NOTE: Store blobs to DB
+    {
+        ZoneScopedN("Store blobs to DB");
         auto& db = blockchain.db();
         cryptonote::db_wtxn_guard txn_guard{db};
-        db.set_service_node_data(ba.str(), false /*long_term*/);
+
+        if (m_transient->long_term_data_dirty) {
+            TracyCZoneN(serialize_step, "Serialize archive array of blobs", true);
+            serialization::binary_string_archiver ar;
+            std::string db_blob = serialize_db_blob(ar, m_transient->archive_blob_list, nullptr);
+            TracyCZoneEnd(serialize_step);
+            db.set_service_node_data(db_blob, true /*long_term*/);
+        }
+
+        {
+            TracyCZoneN(serialize_step, "Serialize history array of blobs", true);
+            serialization::binary_string_archiver ar;
+            std::string db_blob = serialize_db_blob(ar, m_transient->history_blob_list, &m_transient->old_quorum_states);
+            TracyCZoneEnd(serialize_step);
+            db.set_service_node_data(db_blob, false /*long_term*/);
+        }
     }
 
     m_transient->long_term_data_dirty = false;
@@ -5469,56 +5537,60 @@ service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
     return service_nodes_infos.erase(it);
 }
 
-bool service_node_list::load(const uint64_t current_height) {
-    ZoneScoped;
-    log::info(logcat, "service_node_list::load()");
-    reset(false);
-    if (!blockchain.has_db() || true) {
-        return false;
-    }
+struct try_load_as_old_result
+{
+    bool success;
+    uint64_t archive_min_height = 0;
+    uint64_t archive_max_height = 0;
+    uint64_t archive_with_quorums_only = 0;
+
+    uint64_t recent_max_height = 0;
+    uint64_t recent_min_height = 0;
+    uint64_t bytes_loaded = 0;
+};
+
+static try_load_as_old_result try_load_as_old_style_blobs(uint64_t current_height, service_node_list *snl, service_node_list_transient_storage *m_transient, cryptonote::Blockchain& blockchain, service_node_list::state_t &m_state, uint64_t m_store_quorum_history)
+{
+    auto& db = blockchain.db();
+    cryptonote::db_rtxn_guard txn_guard{db};
+
+    try_load_as_old_result result = {};
+    std::string blob;
 
     // NOTE: Deserialize long term state history (optional, if it doesn't exist- this node can't
     // roll-back but this is not considered fatal. It will have to recompute the rollback by jumping
     // back and processing blocks forward).
-    uint64_t bytes_loaded = 0;
-    auto& db = blockchain.db();
-    cryptonote::db_rtxn_guard txn_guard{db};
-    std::string blob;
-
-    uint64_t archive_min_height = 0;
-    uint64_t archive_max_height = 0;
-    uint64_t archive_with_quorums_only = 0;
     if (db.get_service_node_data(blob, true /*long_term*/)) {
         ZoneScopedN("Load long term SNL blob");
-        bytes_loaded += blob.size();
+        result.bytes_loaded += blob.size();
         try {
             data_for_serialization data_in = {};
             serialization::parse_binary(blob, data_in);
             if (data_in.states.size()) {
-                archive_min_height = std::numeric_limits<uint64_t>::max();
+                result.archive_min_height = std::numeric_limits<uint64_t>::max();
                 for (state_serialized& entry : data_in.states) {
                     m_transient->state_archive.emplace_hint(
-                            m_transient->state_archive.end(), *this, std::move(entry));
-                    archive_with_quorums_only += entry.only_stored_quorums;
-                    archive_min_height = std::min(archive_min_height, entry.height);
-                    archive_max_height = std::max(archive_max_height, entry.height);
+                            m_transient->state_archive.end(), *snl, std::move(entry));
+                    result.archive_with_quorums_only += entry.only_stored_quorums;
+                    result.archive_min_height = std::min(result.archive_min_height, entry.height);
+                    result.archive_max_height = std::max(result.archive_max_height, entry.height);
                 }
             }
-        } catch (...) {
+        } catch (const std::exception&) {
         }
     }
 
     // NOTE: Deserialize short term state history
     if (!db.get_service_node_data(blob, false))
-        return false;
+        return result;
 
-    bytes_loaded += blob.size();
+    result.bytes_loaded += blob.size();
     data_for_serialization data_in = {};
     try {
         serialization::parse_binary(blob, data_in);
     } catch (const std::exception& e) {
-        log::error(logcat, "Failed to parse service node data from blob: {}", e.what());
-        return false;
+        log::info(logcat, "Old style SNL blob was not detected ({}), parsing as new style blobs", e.what());
+        return result;
     }
 
     // NOTE: Temporary code for HF21 on Stagenet.v3. The pulse sort key of nodes
@@ -5532,11 +5604,11 @@ bool service_node_list::load(const uint64_t current_height) {
          blockchain.nettype() == cryptonote::network_type::DEVNET) &&
         data_in.version <
                 data_for_serialization::version_t::version_5_stagenet_devnet_regen_pulse_sorter) {
-        return false;
+        return result;
     }
 
     if (data_in.states.empty())
-        return false;
+        return result;
 
     {
         const uint64_t hist_state_from_height = current_height - m_store_quorum_history;
@@ -5554,21 +5626,19 @@ bool service_node_list::load(const uint64_t current_height) {
                         logcat,
                         "Serialised quorums is not stored in ascending order by height in DB, "
                         "failed to load from DB");
-                return false;
+                return result;
             }
             last_loaded_height = states.height;
             m_transient->old_quorum_states.push_back(entry);
         }
     }
 
-    uint64_t recent_max_height = 0;
-    uint64_t recent_min_height = 0;
     assert(data_in.states.size());
     if (data_in.states.size()) {
         ZoneScopedN("Deserialize SNL states");
         if (data_in.states.back().only_stored_quorums) {
             log::warning(logcat, "Unexpected last serialized state only has quorums loaded");
-            return false;
+            return result;
         }
 
         // NOTE: Prior to SNL v4 on all networks, we had a bug in the recent serialisation code
@@ -5577,15 +5647,15 @@ bool service_node_list::load(const uint64_t current_height) {
         if (data_in.version <
             data_for_serialization::version_t::version_4_ensure_rescan_resets_sql_db) {
             // NOTE: Construct key to retrieve the last SNL state in the archive
-            auto last_state_key = state_t(this);
-            last_state_key.height = archive_max_height;
+            auto last_state_key = service_node_list::state_t(snl);
+            last_state_key.height = result.archive_max_height;
 
             // NOTE: Assign last archive to state
             m_state = *m_transient->state_archive.find(last_state_key);
-            recent_min_height = m_state.height;
-            recent_max_height = m_state.height;
+            result.recent_min_height = m_state.height;
+            result.recent_max_height = m_state.height;
         } else {
-            recent_min_height = std::numeric_limits<uint64_t>::max();
+            result.recent_min_height = std::numeric_limits<uint64_t>::max();
             const size_t last_index = data_in.states.size() - 1;
             for (size_t i = 0; i < data_in.states.size(); i++) {
                 state_serialized& entry = data_in.states[i];
@@ -5597,17 +5667,148 @@ bool service_node_list::load(const uint64_t current_height) {
                 if (!entry.block_hash)
                     entry.block_hash = blockchain.get_block_id_by_height(entry.height);
 
-                recent_min_height = std::min(recent_min_height, entry.height);
-                recent_max_height = std::max(recent_max_height, entry.height);
+                result.recent_min_height = std::min(result.recent_min_height, entry.height);
+                result.recent_max_height = std::max(result.recent_max_height, entry.height);
 
                 if (i == last_index) {
-                    m_state = {*this, std::move(entry)};
+                    m_state = {*snl, std::move(entry)};
                 } else {
                     m_transient->state_history.emplace_hint(
-                            m_transient->state_history.end(), *this, std::move(entry));
+                            m_transient->state_history.end(), *snl, std::move(entry));
                 }
             }
         }
+    }
+
+    result.success = true;
+    return result;
+}
+
+bool service_node_list::load(const uint64_t current_height) {
+    ZoneScoped;
+    log::info(logcat, "service_node_list::load()");
+    reset(false);
+    if (!blockchain.has_db()) {
+        return false;
+    }
+
+    auto& db = blockchain.db();
+
+    // TODO: All the old code has been encapsulated to this function. After
+    // everyone migrates to HF20, everyone's blobs will have been updated. We
+    // can then just delete this entire function and promote the else branch
+    // below to the default code path to run.
+    try_load_as_old_result load_old_result = try_load_as_old_style_blobs(
+            current_height, this, m_transient.get(), blockchain, m_state, m_store_quorum_history);
+
+    uint64_t bytes_loaded = 0;
+    uint64_t archive_min_height = std::numeric_limits<uint64_t>::max();
+    uint64_t archive_max_height = 0;
+    uint64_t archive_with_quorums_only = 0;
+    uint64_t recent_max_height = std::numeric_limits<uint64_t>::max();
+    uint64_t recent_min_height = 0;
+
+    if (load_old_result.success) {
+        bytes_loaded = load_old_result.bytes_loaded;
+        archive_min_height = load_old_result.archive_min_height;
+        archive_max_height = load_old_result.archive_max_height;
+        archive_with_quorums_only = load_old_result.archive_with_quorums_only;
+        recent_max_height = load_old_result.recent_max_height;
+        recent_min_height = load_old_result.recent_min_height;
+    } else {
+        // NOTE: This person's node has migrated to the new version with the
+        // new serialisation code which completely dumps the old
+        // data_for_serialization which was silly and required copying all the
+        // structures into a special purpose data structure which then got
+        // serialised again into binary.
+        //
+        // Instead the new serialisation method works directly with the service
+        // node list state objects by walking through it directly and writing
+        // the fields to binary. This saves the wasteful compute work required
+        // to marshall the massive SNL state into an intermediate format which
+        // is then marshalled to binary, then memcopied into LMDB.
+        //
+        // Now it's just marshall massive SNL state to binary, then copy binary
+        // to LMDB. Each state is stored as a separate blob, this is intentional
+        // to eliminate the dependency chain we had with serialising the blobs as
+        // a singular binary stream where you can't jump ahead unless you know
+        // how much bytes the previous SNL state occupied. Instead storing SNL
+        // blobs as independent binary streams allows us to run the
+        // de/serialising step with multiple threads.
+        //
+        // Serialising is compute and memory unfriendly. There are multiple
+        // hash tables and trees to walk through that are full of STL containers
+        // and the work of processing through these structures can be pipelined
+        // using threads.
+        //
+        // TODO: We could even make the store to the DB multithreaded by passing
+        // the RESERVE flag to LMDB which gives us back a pointer that we can
+        // divvy across all threads to write the serialised binary into the DB.
+        //
+        // This is not implemented because serialising is not as _bad_ as it was
+        // before where it stalled the entire pipeline for a couple of seconds
+        // as we approach pulse blocks and the amount of data that's getting
+        // written grows larger.
+        //
+        // Ultimately a better way to improve this would be to store deltas as
+        // the number of changes between blocks is not large typically.
+        //
+        // However that change is quite a lot more destructive and requires
+        // fundamentally changing a lot of how the SNL interops with historical
+        // data and so forth.
+        //
+        // Storing deltas would most likely eliminate the pipeline stalls
+        // entirely removing the need to multithread as well as also getting rid
+        // of the intermediate formats as this change has also done.
+
+        std::string db_blob;
+        if (db.get_service_node_data(db_blob, true /*long_term*/)) {
+            serialization::binary_string_unarchiver ar{db_blob};
+            std::vector<std::string> sn_blob_list;
+            serialize_db_blob(ar, sn_blob_list, nullptr);
+
+            std::mutex mutex;
+            for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
+                const auto& sn_blob = sn_blob_list[sn_blob_index];
+                serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
+                state_t state(this);
+                serialize_snl_directly(sn_blob_ar, state); // TODO: Multi-thread this step
+
+                archive_with_quorums_only += state.only_loaded_quorums;
+                archive_min_height = std::min(archive_min_height, state.height);
+                archive_max_height = std::max(archive_max_height, state.height);
+
+                auto lock = std::unique_lock{mutex};
+                m_transient->state_archive.emplace_hint(m_transient->state_archive.end(), std::move(state));
+            }
+        }
+        bytes_loaded += db_blob.size();
+
+        if (db.get_service_node_data(db_blob, false /*long_term*/)) {
+            serialization::binary_string_unarchiver ar{db_blob};
+            std::vector<std::string> sn_blob_list;
+            serialize_db_blob(ar, sn_blob_list, &m_transient->old_quorum_states);
+
+            std::mutex mutex;
+            for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
+                const auto& sn_blob = sn_blob_list[sn_blob_index];
+                serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
+                state_t state(this);
+                serialize_snl_directly(sn_blob_ar, state); // TODO: Multi-thread this step
+
+                recent_min_height = std::min(recent_min_height, state.height);
+                recent_max_height = std::max(recent_max_height, state.height);
+
+                auto lock = std::unique_lock{mutex};
+                if (sn_blob_index == sn_blob_list.size() - 1) {
+                    m_state = std::move(state);
+                } else {
+                    m_transient->state_history.emplace_hint(
+                            m_transient->state_history.end(), std::move(state));
+                }
+            }
+        }
+        bytes_loaded += db_blob.size();
     }
 
     // NOTE: Load uptime proof data

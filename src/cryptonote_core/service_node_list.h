@@ -1175,11 +1175,10 @@ class service_node_list {
         // contract staking requirement update).
         uint64_t get_staking_requirement(cryptonote::network_type nettype) const;
 
-      private:
         // Rebuilds the x25519_map and bls_map from the list of service nodes and recently removed
         // nodes.  Does nothing if the feature::ETH_BLS fork hasn't happened for this state height.
         void initialize_alt_pk_maps();
-
+      private:
         mutable std::optional<service_nodes::payout> next_block_leader_cache;
     };
 

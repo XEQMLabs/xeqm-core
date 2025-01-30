@@ -6470,6 +6470,7 @@ bool BlockchainLMDB::get_service_node_data(std::string& data, bool long_term) co
         }
     }
 
+    data.clear();
     data.assign(reinterpret_cast<const char*>(v.mv_data), v.mv_size);
     return true;
 }
