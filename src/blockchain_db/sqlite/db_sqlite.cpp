@@ -44,16 +44,6 @@ namespace cryptonote {
 
 static auto logcat = log::Cat("blockchain.db.sqlite");
 
-struct delayed_payment
-{
-    BlockchainSQLite::exit_stake exit;
-    uint64_t payout_height;
-};
-
-std::map<uint64_t /*height*/, block_payments> batched_payments_accrued_staging;
-std::map<uint64_t /*height*/, std::vector<delayed_payment>> delayed_payments_staging;
-bool commit_on_block_add = true;
-
 BlockchainSQLite::BlockchainSQLite(
         cryptonote::network_type nettype, std::filesystem::path db_path) :
         db::Database(db_path, ""), m_nettype(nettype) {
@@ -1002,7 +992,7 @@ bool BlockchainSQLite::add_block(
     // NOTE: Submit payments
     reward_handler(block, service_nodes_state, get_delayed_payments(block_height));
     update_height(height + 1, false /*commit*/);
-
+    commit();
     return true;
 }
 
