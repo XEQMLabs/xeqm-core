@@ -177,6 +177,13 @@ class BlockchainSQLite : public db::Database {
     uint64_t commit_height;
 
   protected:
+    struct delayed_payment {
+        BlockchainSQLite::exit_stake exit;
+        uint64_t payout_height;
+    };
+
+    std::map<uint64_t /*height*/, block_payments> batched_payments_accrued_staging;
+    std::map<uint64_t /*height*/, std::vector<delayed_payment>> delayed_payments_staging;
     cryptonote::network_type m_nettype;
 };
 
