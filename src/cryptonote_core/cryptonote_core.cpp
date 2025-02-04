@@ -2341,6 +2341,13 @@ void core::safesyncmode(const bool onoff) {
 //-----------------------------------------------------------------------------------------------
 bool core::add_new_block(
         const block& b, block_verification_context& bvc, checkpoint_t const* checkpoint) {
+
+    // XXX FIXME: devnet testing
+    auto hf21_height = hard_fork_begins(m_nettype, hf::hf21_eth);
+    if (hf21_height && b.get_height() == *hf21_height) {
+        log::debug(logcat, "Ignoring new block at height {} with incoming height {} because it would be HF21; stalling on final block of HF20", b.get_height() - 1, b.get_height());
+        return false;
+    }
     bool result = blockchain.add_new_block(b, bvc, checkpoint);
     if (result)
         relay_service_node_votes();  // NOTE: nop if synchronising due to not accepting votes whilst
