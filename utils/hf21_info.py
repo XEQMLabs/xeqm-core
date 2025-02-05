@@ -33,15 +33,15 @@ addresses = {
 }
 
 transition_bonus = {
-    '0xB0CefD61ddB88176Fb972955341adC6c1d05230e': 26722101500000,
-    '0xB7649B5A5DfABAA0713ACFB3040945035b0bBD9e': 0,
-    '0xb82Cd271CE0E498e4203AC4db801698Bd720f6AF': 0,
-    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': 0,
-    '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb': 0,
-    '0xcccccccccccccccccccccccccccccccccccccccc': 292857142960,
-    '0xdddddddddddddddddddddddddddddddddddddddd': 0,
-    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee': 5966165000000,
-    '0xffffffffffffffffffffffffffffffffffffffff': 12345123450, # registered, but staked nothing
+    '0xB0CefD61ddB88176Fb972955341adC6c1d05230e': 64035886857040, # wallet1
+    '0xB7649B5A5DfABAA0713ACFB3040945035b0bBD9e': 1658571428520,  # wallet2
+    '0xb82Cd271CE0E498e4203AC4db801698Bd720f6AF': 3577714285680,  # wallet3
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': 0,              # wallet4
+    '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb': 0,              # wallet5
+    '0xcccccccccccccccccccccccccccccccccccccccc': 6434285714320,   # wallet7
+    '0xdddddddddddddddddddddddddddddddddddddddd': 0,              # wallet8
+    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee': 76368521000000,  # wallet9
+    '0xffffffffffffffffffffffffffffffffffffffff': 12345123450,    # wallet10 (registered, but staked nothing)
 }
 
 conversion_ratio = 200 # testnet SENT stake is 200x testnet OXEN stake
@@ -98,8 +98,12 @@ def get_migration():
 
         # TODO: normalize if sum > req for the few nodes on mainnet with a higher stake sum
         if contribution_sum != staking_requirement:
-            print(f"Stakes * conversion_ratio != staking_requirement, {contribution_sum} != {staking_requirement}")
-            continue
+            new_sum = 0
+            for c in contributors:
+                c['amount'] = int(c['amount'] / (contribution_sum + 1) * staking_requirement)
+                new_sum += c['amount']
+            if new_sum < staking_requirement:
+                contributors[0]['amount'] += staking_requirement - new_sum
 
         seed_list.append({
             'bls_pubkey': res['pubkey_bls'],
