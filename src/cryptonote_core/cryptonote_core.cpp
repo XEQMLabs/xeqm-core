@@ -2254,7 +2254,7 @@ bool core::submit_uptime_proof() {
     try {
         cryptonote_connection_context fake_context{};
         bool relayed;
-        auto height = blockchain.get_current_blockchain_height();
+        auto height = blockchain.get_current_blockchain_height() - 1;  // -1 or would use new rules 1 block too early
         auto hf_version = get_network_version(m_nettype, height);
 
         auto proof = service_node_list.generate_uptime_proof(
@@ -2286,8 +2286,9 @@ bool core::handle_uptime_proof(
     ZoneScoped;
     std::unique_ptr<uptime_proof::Proof> proof;
     try {
+        // height -1 or would use new rules 1 block too early
         proof = std::make_unique<uptime_proof::Proof>(
-                get_network_version(m_nettype, blockchain.get_current_blockchain_height()),
+                get_network_version(m_nettype, blockchain.get_current_blockchain_height() - 1),
                 m_nettype,
                 req.proof);
 
