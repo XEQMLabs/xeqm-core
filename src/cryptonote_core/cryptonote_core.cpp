@@ -777,6 +777,18 @@ bool core::init(
     // transactions in the pool that do not conform to the current fork
     mempool.validate(blockchain.get_network_version());
 
+    // if loading after HF21 and monero key was still present, fix here
+    auto height = blockchain.get_current_blockchain_height();
+    if (height > 0) {
+        auto hf21_height = hard_fork_begins(m_nettype, hf::hf21_eth);
+        if (hf21_height && height > *hf21_height) {
+            service_node_list.while_locked([this](){
+                    init_service_keys(true);
+                    });
+        }
+    }
+
+
     bool show_time_stats = command_line::get_arg(vm, arg_show_time_stats) != 0;
     blockchain.set_show_time_stats(show_time_stats);
 
@@ -1010,7 +1022,7 @@ bool init_key(
 }
 
 //-----------------------------------------------------------------------------------------------
-bool core::init_service_keys() {
+bool core::init_service_keys(bool fixup_monero_ed) {
     auto& keys = m_service_keys;
 
     static_assert(
@@ -1020,6 +1032,11 @@ bool core::init_service_keys() {
                     sizeof(crypto::x25519_public_key) == crypto_scalarmult_curve25519_BYTES &&
                     sizeof(crypto::x25519_secret_key) == crypto_scalarmult_curve25519_BYTES,
             "Invalid ed25519/x25519 sizes");
+
+    // clang-format off
+    // at HF21 (and on load if after HF21), we need to ignore the old monero-style key
+    // and just use the proper ed25519 as if it doesn't exist
+    if (!fixup_monero_ed) {
 
     // <data>/key_ed25519: Standard ed25519 secret key.  We always have this, and generate one if it
     // doesn't exist.
@@ -1066,13 +1083,16 @@ bool core::init_service_keys() {
                                   }))
         return false;
 
+    }
+    // clang-format on
+
     // Legacy primary SN key file; we only load this if it exists, otherwise we use `key_ed25519`
     // for the primary SN keypair.  (This key predates the Ed25519 keys and so is needed for
     // backwards compatibility with existing active service nodes.)  The legacy key consists of
     // *just* the private point, but not the seed, and so cannot be used for full Ed25519 signatures
     // (which rely on the seed for signing).
     if (m_service_node) {
-        if (std::error_code ec; !fs::exists(m_config_folder / "key", ec)) {
+        if (std::error_code ec; fixup_monero_ed || !fs::exists(m_config_folder / "key", ec)) {
             epee::wipeable_string privkey_signhash;
             privkey_signhash.resize(crypto_hash_sha512_BYTES);
             unsigned char* pk_sh_data = reinterpret_cast<unsigned char*>(privkey_signhash.data());
@@ -2350,9 +2370,15 @@ bool core::add_new_block(
         return false;
     }
     bool result = blockchain.add_new_block(b, bvc, checkpoint);
-    if (result)
+    if (result) {
         relay_service_node_votes();  // NOTE: nop if synchronising due to not accepting votes whilst
                                      // syncing
+        if (hf21_height && b.get_height() == *hf21_height) {
+            service_node_list.while_locked([this](){
+                    init_service_keys(true);
+                    });
+        }
+    }
     return result;
 }
 //-----------------------------------------------------------------------------------------------

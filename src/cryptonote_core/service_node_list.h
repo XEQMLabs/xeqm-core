@@ -604,6 +604,15 @@ class service_node_list {
             f(it->second);
     }
 
+    /// FIXME: remove some time after HF21
+    /// core needs to update the service node keys (to which we have a pointer) at HF21,
+    /// this allows core to make sure we're not using them at that moment
+    template <typename Func>
+    void while_locked(Func f) const {
+        std::unique_lock lock{m_sn_mutex};
+        f();
+    }
+
     /// Returns the primary SN pubkey associated with a x25519 pubkey.  Returns a null public key if
     /// not found.  (Note: this is just looking up the association, not derivation).
     ///
