@@ -609,26 +609,40 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
     const auto& conf = get_config(m_nettype);
 
-    auto accrued_amounts = prepared_results<std::string_view, int64_t>(
-            "SELECT address, amount FROM batched_payments_accrued WHERE payout_offset = ? AND "
-            "amount >= ? ORDER BY address ASC",
-            static_cast<int>(block_height % conf.BATCHING_INTERVAL),
-            static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+    std::vector<std::pair<std::string, int64_t>> accrued_pairs;
+    {
+        auto accrued_amounts = prepared_results<std::string_view, int64_t>(
+                "SELECT address, amount FROM batched_payments_accrued WHERE payout_offset = ? AND "
+                "amount >= ? ORDER BY address ASC",
+                static_cast<int>(block_height % conf.BATCHING_INTERVAL),
+                static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+
+        for (const auto& [address, amount] : accrued_amounts)
+            accrued_pairs.emplace_back(std::string{address}, amount);
+    }
 
     // The block before HF21, addresses which have not registered an ETH address for the
     // SENT transition will have their balances paid out, regardless of balance.
     bool pre_hf21_final_payout = false;
-    if (block_height == *cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth) - 1) {
-        bool pre_hf21_final_payout = true;
-        auto accrued_amounts = prepared_results<std::string_view, int64_t>(
-                "SELECT address, amount FROM batched_payments_accrued ");
+    auto hf21_begins = *cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth);
+    if (block_height == hf21_begins - 1) {
+        log::debug(logcat, "block before hf21, doing final payout to addresses not registered for conversion");
+        pre_hf21_final_payout = true;
+        auto all_accrued_amounts = prepared_results<std::string_view, int64_t>(
+                "SELECT address, amount FROM batched_payments_accrued ORDER BY address ASC");
+        accrued_pairs.clear();
+        for (auto [address, amount] : all_accrued_amounts)
+            accrued_pairs.emplace_back(std::string{address}, amount);
     }
 
     std::vector<cryptonote::batch_sn_payment> payments;
 
     const auto& sent_addr_map = oxen::sent::addresses(m_nettype);
-    for (auto [address, amount] : accrued_amounts) {
+    for (const auto& pair : accrued_pairs) {
+        const auto& address = pair.first;
+        const auto& amount = pair.second;
         if (pre_hf21_final_payout) {
+            log::debug(logcat, "address {} has amount {}", address, amount);
             if (sent_addr_map.contains(std::string{address}))
                 continue;
             log::debug(logcat, "pre_hf21_final_payout, paying out address {}", address);
