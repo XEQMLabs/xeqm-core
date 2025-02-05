@@ -209,6 +209,9 @@ void transition(
                                             : SENT_STAKING_REQUIREMENT_TESTNET;
     const auto& staking_ratio = net == network_type::MAINNET ? OXEN_SENT_STAKING_RATIO
                                                              : OXEN_SENT_TESTNET_STAKING_RATIO;
+    const auto& oxen_staking_requirement = net == network_type::MAINNET
+                                            ? OXEN_STAKING_REQUIREMENT
+                                            : OXEN_STAKING_REQUIREMENT_TESTNET;
 
     for (const auto& [pk, sni] : sorted_sns) {
         bool zombie = false;
@@ -216,12 +219,12 @@ void transition(
         // We have 5 exceptions to the 15k staking requirement on the OXEN mainnet, registered
         // continuously since before the staking requirement was fixed at 15k (HF16, i.e. Oxen 8).
         std::optional<std::pair<uint32_t, uint32_t>> extra_ratio;
-        if (net == network_type::MAINNET && sni->staking_requirement > 15000'000000000) {
+        if (sni->staking_requirement > oxen_staking_requirement) {
             // +1 because we want this ratio to err on the size of being too small so that we are
             // guaranteed to have a sum of contributions at the end that are <= the required amount.
             // This is computed in tenths of an OXEN to ensure we won't overflow when applying the
             // ratio while still being able to get reasonably close to the precise number.
-            extra_ratio.emplace(15000'0, sni->staking_requirement / 100'000'000 + 1);
+            extra_ratio.emplace(oxen_staking_requirement / 100'000'000, sni->staking_requirement / 100'000'000 + 1);
 
             // The maximum OXEN contribution amount we have is just under 17500, which means in the
             // code below we could (as an intermediate step) end up calculating up to just under 7/6
