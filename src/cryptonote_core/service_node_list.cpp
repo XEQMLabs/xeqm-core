@@ -5199,7 +5199,7 @@ bool service_node_list::handle_uptime_proof(
         bool& my_uptime_proof_confirmation,
         crypto::x25519_public_key& x25519_pkey) {
     auto vers = get_network_version_revision(
-            blockchain.nettype(), blockchain.get_current_blockchain_height());
+            blockchain.nettype(), blockchain.get_current_blockchain_height() - 1);
     auto& netconf = get_config(blockchain.nettype());
     auto now = std::chrono::system_clock::now();
 
