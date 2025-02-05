@@ -25,13 +25,6 @@ namespace mainnet {
     const conv_ratio_t conv_ratio;
     const bonus_map_t transition_bonus;
 }  // namespace mainnet
-namespace devnet {
-    const addrmap_t addresses;
-    const proper_ed_keys_t proper_ed_keys;
-    const bls_keys_t bls_keys;
-    const conv_ratio_t conv_ratio;
-    const bonus_map_t transition_bonus;
-}  // namespace devnet
 
 const conv_ratio_t& conversion_ratio(network_type net) {
     return net == network_type::DEVNET  ? devnet::conv_ratio

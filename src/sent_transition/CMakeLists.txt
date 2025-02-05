@@ -8,8 +8,9 @@ add_library(sent_transition
 ]]
 
 add_library(sent_transition
-  sent_transition.cpp
+  devnet.cpp
   localdev.cpp
+  sent_transition.cpp
   testnet.cpp)
 
 target_link_libraries(sent_transition
