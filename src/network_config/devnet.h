@@ -64,7 +64,7 @@ inline constexpr network_config config{
         .DEREGISTRATION_LOCK_DURATION = testnet::config.DEREGISTRATION_LOCK_DURATION,
         .UNLOCK_DURATION = testnet::config.UNLOCK_DURATION,
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD =
-                mainnet::config.HARDFORK_DEREGISTRATION_GRACE_PERIOD,
+                100,
         .HISTORY_ARCHIVE_INTERVAL = mainnet::config.HISTORY_ARCHIVE_INTERVAL,
         .HISTORY_ARCHIVE_KEEP_WINDOW = mainnet::config.HISTORY_ARCHIVE_KEEP_WINDOW,
         .HISTORY_RECENT_KEEP_WINDOW = mainnet::config.HISTORY_RECENT_KEEP_WINDOW,
