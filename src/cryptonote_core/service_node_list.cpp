@@ -2952,6 +2952,7 @@ void service_node_list::block_add(
 }
 
 static std::mt19937_64 quorum_rng(hf hf_version, crypto::hash const& hash, quorum_type type) {
+    ZoneScoped;
     std::mt19937_64 result;
     if (hf_version >= hf::hf16_pulse) {
         std::array<uint32_t, (sizeof(hash) / sizeof(uint32_t)) + 1> src = {
@@ -3402,6 +3403,83 @@ crypto::x25519_public_key snpk_to_xpk(const crypto::public_key& snpk, bool alrea
     return xpk;
 }
 
+static std::vector<crypto::public_key> get_expired_nodes_for_hf9(
+        cryptonote::BlockchainDB const& db,
+        cryptonote::network_type nettype,
+        hf hf_version,
+        uint64_t block_height) {
+    std::vector<crypto::public_key> result;
+    uint64_t const lock_blocks = staking_num_lock_blocks(nettype);
+    if (block_height <= lock_blocks)
+        return result;
+
+    const uint64_t expired_nodes_block_height = block_height - lock_blocks;
+    cryptonote::block block = {};
+    try {
+        block = db.get_block_from_height(expired_nodes_block_height);
+    } catch (std::exception const& e) {
+        log::error(
+                logcat, "Failed to get historical block to find expired nodes in v9: {}", e.what());
+        return result;
+    }
+
+    if (block.major_version < hf::hf9_service_nodes)
+        return result;
+
+    for (crypto::hash const& hash : block.tx_hashes) {
+        cryptonote::transaction tx;
+        if (!db.get_tx(hash, tx)) {
+            log::error(logcat, "Failed to get historical tx to find expired service nodes in v9");
+            continue;
+        }
+
+        uint32_t index = 0;
+        crypto::public_key key;
+        service_node_info info = {};
+        if (is_registration_tx(
+                    nettype,
+                    hf::hf9_service_nodes,
+                    tx,
+                    block.timestamp,
+                    expired_nodes_block_height,
+                    index,
+                    get_default_staking_requirement(nettype, expired_nodes_block_height),
+                    key,
+                    info))
+            result.push_back(key);
+        index++;
+    }
+
+    return result;
+}
+
+static bool is_expired_node_hf10_onwards(
+        cryptonote::network_type nettype,
+        hf hf_version,
+        uint64_t block_height,
+        const service_node_pubkey_info& sn) {
+    if (hf_version < hf::hf10_bulletproofs)
+        return false;
+
+    const crypto::public_key& snode_key = sn.pubkey;
+    const service_node_info& info = *sn.info;
+    if (info.registration_hf_version >= hf::hf11_infinite_staking) {
+        if (info.requested_unlock_height && block_height > info.requested_unlock_height)
+            return true;
+    } else {  // Version 10 Bulletproofs
+        /// Note: this code exhibits a subtle unintended behaviour: a snode that
+        /// registered in hardfork 9 and was scheduled for deregistration in hardfork 10
+        /// will have its life is slightly prolonged by the "grace period", although it
+        /// might look like we use the registration height to determine the expiry height.
+        uint64_t const lock_blocks = staking_num_lock_blocks(nettype);
+        uint64_t node_expiry_height = info.registration_height + lock_blocks +
+                                      cryptonote::old::STAKING_REQUIREMENT_LOCK_BLOCKS_EXCESS;
+        if (block_height > node_expiry_height)
+            return true;
+    }
+    return false;
+}
+
 void service_node_list::state_t::update_from_block(
         cryptonote::BlockchainDB const& db,
         cryptonote::network_type nettype,
@@ -3428,6 +3506,7 @@ void service_node_list::state_t::update_from_block(
     struct pre_block_precomputed_data {
         std::vector<crypto::public_key> active_snode_list;
         std::vector<crypto::public_key> pulse_candidates;
+        std::vector<crypto::public_key> expired_nodes;
         crypto::public_key block_leader;
     } pre_block_precomputed;
 
@@ -3442,10 +3521,21 @@ void service_node_list::state_t::update_from_block(
                 std::numeric_limits<uint32_t>::max(),
                 crypto::null<crypto::public_key>);
 
+        if (hf_version == hf::hf9_service_nodes)
+            pre_block_precomputed.expired_nodes =
+                    get_expired_nodes_for_hf9(db, nettype, block.major_version, block.get_height());
+
         // NOTE: Walk the list
         for (auto it : service_nodes_infos) {
             const crypto::public_key& key = it.first;
             const service_node_info* info = it.second.get();
+
+            if (hf_version >= hf::hf10_bulletproofs) {
+                if (is_expired_node_hf10_onwards(
+                            nettype, hf_version, block.get_height(), service_node_pubkey_info(it)))
+                    pre_block_precomputed.expired_nodes.push_back(key);
+            }
+
             if (!info->is_active())
                 continue;
 
@@ -3477,12 +3567,13 @@ void service_node_list::state_t::update_from_block(
         if (hf_version >= hf::hf16_pulse) {
             ZoneScopedN("Generate pulse candidates");
             pre_block_precomputed.pulse_candidates = pre_block_precomputed.active_snode_list;
+            // NOTE: Remove the block leader if we're in round 0. In all other
+            // rounds everyone's a candidate for participating in Pulse
             if (block.pulse.round == 0) {
                 auto it = std::lower_bound(
                         pre_block_precomputed.pulse_candidates.begin(),
                         pre_block_precomputed.pulse_candidates.end(),
                         pre_block_precomputed.block_leader);
-
                 if (it != pre_block_precomputed.pulse_candidates.end())
                     pre_block_precomputed.pulse_candidates.erase(it);
             }
@@ -3579,8 +3670,7 @@ void service_node_list::state_t::update_from_block(
     // Expire Nodes
     //
     TracyCZoneN(expire_nodes, "Expire nodes", true);
-    for (const crypto::public_key& pubkey :
-         get_expired_nodes(db, nettype, block.major_version, height)) {
+    for (const crypto::public_key& pubkey : pre_block_precomputed.expired_nodes) {
         auto i = service_nodes_infos.find(pubkey);
         if (i == service_nodes_infos.end())
             continue;
@@ -4102,82 +4192,6 @@ void service_node_list::blockchain_detached(uint64_t height) {
             detach_label);
 
     blockchain.sqlite_db().blockchain_detached(history, m_state.height);
-}
-
-std::vector<crypto::public_key> service_node_list::state_t::get_expired_nodes(
-        cryptonote::BlockchainDB const& db,
-        cryptonote::network_type nettype,
-        hf hf_version,
-        uint64_t block_height) const {
-    std::vector<crypto::public_key> expired_nodes;
-    uint64_t const lock_blocks = staking_num_lock_blocks(nettype);
-    if (hf_version == hf::hf9_service_nodes) {
-        if (block_height <= lock_blocks)
-            return expired_nodes;
-
-        const uint64_t expired_nodes_block_height = block_height - lock_blocks;
-        cryptonote::block block = {};
-        try {
-            block = db.get_block_from_height(expired_nodes_block_height);
-        } catch (std::exception const& e) {
-            log::error(
-                    logcat,
-                    "Failed to get historical block to find expired nodes in v9: {}",
-                    e.what());
-            return expired_nodes;
-        }
-
-        if (block.major_version < hf::hf9_service_nodes)
-            return expired_nodes;
-
-        for (crypto::hash const& hash : block.tx_hashes) {
-            cryptonote::transaction tx;
-            if (!db.get_tx(hash, tx)) {
-                log::error(
-                        logcat, "Failed to get historical tx to find expired service nodes in v9");
-                continue;
-            }
-
-            uint32_t index = 0;
-            crypto::public_key key;
-            service_node_info info = {};
-            if (is_registration_tx(
-                        nettype,
-                        hf::hf9_service_nodes,
-                        tx,
-                        block.timestamp,
-                        expired_nodes_block_height,
-                        index,
-                        get_default_staking_requirement(nettype, expired_nodes_block_height),
-                        key,
-                        info))
-                expired_nodes.push_back(key);
-            index++;
-        }
-
-    } else {
-        for (auto it = service_nodes_infos.begin(); it != service_nodes_infos.end(); it++) {
-            crypto::public_key const& snode_key = it->first;
-            const service_node_info& info = *it->second;
-            if (info.registration_hf_version >= hf::hf11_infinite_staking) {
-                if (info.requested_unlock_height && block_height > info.requested_unlock_height)
-                    expired_nodes.push_back(snode_key);
-            } else  // Version 10 Bulletproofs
-            {
-                /// Note: this code exhibits a subtle unintended behaviour: a snode that
-                /// registered in hardfork 9 and was scheduled for deregistration in hardfork 10
-                /// will have its life is slightly prolonged by the "grace period", although it
-                /// might look like we use the registration height to determine the expiry height.
-                uint64_t node_expiry_height =
-                        info.registration_height + lock_blocks +
-                        cryptonote::old::STAKING_REQUIREMENT_LOCK_BLOCKS_EXCESS;
-                if (block_height > node_expiry_height)
-                    expired_nodes.push_back(snode_key);
-            }
-        }
-    }
-
-    return expired_nodes;
 }
 
 service_nodes::payout service_node_list::state_t::get_next_block_leader() const {
