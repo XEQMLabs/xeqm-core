@@ -2979,6 +2979,7 @@ static std::vector<size_t> generate_shuffled_service_node_index_list(
         quorum_type type,
         size_t sublist_size = 0,
         size_t sublist_up_to = 0) {
+    ZoneScoped;
     std::vector<size_t> result(list_size);
     std::iota(result.begin(), result.end(), 0);
     std::mt19937_64 rng = quorum_rng(hf_version, block_hash, type);
@@ -3107,6 +3108,71 @@ std::vector<crypto::hash> get_pulse_entropy_for_next_block(
     return get_pulse_entropy_for_next_block(db, db.get_top_block(), pulse_round);
 }
 
+service_nodes::quorum generate_pulse_quorum2(
+        cryptonote::network_type nettype,
+        crypto::public_key const& block_leader,
+        hf hf_version,
+        size_t active_snode_list_size,
+        std::vector<crypto::public_key>& pulse_candidates,
+        const std::vector<crypto::hash>& pulse_entropy,
+        uint8_t pulse_round) {
+    ZoneScoped;
+    service_nodes::quorum result = {};
+    const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
+    if (active_snode_list_size < MIN_NODE_COUNT) {
+        log::debug(
+                logcat,
+                "There are {} nodes available and active on the network to generate a quorum but "
+                "{} nodes are required",
+                active_snode_list_size,
+                MIN_NODE_COUNT);
+        return result;
+    }
+
+    if (pulse_entropy.size() != PULSE_QUORUM_SIZE) {
+        log::debug(logcat, "Blockchain has insufficient blocks to generate Pulse data");
+        return result;
+    }
+
+    crypto::public_key block_producer;
+    if (pulse_round == 0) {
+        block_producer = block_leader;
+    } else {
+        std::mt19937_64 rng = quorum_rng(hf_version, pulse_entropy[0], quorum_type::pulse);
+        size_t producer_index = tools::uniform_distribution_portable(rng, pulse_candidates.size());
+        block_producer = pulse_candidates[producer_index];
+        pulse_candidates.erase(pulse_candidates.begin() + producer_index);
+    }
+
+    // NOTE: Order the candidates so the first half nodes in the list is the validators for this
+    // round.
+    // - Divide the list in half, select validators from the first half of the list.
+    // - Swap the chosen validator into the moving first half of the list.
+    TracyCZoneN(pick_pulse_candidates, "Pick pulse quorum members", true);
+    auto running_it = pulse_candidates.begin();
+    size_t const partition_index = (pulse_candidates.size() - 1) / 2;
+    if (partition_index == 0) {
+        running_it += service_nodes::PULSE_QUORUM_NUM_VALIDATORS;
+    } else {
+        for (size_t i = 0; i < service_nodes::PULSE_QUORUM_NUM_VALIDATORS; i++) {
+            crypto::hash const& entropy = pulse_entropy[i + 1];
+            std::mt19937_64 rng = quorum_rng(hf_version, entropy, quorum_type::pulse);
+            size_t validators_available = std::distance(running_it, pulse_candidates.end());
+            size_t swap_index = tools::uniform_distribution_portable(
+                    rng, std::min(partition_index, validators_available));
+            std::swap(*running_it, *(running_it + swap_index));
+            running_it++;
+        }
+    }
+    TracyCZoneEnd(pick_pulse_candidates);
+
+    result.workers.push_back(block_producer);
+    result.validators.reserve(PULSE_QUORUM_NUM_VALIDATORS);
+    for (auto it = pulse_candidates.begin(); it != running_it; it++)
+        result.validators.push_back(*it);
+    return result;
+}
+
 service_nodes::quorum generate_pulse_quorum(
         cryptonote::network_type nettype,
         crypto::public_key const& block_leader,
@@ -3199,7 +3265,8 @@ service_nodes::quorum generate_pulse_quorum(
 
 static void generate_other_quorums(
         service_node_list::state_t& state,
-        std::vector<pubkey_and_sninfo> const& active_snode_list,
+        std::span<const service_node_pubkey_info> active_snode_list,
+        std::span<const crypto::public_key> decomm_snode_list,
         cryptonote::network_type nettype,
         hf hf_version) {
     ZoneScoped;
@@ -3209,10 +3276,6 @@ static void generate_other_quorums(
     // state change *validators* want only active service nodes, but the state change *workers*
     // (i.e. the nodes to be tested) also include decommissioned service nodes.  (Prior to v12 there
     // are no decommissioned nodes, so this distinction is irrelevant for network concensus).
-    std::vector<pubkey_and_sninfo> decomm_snode_list;
-    if (hf_version >= hf::hf12_checkpointing)
-        decomm_snode_list = state.decommissioned_service_nodes_infos();
-
     quorum_type const max_quorum_type = max_quorum_type_for_hf(hf_version);
     for (int type_int = 0; type_int <= (int)max_quorum_type; type_int++) {
         auto type = static_cast<quorum_type>(type_int);
@@ -3276,8 +3339,8 @@ static void generate_other_quorums(
                 pub_keys_indexes.reserve(active_snode_list.size());
                 uint64_t const active_until = state.height + BLINK_EXPIRY_BUFFER;
                 for (size_t index = 0; index < active_snode_list.size(); index++) {
-                    pubkey_and_sninfo const& entry = active_snode_list[index];
-                    uint64_t requested_unlock_height = entry.second->requested_unlock_height;
+                    service_node_pubkey_info const& entry = active_snode_list[index];
+                    uint64_t requested_unlock_height = entry.info->requested_unlock_height;
                     if (!requested_unlock_height || requested_unlock_height > active_until)
                         pub_keys_indexes.push_back(index);
                 }
@@ -3306,15 +3369,15 @@ static void generate_other_quorums(
 
         size_t i = 0;
         for (; i < num_validators; i++) {
-            quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].first);
+            quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
         }
 
         for (; i < num_validators + num_workers; i++) {
             size_t j = pub_keys_indexes[i];
             if (j < active_snode_list.size())
-                quorum->workers.push_back(active_snode_list[j].first);
+                quorum->workers.push_back(active_snode_list[j].pubkey);
             else
-                quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()].first);
+                quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
         }
     }
 }
@@ -3359,6 +3422,84 @@ void service_node_list::state_t::update_from_block(
     quorums = {};
     auto hf_version = block.major_version;
 
+    // NOTE: In the update step there are multiple pieces of information we want
+    // to extract from the SN list. Instead of the various steps independently
+    // walking the list, we walk the list once at the top and feed it in.
+    struct pre_block_precomputed_data {
+        std::vector<crypto::public_key> active_snode_list;
+        std::vector<crypto::public_key> pulse_candidates;
+        crypto::public_key block_leader;
+    } pre_block_precomputed;
+
+    {
+        ZoneScopedN("Pre-block precompute SNL data");
+        pre_block_precomputed.active_snode_list.reserve(service_nodes_infos.size());
+
+        // NOTE: Block leader setup
+        service_node_pubkey_info block_leader_info = {};
+        auto oldest_waiting = std::make_tuple(
+                std::numeric_limits<uint64_t>::max(),
+                std::numeric_limits<uint32_t>::max(),
+                crypto::null<crypto::public_key>);
+
+        // NOTE: Walk the list
+        for (auto it : service_nodes_infos) {
+            const crypto::public_key& key = it.first;
+            const service_node_info* info = it.second.get();
+            if (!info->is_active())
+                continue;
+
+            // NOTE: Build the active list
+            pre_block_precomputed.active_snode_list.push_back(it.first);
+
+            // NOTE: Find the block leader
+            auto waiting_since = std::make_tuple(
+                    info->last_reward_block_height, info->last_reward_transaction_index, key);
+            if (waiting_since < oldest_waiting) {
+                oldest_waiting = waiting_since;
+                block_leader_info = service_node_pubkey_info(it);
+            }
+        }
+
+        // NOTE: Assign the block leader
+        if (block_leader_info.info) {
+            next_block_leader_cache =
+                    service_node_payout_portions(block_leader_info.pubkey, *block_leader_info.info);
+            pre_block_precomputed.block_leader = block_leader_info.pubkey;
+        } else {
+            next_block_leader_cache = service_nodes::null_payout;
+        }
+
+        // NOTE: Sort the list
+        std::sort(pre_block_precomputed.active_snode_list.begin(), pre_block_precomputed.active_snode_list.end());
+
+        // NOTE: Generate pulse candidates
+        if (hf_version >= hf::hf16_pulse) {
+            ZoneScopedN("Generate pulse candidates");
+            pre_block_precomputed.pulse_candidates = pre_block_precomputed.active_snode_list;
+            if (block.pulse.round == 0) {
+                auto it = std::lower_bound(
+                        pre_block_precomputed.pulse_candidates.begin(),
+                        pre_block_precomputed.pulse_candidates.end(),
+                        pre_block_precomputed.block_leader);
+
+                if (it != pre_block_precomputed.pulse_candidates.end())
+                    pre_block_precomputed.pulse_candidates.erase(it);
+            }
+
+            std::sort(
+                    pre_block_precomputed.pulse_candidates.begin(),
+                    pre_block_precomputed.pulse_candidates.end(),
+                    [this](crypto::public_key const& a, crypto::public_key const& b) {
+                        const service_node_info& a_info = *service_nodes_infos[a];
+                        const service_node_info& b_info = *service_nodes_infos[b];
+                        if (a_info.pulse_sorter == b_info.pulse_sorter)
+                            return a < b;
+                        return a_info.pulse_sorter < b_info.pulse_sorter;
+                    });
+        }
+    }
+
     //
     // Generate Pulse Quorum and winner before we make any changes to the state because changing the
     // height, processing state changes, and so on can affect the block leader and pulse quorums.
@@ -3366,18 +3507,28 @@ void service_node_list::state_t::update_from_block(
     TracyCZoneN(get_winner_and_gen_pulse_quorum, "Get winner and generate pulse quorum", true);
     crypto::public_key winner_pubkey = get_next_block_leader().key;
     if (hf_version >= hf::hf16_pulse) {
-        if (auto quorum = get_next_pulse_quorum(hf_version, block.pulse.round, db, nettype)) {
+
+        quorum pulse_quorum = generate_pulse_quorum2(
+                nettype,
+                winner_pubkey,
+                hf_version,
+                pre_block_precomputed.active_snode_list.size(),
+                pre_block_precomputed.pulse_candidates,
+                get_pulse_entropy_for_next_block(db, block_hash, block.pulse.round),
+                block.pulse.round);
+
+        if (verify_pulse_quorum_sizes(pulse_quorum)) {
             // NOTE: Send candidate to the back of the list
-            for (size_t quorum_index = 0; quorum_index < quorum->validators.size();
+            for (size_t quorum_index = 0; quorum_index < pulse_quorum.validators.size();
                  quorum_index++) {
-                crypto::public_key const& key = quorum->validators[quorum_index];
+                crypto::public_key const& key = pulse_quorum.validators[quorum_index];
                 service_node_info& new_info = duplicate_info(service_nodes_infos[key]);
                 new_info.pulse_sorter.last_height_validating_in_quorum = height + 1;
                 new_info.pulse_sorter.quorum_index = quorum_index;
             }
 
             TracyCZoneN(alloc_quorum, "Shared pointer alloc quorum", true);
-            quorums.pulse = std::make_shared<service_nodes::quorum>(std::move(*quorum));
+            quorums.pulse = std::make_shared<service_nodes::quorum>(std::move(pulse_quorum));
             TracyCZoneEnd(alloc_quorum);
         }
     }
@@ -3464,8 +3615,8 @@ void service_node_list::state_t::update_from_block(
     // Process any votes to pending eth state changes (this has to be done before we process
     // transactions, because that might add new unconfirmed txes and make the vote index no longer
     // match up).
-    TracyCZoneN(process_pending_eth_state_changes, "Process pending ETH state changes", true);
     if (hf_version >= feature::ETH_BLS) {
+        ZoneScopedN("Process pending ETH state changes");
         // Basic block validation (long before this) is responsible for ensuring this:
         assert(block.tx_eth_count <= block.tx_hashes.size());
 
@@ -3554,7 +3705,6 @@ void service_node_list::state_t::update_from_block(
             }
         }
     }
-    TracyCZoneEnd(process_pending_eth_state_changes);
 
     //
     // If our x25519/bls maps are empty then try populating it (which only does something if we're
@@ -3613,10 +3763,30 @@ void service_node_list::state_t::update_from_block(
     }
     TracyCZoneEnd(process_txs_in_block);
 
-    // Filtered pubkey-sorted vector of service nodes that are active (fully funded and *not*
-    // decommissioned).
-    std::vector<pubkey_and_sninfo> active_snode_list = sort_and_filter(
-            service_nodes_infos, [](const service_node_info& info) { return info.is_active(); });
+    // NOTE: Calculate both lists in one loop
+    std::vector<service_node_pubkey_info> post_block_active_snode_list = {};
+    std::vector<crypto::public_key> post_block_decomm_snode_list = {};
+    {
+        ZoneScopedN("Post-block calc active/decomm SN list");
+        post_block_active_snode_list.reserve(service_nodes_infos.size());
+        for (auto it : service_nodes_infos) {
+            const service_node_info* info = it.second.get();
+            if (info->is_active())
+                post_block_active_snode_list.emplace_back(it);
+
+            if (hf_version >= hf::hf12_checkpointing) {
+                if (info->is_decommissioned() && info->is_fully_funded())
+                    post_block_decomm_snode_list.push_back(it.first);
+            }
+        }
+        std::sort(
+                post_block_active_snode_list.begin(),
+                post_block_active_snode_list.end(),
+                [](const service_node_pubkey_info& lhs, const service_node_pubkey_info& rhs) {
+                    return lhs.pubkey < rhs.pubkey;
+                });
+        std::sort(post_block_decomm_snode_list.begin(), post_block_decomm_snode_list.end());
+    }
 
     if (need_swarm_update) {
         ZoneScopedN("Swarm update");
@@ -3626,8 +3796,9 @@ void service_node_list::state_t::update_from_block(
 
         /// Gather existing swarms from infos
         swarm_snode_map_t existing_swarms;
-        for (const auto& key_info : active_snode_list)
-            existing_swarms[key_info.second->swarm_id].push_back(key_info.first);
+        for (const auto& key_info : post_block_active_snode_list) {
+            existing_swarms[key_info.info->swarm_id].push_back(key_info.pubkey);
+        }
 
         calc_swarm_changes(existing_swarms, seed);
 
@@ -3642,7 +3813,7 @@ void service_node_list::state_t::update_from_block(
         }
     }
 
-    generate_other_quorums(*this, active_snode_list, nettype, hf_version);
+    generate_other_quorums(*this, post_block_active_snode_list, post_block_decomm_snode_list, nettype, hf_version);
     next_block_leader_cache.reset();
     log::debug(
             logcat,
