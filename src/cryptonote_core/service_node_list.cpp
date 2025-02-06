@@ -2948,7 +2948,7 @@ void service_node_list::block_add(
 
     // NOTE: Add block to SQL in lock-step with SNL
     if (auto* sql_db = blockchain.maybe_sqlite_db())
-        sql_db->add_block(block, m_state, blockchain.get_current_blockchain_height() - 1);
+        sql_db->add_block(block, m_state);
 }
 
 static std::mt19937_64 quorum_rng(hf hf_version, crypto::hash const& hash, quorum_type type) {
