@@ -592,7 +592,8 @@ bool core::init(
                 "11597c2be5719701d8d1000cfccf46ef7b52a3d80573300d38aa5bf283b43b6a"sv,
                 "efd64cb09bd3cadb127731d2919769314100d85e6d09fdcd022327e65d43e9f2"sv};
         const std::vector<std::string_view> DEVNET_OLD_BLOCK1_HASHES = {
-                "a9ef652d2867cc663388136c2e18c6d7f3bcaccd3c8615e8d8bc838aa8aae191"sv};
+                "a9ef652d2867cc663388136c2e18c6d7f3bcaccd3c8615e8d8bc838aa8aae191"sv,
+                "2fc566f435bb0f70fd8d10eac54b229150470b3aaa02ca81104f1c7467a0d3a8"sv};
 
         auto* hashes = m_nettype == network_type::STAGENET ? &STAGENET_OLD_BLOCK1_HASHES :
                 m_nettype == network_type::DEVNET ? &DEVNET_OLD_BLOCK1_HASHES : nullptr;
