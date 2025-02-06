@@ -495,6 +495,22 @@ struct service_node_keys {
     eth::bls_public_key pub_bls;
 };
 
+// Caches the window of block entropy for deriving pulse quorums of blocks for forming pulse
+// quorums. This prevents having to pull blocks from the DB and instead have them sitting in memory.
+// The entropy for `block` is defined as the first `PULSE_QUORUM_SIZE` hashes from `data` after
+// `add_block` is called at-least once for a block.
+//
+// If `add_block` fails then the window is not initialised and no hashes will be returned when
+// queried.
+struct pulse_entropy_feeder {
+    bool init = false;
+    uint8_t pulse_round = 0;
+    crypto::hash last_hash = {};
+    crypto::hash data[PULSE_QUORUM_ENTROPY_LAG + 2] = {};
+    bool add_block(const cryptonote::BlockchainDB& db, const cryptonote::block &block);
+    std::span<const crypto::hash> get_window() const;
+};
+
 class service_node_list {
   public:
     explicit service_node_list(cryptonote::Blockchain& blockchain);
@@ -1060,7 +1076,8 @@ class service_node_list {
                 std::unordered_map<crypto::hash, state_t> const& alt_states,
                 const cryptonote::block& block,
                 const std::vector<cryptonote::transaction>& txs,
-                const service_node_keys* my_keys);
+                const service_node_keys* my_keys,
+                const pulse_entropy_feeder *entropy_window);
 
         // Returns true if there was a registration:
         bool process_registration_tx(
@@ -1302,6 +1319,8 @@ class service_node_list {
     // nodes that can't yet be liquidated; the .second value is the expiry block height at which we
     // remove them (and thus allow liquidation):
     std::unordered_map<eth::bls_public_key, uint64_t> recently_expired_nodes;
+
+    pulse_entropy_feeder pulse_entropy_feed;
 };
 
 struct staking_components {
