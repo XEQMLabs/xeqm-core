@@ -3115,7 +3115,7 @@ service_nodes::quorum generate_pulse_quorum2(
         hf hf_version,
         size_t active_snode_list_size,
         std::vector<crypto::public_key>& pulse_candidates,
-        const std::vector<crypto::hash>& pulse_entropy,
+        std::span<const crypto::hash> pulse_entropy,
         uint8_t pulse_round) {
     ZoneScoped;
     service_nodes::quorum result = {};
@@ -3488,7 +3488,8 @@ void service_node_list::state_t::update_from_block(
         std::unordered_map<crypto::hash, state_t> const& alt_states,
         const cryptonote::block& block,
         const std::vector<cryptonote::transaction>& txs,
-        const service_node_keys* my_keys) {
+        const service_node_keys* my_keys,
+        const pulse_entropy_feeder* pulse_entropy_feed) {
     ZoneScoped;
     log::trace(
             logcat,
@@ -3598,6 +3599,25 @@ void service_node_list::state_t::update_from_block(
     TracyCZoneN(get_winner_and_gen_pulse_quorum, "Get winner and generate pulse quorum", true);
     crypto::public_key winner_pubkey = get_next_block_leader().key;
     if (hf_version >= hf::hf16_pulse) {
+        std::vector<crypto::hash> pulse_entropy_storage;
+        std::span<const crypto::hash> pulse_entropy;
+        if (pulse_entropy_feed) {
+            pulse_entropy = pulse_entropy_feed->get_window();
+            // NOTE: In debug mode, test that the entropy window is correct
+#if !defined(NDEBUG)
+            for (static bool once = true; once; once = false) {
+                pulse_entropy_storage =
+                        get_pulse_entropy_for_next_block(db, block_hash, block.pulse.round);
+                for (size_t index = 0; index < pulse_entropy.size(); index++) {
+                    assert(pulse_entropy[index] == pulse_entropy_storage[index]);
+                }
+            }
+#endif
+        } else {
+            pulse_entropy_storage =
+                    get_pulse_entropy_for_next_block(db, block_hash, block.pulse.round);
+            pulse_entropy = pulse_entropy_storage;
+        }
 
         quorum pulse_quorum = generate_pulse_quorum2(
                 nettype,
@@ -3605,7 +3625,7 @@ void service_node_list::state_t::update_from_block(
                 hf_version,
                 pre_block_precomputed.active_snode_list.size(),
                 pre_block_precomputed.pulse_candidates,
-                get_pulse_entropy_for_next_block(db, block_hash, block.pulse.round),
+                pulse_entropy,
                 block.pulse.round);
 
         if (verify_pulse_quorum_sizes(pulse_quorum)) {
@@ -3914,6 +3934,56 @@ void service_node_list::state_t::update_from_block(
     block_leader = std::move(winner_pubkey);
 }
 
+bool pulse_entropy_feeder::add_block(const cryptonote::BlockchainDB& db, const cryptonote::block& block)
+{
+    if (block.major_version < hf::hf16_pulse)
+        return false;
+
+    if (cryptonote::get_block_hash(block) == last_hash) // Already added
+        return true;
+
+    bool seed_window = !init;
+    seed_window |= pulse_round != block.pulse.round;
+    seed_window |= last_hash != block.prev_id;
+
+    if (seed_window) {
+        // NOTE: Seed the entire window with the last window of blocks needed for pulse
+        *this = {};
+        init = true;
+
+        cryptonote::block it;
+        it.prev_id = cryptonote::get_block_hash(block);
+
+        for (size_t index = oxen::array_count(data) - 1; index < oxen::array_count(data); index--) {
+            if (!find_block_in_db(db, it.prev_id, it)) {
+                *this = {};
+                return false;
+            }
+            data[index] = make_pulse_entropy_from_blocks(&it, &it + 1, block.pulse.round)[0];
+        }
+    } else {
+        // NOTE: It is seeded, shift everything down by 1
+        std::memmove(data, data + 1, sizeof(data) - sizeof(data[0]));
+
+        // NOTE: Add the block to the end of the window
+        data[oxen::array_count(data) - 1] =
+                make_pulse_entropy_from_blocks(&block, &block + 1, block.pulse.round)[0];
+    }
+
+    last_hash = cryptonote::get_block_hash(block);
+    pulse_round = block.pulse.round;
+    assert(init);
+    return true;
+}
+
+std::span<const crypto::hash> pulse_entropy_feeder::get_window() const
+{
+    std::span<const crypto::hash> result = {};
+    if (init)
+        result = std::span<const crypto::hash>(data, PULSE_QUORUM_SIZE);
+    return result;
+}
+
 void service_node_list::process_block(
         const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs) {
     ZoneScoped;
@@ -4034,6 +4104,7 @@ void service_node_list::process_block(
             old.erase(old.begin(), old.begin() + (old.size() - m_store_quorum_history));
     }
 
+    pulse_entropy_feed.add_block(blockchain.db(), block);
     m_state.update_from_block(
             blockchain.db(),
             blockchain.nettype(),
@@ -4042,7 +4113,8 @@ void service_node_list::process_block(
             {},
             block,
             txs,
-            m_service_node_keys);
+            m_service_node_keys,
+            &pulse_entropy_feed);
 }
 
 void service_node_list::blockchain_detached(uint64_t height) {
@@ -4751,7 +4823,8 @@ void service_node_list::alt_block_add(const cryptonote::block_add_info& info) {
             m_transient->alt_state,
             block,
             info.txs,
-            m_service_node_keys);
+            m_service_node_keys,
+            nullptr);
     auto alt_it = m_transient->alt_state.find(block_hash);
     if (alt_it != m_transient->alt_state.end())
         alt_it->second = std::move(alt_state);
