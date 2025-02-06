@@ -53,7 +53,7 @@ class BlockchainSQLite : public db::Database {
 
     // Update the height stored in the SQL DB that indicates the last block height that this DB has
     // synchronised to in.
-    void update_height(uint64_t new_height);
+    void update_height(uint64_t new_height, bool commit);
 
     enum class PaymentTableType {
         Nil,      // Table containing current state
@@ -82,9 +82,9 @@ class BlockchainSQLite : public db::Database {
     void reward_handler(
             const cryptonote::block& block,
             const service_nodes::service_node_list::state_t& service_nodes_state,
-            block_payments&& payments);
+            block_payments payments = {});
 
-    block_payments get_delayed_payments();
+    block_payments get_delayed_payments(uint64_t height);
 
     std::unordered_map<account_public_address, std::string> address_str_cache;
     std::pair<hf, cryptonote::address_parse_info> parsed_governance_addr = {hf::none, {}};
@@ -141,8 +141,7 @@ class BlockchainSQLite : public db::Database {
     // database. Each accepted block should call this passing in the SN list structure.
     bool add_block(
             const cryptonote::block& block,
-            const service_nodes::service_node_list::state_t& service_nodes_state,
-            uint64_t top_block_height);
+            const service_nodes::service_node_list::state_t& service_nodes_state);
 
     struct exit_stake {
         eth::address addr;
@@ -174,18 +173,8 @@ class BlockchainSQLite : public db::Database {
 
     bool commit();
 
-    uint64_t height = 0;         // Last block height that this object processed
-    uint64_t commit_height = 0;  // Last block height that was committed to the DB
-
-    // When height is modulo `commit_interval` the runtime data for the SQL DB
-    // will be committed to disk. If `commit_interval` is set to 0 then the
-    // interval is disabled.
-    uint64_t commit_interval = 0;
-
-    // Set to true to commit to the SQL DB when `add_block` is called. Otherwise
-    // the SQL will be committed whenever the block height is modulo the
-    // `commit_interval`.
-    bool commit_on_block_add = false;
+    uint64_t height;
+    uint64_t commit_height;
 
   protected:
     struct delayed_payment {
@@ -193,13 +182,8 @@ class BlockchainSQLite : public db::Database {
         uint64_t payout_height;
     };
 
-    struct per_block_state {
-        block_payments batched_payments_accrued;
-        std::vector<delayed_payment> delayed_payments;
-    };
-
-    per_block_state block_state;
-    std::map<uint64_t, per_block_state> block_state_staging;
+    std::map<uint64_t /*height*/, block_payments> batched_payments_accrued_staging;
+    std::map<uint64_t /*height*/, std::vector<delayed_payment>> delayed_payments_staging;
     cryptonote::network_type m_nettype;
 };
 
