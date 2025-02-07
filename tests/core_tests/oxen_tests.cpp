@@ -3810,7 +3810,7 @@ bool oxen_batch_sn_rewards_pop_blocks::generate(std::vector<test_event_entry> &e
     CHECK_EQ(sqliteDB.height, curr_height - 1);
     std::optional<std::vector<cryptonote::batch_sn_payment>> records;
     // curr_height = the block that would contain the batched service node payment
-    records = sqliteDB.get_pre_eth_bls_sn_payments(curr_height);
+    records = sqliteDB.get_sn_payments(curr_height);
     CHECK_EQ(records.has_value(), true);
     CHECK_EQ((*records).size(), 1);
     // Check that the database has a full batch amount that includes the soon to be popped block 
@@ -3821,7 +3821,7 @@ bool oxen_batch_sn_rewards_pop_blocks::generate(std::vector<test_event_entry> &e
     CHECK_EQ(sqliteDB.height, blockchain.get_current_blockchain_height() - 1);
     CHECK_EQ(sqliteDB.height, curr_height - 2);
 
-    records = sqliteDB.get_pre_eth_bls_sn_payments(curr_height);
+    records = sqliteDB.get_sn_payments(curr_height);
     CHECK_EQ(records.has_value(), true);
     if (batched_rewards_earned != MK_COINS(1) * 16.5)
     {
@@ -3840,7 +3840,7 @@ bool oxen_batch_sn_rewards_pop_blocks::generate(std::vector<test_event_entry> &e
     CHECK_EQ(sqliteDB.height, blockchain.get_current_blockchain_height() - 1);
     CHECK_EQ(sqliteDB.height, curr_height - more_blocks - 1);
 
-    records = sqliteDB.get_pre_eth_bls_sn_payments(curr_height + 1);
+    records = sqliteDB.get_sn_payments(curr_height + 1);
     CHECK_EQ((*records).size(), 0);
 
     return true;
@@ -3914,7 +3914,7 @@ bool oxen_batch_sn_rewards_pop_blocks_after_big_cycle::generate(std::vector<test
 
     curr_height = blockchain.get_current_blockchain_height();
 
-    auto records = sqliteDB.get_pre_eth_bls_sn_payments(curr_height);
+    auto records = sqliteDB.get_sn_payments(curr_height);
     CHECK_EQ(records.size(), 1);
     CHECK_EQ(records[0].amount, cryptonote::reward_money::coin_amount(amount));
     CHECK_EQ(tools::view_guts(records[0].address_info.address), tools::view_guts(alice.get_keys().m_account_address));
