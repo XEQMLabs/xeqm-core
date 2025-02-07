@@ -53,7 +53,7 @@ class BlockchainSQLite : public db::Database {
 
     // Update the height stored in the SQL DB that indicates the last block height that this DB has
     // synchronised to in.
-    void update_height(uint64_t new_height, bool commit);
+    void update_height(uint64_t new_height);
 
     enum class PaymentTableType {
         Nil,      // Table containing current state
@@ -98,18 +98,29 @@ class BlockchainSQLite : public db::Database {
     bool trigger_exists(const std::string& name);
 
   public:
-    // Retrieves the amount (in atomic SENT) that has been accrued to the `address`.
-    // Returns the current height and the atomic lifetime value that the address is owed. (Note
-    // for Eth addresses unlike Oxen addresses, these rewards never reset to zero; but rather the
-    // rewards contract keeps track of the current paid and current total and pays out the
-    // difference).
-    std::pair<uint64_t, uint64_t> get_accrued_rewards(const std::variant<eth::address, account_public_address>& address);
+    // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.
+    // Returns the current height and the atomic lifetime value that the address is owed.  (Note
+    // that, unlike Oxen addresses, these rewards never reset to zero; but rather the rewards
+    // contract keeps track of the current paid and current total and pays out the difference).
+    std::pair<uint64_t, uint64_t> get_accrued_rewards(const eth::address& address);
 
-    // Returns the amount (in atomic SENT) that has been accrued to the `address` as of the
+    // Retrieves the amount (in atomic OXEN) that has been accrued but not yet paid out to the Oxen
+    // wallet `address`.  Returns the current height and the atomic unpaid amount that the address
+    // is owed.
+    std::pair<uint64_t, uint64_t> get_accrued_rewards(const account_public_address& address);
+
+    // Returns the amount (in atomic SENT) that has been accrued to the Ethereum `address` as of the
     // given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
     // current block height, or lower than the oldest stored recent height (see network_config's
-    // KEEP_WINDOW), otherwise returns the balance.
-    std::optional<uint64_t> get_accrued_rewards(const std::variant<eth::address, account_public_address>& address, uint64_t at_height);
+    // STORE_RECENT_REWARDS;, otherwise returns the balance.
+    std::optional<uint64_t> get_accrued_rewards(const eth::address& address, uint64_t at_height);
+
+    // Returns the amount (in atomic OXEN) that has been accrued to the Oxen wallet `address` as of
+    // the given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
+    // known height, or lower than the stored recent heights (see network_config's
+    // STORE_RECENT_REWARDS); otherwise returns the balance.
+    std::optional<uint64_t> get_accrued_rewards(
+            const account_public_address& address, uint64_t height);
 
     // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
     // service nodes will return 2 vectors corresponding to the addresses and the atomic value in
@@ -118,7 +129,7 @@ class BlockchainSQLite : public db::Database {
 
     // get_payments -> passing a block height will return an array of payments that should be
     // created in a coinbase transaction on that block given the current batching DB state.
-    std::vector<cryptonote::batch_sn_payment> get_pre_eth_bls_sn_payments(uint64_t block_height);
+    std::vector<cryptonote::batch_sn_payment> get_sn_payments(uint64_t block_height);
 
     // Takes the list of contributors from sn_info with their SN contribution amounts and will
     // calculate how much of the block rewards should be the allocated to the contributors. The
@@ -154,7 +165,7 @@ class BlockchainSQLite : public db::Database {
     // Add a payment to the delayed_payments table. 'at_height' should be greater than or equal to
     // the height of the table or otherwise the payments may be deleted without taking effect. This
     // function asserts if 'at_height' does not meet this criteria.
-    void add_delayed_payments(
+    bool add_delayed_payments(
             std::span<const exit_stake> payments, uint64_t at_height, uint64_t delay_blocks);
 
     // validate_batch_payment -> used to make sure that list of miner_tx_vouts is correct. Compares
@@ -171,19 +182,9 @@ class BlockchainSQLite : public db::Database {
     // batched_payments_paid database as height_paid.
     bool save_payments(uint64_t block_height, const std::vector<batch_sn_payment>& paid_amounts);
 
-    bool commit();
-
     uint64_t height;
-    uint64_t commit_height;
 
   protected:
-    struct delayed_payment {
-        BlockchainSQLite::exit_stake exit;
-        uint64_t payout_height;
-    };
-
-    std::map<uint64_t /*height*/, block_payments> batched_payments_accrued_staging;
-    std::map<uint64_t /*height*/, std::vector<delayed_payment>> delayed_payments_staging;
     cryptonote::network_type m_nettype;
 };
 

@@ -37,7 +37,7 @@ public:
 
     transaction.commit();
 
-    update_height(other.height, true /*commit*/);
+    update_height(other.height);
   }
 
   // Helper functions, used in testing to assess the state of the database
