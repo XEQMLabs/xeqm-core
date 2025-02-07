@@ -36,8 +36,8 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string_view>
-#include <type_traits>
 #include <tracy/Tracy.hpp>
+#include <type_traits>
 
 #include "common/util.h"
 #include "crypto/crypto.h"
@@ -66,6 +66,11 @@ struct checkpoint_t;
 
 namespace service_nodes {
 inline constexpr uint64_t INVALID_HEIGHT = static_cast<uint64_t>(-1);
+
+struct rescan_context {
+    bool skip_verify;
+    uint64_t top_block_height;
+};
 
 struct checkpoint_participation_entry {
     uint64_t height = INVALID_HEIGHT;
@@ -202,6 +207,12 @@ struct pulse_sort_key {
         field_varint(ar, "last_height_validating_in_quorum", last_height_validating_in_quorum);
         field(ar, "quorum_index", quorum_index);
     }
+};
+
+struct block_add_result {
+    // List of payable nodes. Populated when the block height is >= HF19, empty
+    // otherwise
+    std::vector<crypto::public_key> payable_nodes_hf19_onwards;
 };
 
 struct service_node_info  // registration information
@@ -507,7 +518,7 @@ struct pulse_entropy_feeder {
     uint8_t pulse_round = 0;
     crypto::hash last_hash = {};
     crypto::hash data[PULSE_QUORUM_ENTROPY_LAG + 2] = {};
-    bool add_block(const cryptonote::BlockchainDB& db, const cryptonote::block &block);
+    bool add_block(const cryptonote::BlockchainDB& db, const cryptonote::block& block);
     std::span<const crypto::hash> get_window() const;
 };
 
@@ -524,7 +535,7 @@ class service_node_list {
             const cryptonote::block& block,
             const std::vector<cryptonote::transaction>& txs,
             const cryptonote::checkpoint_t* checkpoint,
-            bool skip_verify = false);
+            const std::optional<rescan_context>& rescan = std::nullopt);
     void blockchain_detached(uint64_t height);
     void init();
     void validate_miner_tx(const cryptonote::miner_tx_info& info) const;
@@ -1001,6 +1012,7 @@ class service_node_list {
     struct state_t;
     using state_set = std::set<state_t, std::less<>>;
     using block_height = uint64_t;
+
     struct state_t {
         crypto::hash block_hash{};
         bool only_loaded_quorums{false};
@@ -1068,7 +1080,7 @@ class service_node_list {
                 cryptonote::network_type nettype,
                 cryptonote::hf hf_version,
                 uint64_t block_height) const;
-        void update_from_block(
+        block_add_result update_from_block(
                 cryptonote::BlockchainDB const& db,
                 cryptonote::network_type nettype,
                 state_set const& state_history,
@@ -1077,7 +1089,7 @@ class service_node_list {
                 const cryptonote::block& block,
                 const std::vector<cryptonote::transaction>& txs,
                 const service_node_keys* my_keys,
-                const pulse_entropy_feeder *entropy_window);
+                const pulse_entropy_feeder* entropy_window);
 
         // Returns true if there was a registration:
         bool process_registration_tx(
@@ -1195,6 +1207,7 @@ class service_node_list {
         // Rebuilds the x25519_map and bls_map from the list of service nodes and recently removed
         // nodes.  Does nothing if the feature::ETH_BLS fork hasn't happened for this state height.
         void initialize_alt_pk_maps();
+
       private:
         mutable std::optional<service_nodes::payout> next_block_leader_cache;
     };
@@ -1282,7 +1295,7 @@ class service_node_list {
 
   private:
     bool m_rescanning = false; /* set to true when doing a rescan so we know not to reset proofs */
-    void process_block(
+    block_add_result process_block(
             const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs);
     void record_pulse_participation(
             crypto::public_key const& pubkey, uint64_t height, uint8_t round, bool participated);
