@@ -544,13 +544,19 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
     uint64_t work_blocks = 0;
     uint64_t total_bytes = 0, work_bytes = 0;
 
+    // We skip verification here because the fact that this block is already in the
+    // lmdb means it has already been verified:
+    service_nodes::rescan_context rescan = {};
+    rescan.top_block_height = end_height;
+    rescan.skip_verify = true;
+
     while (true) {
         ZoneScopedN("Load blocks into subsystem");
 
-        TracyCZoneN(get_block_data_zone, "Get block data (contend on lock)", true);
         auto get_block_data_start = clock::now();
         block_data chunk;
         if (use_threaded_load) {
+            ZoneScopedN("Get block data (contend on lock)");
             {
                 std::unique_lock lock{load_context.block_mut};
                 load_context.block_cv.wait(lock, [&] {
@@ -569,12 +575,12 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
             }
             load_context.block_cv.notify_all();  // Notify the loader that we've removed a block
         } else {
+            ZoneScopedN("Get block data (serial)");
             chunk = get_block_data(load_context.height, end_height);
             if (load_context.height >= end_height || chunk.blocks.empty() || (abort && *abort))
                 break;
             load_context.height += block_load_context::CHUNK_SIZE;
         }
-        TracyCZoneEnd(get_block_data_zone);
 
         auto now = clock::now();
         get_block_data_interval_duration += now - get_block_data_start;
@@ -655,10 +661,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                     checkpoint_ptr = &checkpoint;
 
                 try {
-                    // We skip verification here because the fact that this block is already in the
-                    // lmdb means it has already been verified:
-                    constexpr bool skip_verify = true;
-                    service_node_list.block_add(blk, txs, checkpoint_ptr, skip_verify);
+                    service_node_list.block_add(blk, txs, checkpoint_ptr, rescan);
                 } catch (const std::exception& e) {
                     log::critical(
                             logcat,

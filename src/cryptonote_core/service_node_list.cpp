@@ -34,7 +34,6 @@
 #include <oxenc/endian.h>
 #include <oxenc/hex.h>
 #include <sodium.h>
-#include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
 
 #include <algorithm>
@@ -42,6 +41,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <tracy/Tracy.hpp>
 
 #include "blockchain.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -50,8 +50,8 @@
 #include "common/i18n.h"
 #include "common/lock.h"
 #include "common/random.h"
-#include "common/util.h"
 #include "common/threadpool.h"
+#include "common/util.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/cryptonote_basic.h"
@@ -71,11 +71,11 @@
 #include "pulse.h"
 #include "ringct/rctSigs.h"
 #include "ringct/rctTypes.h"
+#include "serialization/deque.h"
+#include "serialization/string.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
-#include "serialization/string.h"
-#include "serialization/deque.h"
 #include "uptime_proof.h"
 
 using cryptonote::hf;
@@ -103,8 +103,8 @@ struct quorum_for_serialization {
 };
 
 template <typename Archive>
-static void serialize_quorum_ptr_directly(Archive& ar, std::string_view key, std::shared_ptr<const quorum>& ptr)
-{
+static void serialize_quorum_ptr_directly(
+        Archive& ar, std::string_view key, std::shared_ptr<const quorum>& ptr) {
     if constexpr (Archive::is_deserializer) {
         quorum dummy = {};
         field(ar, key, dummy);
@@ -2894,8 +2894,10 @@ void service_node_list::block_add(
         const cryptonote::block& block,
         const std::vector<cryptonote::transaction>& txs,
         cryptonote::checkpoint_t const* checkpoint,
-        bool skip_verify) {
+        const std::optional<rescan_context>& rescan) {
     ZoneScoped;
+    block_add_result result = {};
+
     if (block.major_version < hf::hf9_service_nodes) {
         m_state.height = block.get_height();
     } else {
@@ -2908,8 +2910,8 @@ void service_node_list::block_add(
         }
 
         std::lock_guard lock(m_sn_mutex);
-        process_block(block, txs);
-        if (!skip_verify)
+        result = process_block(block, txs);
+        if (!rescan || !rescan->skip_verify)
             verify_block(block, false /*alt_block*/, checkpoint);
         if (block.has_pulse()) {
             // NOTE: Only record participation if its a block we recently received.
@@ -2948,7 +2950,7 @@ void service_node_list::block_add(
 
     // NOTE: Add block to SQL in lock-step with SNL
     if (auto* sql_db = blockchain.maybe_sqlite_db())
-        sql_db->add_block(block, m_state);
+        sql_db->add_block(block, m_state, result, rescan);
 }
 
 static std::mt19937_64 quorum_rng(hf hf_version, crypto::hash const& hash, quorum_type type) {
@@ -3109,12 +3111,23 @@ std::vector<crypto::hash> get_pulse_entropy_for_next_block(
     return get_pulse_entropy_for_next_block(db, db.get_top_block(), pulse_round);
 }
 
-service_nodes::quorum generate_pulse_quorum2(
+static bool pulse_candidates_sorter(const pubkey_and_sninfo& a, const pubkey_and_sninfo& b) {
+    if (a.second->pulse_sorter == b.second->pulse_sorter)
+        return a.first < b.first;
+    return a.second->pulse_sorter < b.second->pulse_sorter;
+}
+
+// Generate the pulse quorum directly from a list of pulse candidates. The list of pulse candidates
+// for a block height is defined as the state of the SNL before the block is processed including:
+//
+//   - all active nodes
+//   - excludes the block leader if the pulse round is > 0
+static service_nodes::quorum generate_pulse_quorum_with_candidates(
         cryptonote::network_type nettype,
-        crypto::public_key const& block_leader,
+        const crypto::public_key& block_leader,
         hf hf_version,
         size_t active_snode_list_size,
-        std::vector<crypto::public_key>& pulse_candidates,
+        std::vector<pubkey_and_sninfo>& pulse_candidates,
         std::span<const crypto::hash> pulse_entropy,
         uint8_t pulse_round) {
     ZoneScoped;
@@ -3141,7 +3154,7 @@ service_nodes::quorum generate_pulse_quorum2(
     } else {
         std::mt19937_64 rng = quorum_rng(hf_version, pulse_entropy[0], quorum_type::pulse);
         size_t producer_index = tools::uniform_distribution_portable(rng, pulse_candidates.size());
-        block_producer = pulse_candidates[producer_index];
+        block_producer = pulse_candidates[producer_index].first;
         pulse_candidates.erase(pulse_candidates.begin() + producer_index);
     }
 
@@ -3170,10 +3183,13 @@ service_nodes::quorum generate_pulse_quorum2(
     result.workers.push_back(block_producer);
     result.validators.reserve(PULSE_QUORUM_NUM_VALIDATORS);
     for (auto it = pulse_candidates.begin(); it != running_it; it++)
-        result.validators.push_back(*it);
+        result.validators.push_back(it->first);
     return result;
 }
 
+// Generate the pulse quorum given the active service node list. This function will generate a
+// secondary list from the active SN list that is then suitable for passing into
+// `generate_pulse_quorum_with_candidates`
 service_nodes::quorum generate_pulse_quorum(
         cryptonote::network_type nettype,
         crypto::public_key const& block_leader,
@@ -3182,85 +3198,29 @@ service_nodes::quorum generate_pulse_quorum(
         std::vector<crypto::hash> const& pulse_entropy,
         uint8_t pulse_round) {
     ZoneScoped;
-    service_nodes::quorum result = {};
-    const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
-    if (active_snode_list.size() < MIN_NODE_COUNT) {
-        log::debug(
-                logcat,
-                "There are {} nodes available and active on the network to generate a quorum but "
-                "{} nodes are required",
-                active_snode_list.size(),
-                MIN_NODE_COUNT);
-        return result;
-    }
-
-    if (pulse_entropy.size() != PULSE_QUORUM_SIZE) {
-        log::debug(logcat, "Blockchain has insufficient blocks to generate Pulse data");
-        return result;
-    }
-
     TracyCZoneN(gen_pulse_candidates, "Generate pulse candidates", true);
-    std::vector<pubkey_and_sninfo const*> pulse_candidates;
+    std::vector<pubkey_and_sninfo> pulse_candidates;
     pulse_candidates.reserve(active_snode_list.size());
     for (auto& node : active_snode_list) {
         if (node.first != block_leader || pulse_round > 0)
-            pulse_candidates.push_back(&node);
+            pulse_candidates.push_back(node);
     }
     TracyCZoneEnd(gen_pulse_candidates);
 
     // NOTE: Sort ascending in height i.e. sort preferring the longest time since the validator was
     // in a Pulse quorum.
     TracyCZoneN(sort_pulse_candidates, "Sort pulse candidates", true);
-    std::sort(
-            pulse_candidates.begin(),
-            pulse_candidates.end(),
-            [](pubkey_and_sninfo const* a, pubkey_and_sninfo const* b) {
-                if (a->second->pulse_sorter == b->second->pulse_sorter)
-                    return memcmp(reinterpret_cast<const void*>(&a->first),
-                                  reinterpret_cast<const void*>(&b->first),
-                                  sizeof(a->first)) < 0;
-                return a->second->pulse_sorter < b->second->pulse_sorter;
-            });
+    std::sort(pulse_candidates.begin(), pulse_candidates.end(), pulse_candidates_sorter);
     TracyCZoneEnd(sort_pulse_candidates);
 
-    crypto::public_key block_producer;
-    if (pulse_round == 0) {
-        block_producer = block_leader;
-    } else {
-        std::mt19937_64 rng = quorum_rng(hf_version, pulse_entropy[0], quorum_type::pulse);
-        size_t producer_index = tools::uniform_distribution_portable(rng, pulse_candidates.size());
-        block_producer = pulse_candidates[producer_index]->first;
-        pulse_candidates.erase(pulse_candidates.begin() + producer_index);
-    }
-
-    // NOTE: Order the candidates so the first half nodes in the list is the validators for this
-    // round.
-    // - Divide the list in half, select validators from the first half of the list.
-    // - Swap the chosen validator into the moving first half of the list.
-    TracyCZoneN(pick_pulse_candidates, "Pick pulse quorum members", true);
-    auto running_it = pulse_candidates.begin();
-    size_t const partition_index = (pulse_candidates.size() - 1) / 2;
-    if (partition_index == 0) {
-        running_it += service_nodes::PULSE_QUORUM_NUM_VALIDATORS;
-    } else {
-        for (size_t i = 0; i < service_nodes::PULSE_QUORUM_NUM_VALIDATORS; i++) {
-            crypto::hash const& entropy = pulse_entropy[i + 1];
-            std::mt19937_64 rng = quorum_rng(hf_version, entropy, quorum_type::pulse);
-            size_t validators_available = std::distance(running_it, pulse_candidates.end());
-            size_t swap_index = tools::uniform_distribution_portable(
-                    rng, std::min(partition_index, validators_available));
-            std::swap(*running_it, *(running_it + swap_index));
-            running_it++;
-        }
-    }
-    TracyCZoneEnd(pick_pulse_candidates);
-
-    result.workers.push_back(block_producer);
-    result.validators.reserve(PULSE_QUORUM_NUM_VALIDATORS);
-    for (auto it = pulse_candidates.begin(); it != running_it; it++) {
-        crypto::public_key const& node_key = (*it)->first;
-        result.validators.push_back(node_key);
-    }
+    service_nodes::quorum result = generate_pulse_quorum_with_candidates(
+            nettype,
+            block_leader,
+            hf_version,
+            active_snode_list.size(),
+            pulse_candidates,
+            pulse_entropy,
+            pulse_round);
     return result;
 }
 
@@ -3480,7 +3440,7 @@ static bool is_expired_node_hf10_onwards(
     return false;
 }
 
-void service_node_list::state_t::update_from_block(
+block_add_result service_node_list::state_t::update_from_block(
         cryptonote::BlockchainDB const& db,
         cryptonote::network_type nettype,
         state_set const& state_history,
@@ -3505,15 +3465,16 @@ void service_node_list::state_t::update_from_block(
     // to extract from the SN list. Instead of the various steps independently
     // walking the list, we walk the list once at the top and feed it in.
     struct pre_block_precomputed_data {
-        std::vector<crypto::public_key> active_snode_list;
-        std::vector<crypto::public_key> pulse_candidates;
+        std::vector<pubkey_and_sninfo> pulse_candidates;
         std::vector<crypto::public_key> expired_nodes;
         crypto::public_key block_leader;
-    } pre_block_precomputed;
+        size_t payable_node_count;
+        size_t active_snode_size;
+    } pre_block_precomputed = {};
 
     {
         ZoneScopedN("Pre-block precompute SNL data");
-        pre_block_precomputed.active_snode_list.reserve(service_nodes_infos.size());
+        pre_block_precomputed.pulse_candidates.reserve(service_nodes_infos.size());
 
         // NOTE: Block leader setup
         service_node_pubkey_info block_leader_info = {};
@@ -3540,8 +3501,11 @@ void service_node_list::state_t::update_from_block(
             if (!info->is_active())
                 continue;
 
-            // NOTE: Build the active list
-            pre_block_precomputed.active_snode_list.push_back(it.first);
+            pre_block_precomputed.active_snode_size++;
+            if (hf_version >= hf::hf19_reward_batching) {
+                if (info->is_payable(block.get_height(), nettype))
+                    pre_block_precomputed.payable_node_count++;
+            }
 
             // NOTE: Find the block leader
             auto waiting_since = std::make_tuple(
@@ -3550,6 +3514,10 @@ void service_node_list::state_t::update_from_block(
                 oldest_waiting = waiting_since;
                 block_leader_info = service_node_pubkey_info(it);
             }
+
+            // NOTE: Build the candidate list
+            if (hf_version >= hf::hf16_pulse)
+                pre_block_precomputed.pulse_candidates.push_back(it);
         }
 
         // NOTE: Assign the block leader
@@ -3561,34 +3529,26 @@ void service_node_list::state_t::update_from_block(
             next_block_leader_cache = service_nodes::null_payout;
         }
 
-        // NOTE: Sort the list
-        std::sort(pre_block_precomputed.active_snode_list.begin(), pre_block_precomputed.active_snode_list.end());
-
         // NOTE: Generate pulse candidates
         if (hf_version >= hf::hf16_pulse) {
-            ZoneScopedN("Generate pulse candidates");
-            pre_block_precomputed.pulse_candidates = pre_block_precomputed.active_snode_list;
-            // NOTE: Remove the block leader if we're in round 0. In all other
-            // rounds everyone's a candidate for participating in Pulse
-            if (block.pulse.round == 0) {
-                auto it = std::lower_bound(
-                        pre_block_precomputed.pulse_candidates.begin(),
-                        pre_block_precomputed.pulse_candidates.end(),
-                        pre_block_precomputed.block_leader);
-                if (it != pre_block_precomputed.pulse_candidates.end())
-                    pre_block_precomputed.pulse_candidates.erase(it);
-            }
-
+            ZoneScopedN("Finalize pulse candidates");
             std::sort(
                     pre_block_precomputed.pulse_candidates.begin(),
                     pre_block_precomputed.pulse_candidates.end(),
-                    [this](crypto::public_key const& a, crypto::public_key const& b) {
-                        const service_node_info& a_info = *service_nodes_infos[a];
-                        const service_node_info& b_info = *service_nodes_infos[b];
-                        if (a_info.pulse_sorter == b_info.pulse_sorter)
-                            return a < b;
-                        return a_info.pulse_sorter < b_info.pulse_sorter;
-                    });
+                    pulse_candidates_sorter);
+
+            // NOTE: Remove the block leader if we're in round 0. In all other
+            // rounds everyone's a candidate for participating in Pulse
+            if (block.pulse.round == 0) {
+                for (auto it = pre_block_precomputed.pulse_candidates.begin();
+                     it != pre_block_precomputed.pulse_candidates.end();
+                     it++) {
+                    if (it->first == block_leader_info.pubkey) {
+                        pre_block_precomputed.pulse_candidates.erase(it);
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -3619,11 +3579,11 @@ void service_node_list::state_t::update_from_block(
             pulse_entropy = pulse_entropy_storage;
         }
 
-        quorum pulse_quorum = generate_pulse_quorum2(
+        quorum pulse_quorum = generate_pulse_quorum_with_candidates(
                 nettype,
                 winner_pubkey,
                 hf_version,
-                pre_block_precomputed.active_snode_list.size(),
+                pre_block_precomputed.active_snode_size,
                 pre_block_precomputed.pulse_candidates,
                 pulse_entropy,
                 block.pulse.round);
@@ -3712,7 +3672,8 @@ void service_node_list::state_t::update_from_block(
     //
     // Advance the list to the next candidate for a reward
     //
-    TracyCZoneN(advance_list_to_next_reward_candidate, "Advance list to next reward candidate", true);
+    TracyCZoneN(
+            advance_list_to_next_reward_candidate, "Advance list to next reward candidate", true);
     if (auto it = service_nodes_infos.find(winner_pubkey); it != service_nodes_infos.end()) {
         // set the winner as though it was re-registering at transaction index=UINT32_MAX for
         // this block
@@ -3874,6 +3835,9 @@ void service_node_list::state_t::update_from_block(
     TracyCZoneEnd(process_txs_in_block);
 
     // NOTE: Calculate both lists in one loop
+    block_add_result result = {};
+    result.payable_nodes_hf19_onwards.reserve(pre_block_precomputed.payable_node_count);
+
     std::vector<service_node_pubkey_info> post_block_active_snode_list = {};
     std::vector<crypto::public_key> post_block_decomm_snode_list = {};
     {
@@ -3887,6 +3851,11 @@ void service_node_list::state_t::update_from_block(
             if (hf_version >= hf::hf12_checkpointing) {
                 if (info->is_decommissioned() && info->is_fully_funded())
                     post_block_decomm_snode_list.push_back(it.first);
+            }
+
+            if (hf_version >= hf::hf19_reward_batching) {
+                if (info->is_payable(block.get_height(), nettype))
+                    result.payable_nodes_hf19_onwards.push_back(it.first);
             }
         }
         std::sort(
@@ -3923,7 +3892,8 @@ void service_node_list::state_t::update_from_block(
         }
     }
 
-    generate_other_quorums(*this, post_block_active_snode_list, post_block_decomm_snode_list, nettype, hf_version);
+    generate_other_quorums(
+            *this, post_block_active_snode_list, post_block_decomm_snode_list, nettype, hf_version);
     next_block_leader_cache.reset();
     log::debug(
             logcat,
@@ -3932,14 +3902,16 @@ void service_node_list::state_t::update_from_block(
             block_leader,
             winner_pubkey);
     block_leader = std::move(winner_pubkey);
+
+    return result;
 }
 
-bool pulse_entropy_feeder::add_block(const cryptonote::BlockchainDB& db, const cryptonote::block& block)
-{
+bool pulse_entropy_feeder::add_block(
+        const cryptonote::BlockchainDB& db, const cryptonote::block& block) {
     if (block.major_version < hf::hf16_pulse)
         return false;
 
-    if (cryptonote::get_block_hash(block) == last_hash) // Already added
+    if (cryptonote::get_block_hash(block) == last_hash)  // Already added
         return true;
 
     bool seed_window = !init;
@@ -3976,20 +3948,20 @@ bool pulse_entropy_feeder::add_block(const cryptonote::BlockchainDB& db, const c
     return true;
 }
 
-std::span<const crypto::hash> pulse_entropy_feeder::get_window() const
-{
+std::span<const crypto::hash> pulse_entropy_feeder::get_window() const {
     std::span<const crypto::hash> result = {};
     if (init)
         result = std::span<const crypto::hash>(data, PULSE_QUORUM_SIZE);
     return result;
 }
 
-void service_node_list::process_block(
+block_add_result service_node_list::process_block(
         const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs) {
     ZoneScoped;
+    block_add_result result = {};
     auto hf_version = block.major_version;
     if (hf_version < hf::hf9_service_nodes)
-        return;
+        return result;
 
     // NOTE: Store the state into the recent history
     TracyCZoneN(store_state_into_recent, "Store recent state history", true);
@@ -4105,7 +4077,7 @@ void service_node_list::process_block(
     }
 
     pulse_entropy_feed.add_block(blockchain.db(), block);
-    m_state.update_from_block(
+    result = m_state.update_from_block(
             blockchain.db(),
             blockchain.nettype(),
             m_transient->state_history,
@@ -4115,6 +4087,8 @@ void service_node_list::process_block(
             txs,
             m_service_node_keys,
             &pulse_entropy_feed);
+
+    return result;
 }
 
 void service_node_list::blockchain_detached(uint64_t height) {
@@ -4837,8 +4811,8 @@ void service_node_list::alt_block_add(const cryptonote::block_add_info& info) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Serialise the hash table of SNs to the archive `ar`
 template <typename Archive>
-static void serialize_service_node_infos_directly(Archive& ar, std::string_view key, service_nodes_infos_t& sn_infos)
-{
+static void serialize_service_node_infos_directly(
+        Archive& ar, std::string_view key, service_nodes_infos_t& sn_infos) {
     ZoneScoped;
     if constexpr (Archive::is_serializer)
         ar.tag(key);
@@ -4864,8 +4838,8 @@ static void serialize_service_node_infos_directly(Archive& ar, std::string_view 
 // Serialize the list of blobs and quorums into a blob suitable for the DB and
 // vice versa for deserialising.
 template <typename Archive>
-static std::string serialize_db_blob(Archive& ar, std::vector<std::string>& blob_list, std::deque<quorums_by_height>* quorums)
-{
+static std::string serialize_db_blob(
+        Archive& ar, std::vector<std::string>& blob_list, std::deque<quorums_by_height>* quorums) {
     uint32_t version = 0;
     field(ar, "version", version);
     field(ar, "data", blob_list);
@@ -4876,15 +4850,13 @@ static std::string serialize_db_blob(Archive& ar, std::vector<std::string>& blob
     if constexpr (Archive::is_serializer)
         result = ar.str();
     return result;
-
 }
 
 // Serialise the service node state into the archive `ar`. If a serializer is passed in the function
 // produces the binary string and returns it. If it's deserializing the `state` object is populated
 // and an empty string is returned.
 template <typename Archive>
-static std::string serialize_snl_directly(Archive& ar, service_node_list::state_t& state)
-{
+static std::string serialize_snl_directly(Archive& ar, service_node_list::state_t& state) {
     ZoneScoped;
     uint32_t version = 0;
     field_varint(ar, "version", version);
@@ -4979,7 +4951,8 @@ bool service_node_list::store() {
         {
             TracyCZoneN(serialize_step, "Serialize history array of blobs", true);
             serialization::binary_string_archiver ar;
-            std::string db_blob = serialize_db_blob(ar, m_transient->history_blob_list, &m_transient->old_quorum_states);
+            std::string db_blob = serialize_db_blob(
+                    ar, m_transient->history_blob_list, &m_transient->old_quorum_states);
             TracyCZoneEnd(serialize_step);
             db.set_service_node_data(db_blob, false /*long_term*/);
         }
@@ -5795,8 +5768,7 @@ service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
     return service_nodes_infos.erase(it);
 }
 
-struct try_load_as_old_result
-{
+struct try_load_as_old_result {
     bool success;
     uint64_t archive_min_height = 0;
     uint64_t archive_max_height = 0;
@@ -5807,8 +5779,13 @@ struct try_load_as_old_result
     uint64_t bytes_loaded = 0;
 };
 
-static try_load_as_old_result try_load_as_old_style_blobs(uint64_t current_height, service_node_list *snl, service_node_list_transient_storage *m_transient, cryptonote::Blockchain& blockchain, service_node_list::state_t &m_state, uint64_t m_store_quorum_history)
-{
+static try_load_as_old_result try_load_as_old_style_blobs(
+        uint64_t current_height,
+        service_node_list* snl,
+        service_node_list_transient_storage* m_transient,
+        cryptonote::Blockchain& blockchain,
+        service_node_list::state_t& m_state,
+        uint64_t m_store_quorum_history) {
     auto& db = blockchain.db();
     cryptonote::db_rtxn_guard txn_guard{db};
 
@@ -5847,7 +5824,10 @@ static try_load_as_old_result try_load_as_old_style_blobs(uint64_t current_heigh
     try {
         serialization::parse_binary(blob, data_in);
     } catch (const std::exception& e) {
-        log::info(logcat, "Old style SNL blob was not detected ({}), parsing as new style blobs", e.what());
+        log::info(
+                logcat,
+                "Old style SNL blob was not detected ({}), parsing as new style blobs",
+                e.what());
         return result;
     }
 
@@ -6030,14 +6010,15 @@ bool service_node_list::load(const uint64_t current_height) {
                 const auto& sn_blob = sn_blob_list[sn_blob_index];
                 serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
                 state_t state(this);
-                serialize_snl_directly(sn_blob_ar, state); // TODO: Multi-thread this step
+                serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
 
                 archive_with_quorums_only += state.only_loaded_quorums;
                 archive_min_height = std::min(archive_min_height, state.height);
                 archive_max_height = std::max(archive_max_height, state.height);
 
                 auto lock = std::unique_lock{mutex};
-                m_transient->state_archive.emplace_hint(m_transient->state_archive.end(), std::move(state));
+                m_transient->state_archive.emplace_hint(
+                        m_transient->state_archive.end(), std::move(state));
             }
         }
         bytes_loaded += db_blob.size();
@@ -6052,7 +6033,7 @@ bool service_node_list::load(const uint64_t current_height) {
                 const auto& sn_blob = sn_blob_list[sn_blob_index];
                 serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
                 state_t state(this);
-                serialize_snl_directly(sn_blob_ar, state); // TODO: Multi-thread this step
+                serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
 
                 recent_min_height = std::min(recent_min_height, state.height);
                 recent_max_height = std::max(recent_max_height, state.height);
