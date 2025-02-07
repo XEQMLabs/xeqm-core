@@ -4156,8 +4156,7 @@ void service_node_list::blockchain_detached(uint64_t height) {
             return true;
 
         // NOTE: Accept if SQL has payment rows for the requested height:
-        return blockchain.sqlite_db().batch_payments_accrued_row_count(
-                       cryptonote::BlockchainSQLite::PaymentTableType::Recent, height) > 0;
+        return blockchain.sqlite_db().batch_payments_accrued_row_count(table_type, height) > 0;
     };
 
     // NOTE: Lookup desired SNL state from recent backups

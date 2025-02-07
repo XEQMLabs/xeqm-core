@@ -947,8 +947,8 @@ bool Blockchain::init(
         // NOTE: Can happen out-of-band (e.g. SQL DB was corrupt/deleted)
         uint64_t detach_height = m_db->height();
         if (m_sqlite_db && service_node_list.height() != m_sqlite_db->height) {
-            detach_height = std::min(detach_height, service_node_list.height());
-            detach_height = std::min(detach_height, m_sqlite_db->height);
+            detach_height = std::min(detach_height, service_node_list.height() + 1);
+            detach_height = std::min(detach_height, m_sqlite_db->height + 1);
             detach_height = std::max(detach_height, static_cast<uint64_t>(1));
         }
 
