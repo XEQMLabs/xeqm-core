@@ -5768,7 +5768,7 @@ service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
     return service_nodes_infos.erase(it);
 }
 
-struct try_load_as_old_result {
+struct try_load_blobs_result {
     bool success;
     uint64_t archive_min_height = 0;
     uint64_t archive_max_height = 0;
@@ -5779,7 +5779,7 @@ struct try_load_as_old_result {
     uint64_t bytes_loaded = 0;
 };
 
-static try_load_as_old_result try_load_as_old_style_blobs(
+static try_load_blobs_result try_load_as_old_style_blobs(
         uint64_t current_height,
         service_node_list* snl,
         service_node_list_transient_storage* m_transient,
@@ -5789,7 +5789,7 @@ static try_load_as_old_result try_load_as_old_style_blobs(
     auto& db = blockchain.db();
     cryptonote::db_rtxn_guard txn_guard{db};
 
-    try_load_as_old_result result = {};
+    try_load_blobs_result result = {};
     std::string blob;
 
     // NOTE: Deserialize long term state history (optional, if it doesn't exist- this node can't
@@ -5922,6 +5922,113 @@ static try_load_as_old_result try_load_as_old_style_blobs(
     return result;
 }
 
+static try_load_blobs_result try_load_as_new_style_blobs(
+        uint64_t current_height,
+        service_node_list* snl,
+        service_node_list_transient_storage* m_transient,
+        cryptonote::Blockchain& blockchain,
+        service_node_list::state_t& m_state,
+        uint64_t m_store_quorum_history) {
+    try_load_blobs_result result = {};
+    std::string db_blob;
+
+    // NOTE: This person's node has migrated to the new version with the
+    // new serialisation code which completely dumps the old
+    // data_for_serialization which was silly and required copying all the
+    // structures into a special purpose data structure which then got
+    // serialised again into binary.
+    //
+    // Instead the new serialisation method works directly with the service
+    // node list state objects by walking through it directly and writing
+    // the fields to binary. This saves the wasteful compute work required
+    // to marshall the massive SNL state into an intermediate format which
+    // is then marshalled to binary, then memcopied into LMDB.
+    //
+    // Now it just marshalls the massive SNL state to binary, then copy the
+    // binary to LMDB. Each state is stored as a separate blob, this is
+    // intentional to eliminate the dependency chain we had with serialising the
+    // blobs as a singular binary stream where you can't jump ahead unless you
+    // know how much bytes the previous SNL state occupied. Instead storing SNL
+    // blobs as independent binary streams allows us to run the
+    // de/serialising step with multiple threads.
+    //
+    // Serialising is compute and memory unfriendly. There are many RAII
+    // structures to compute and the work of processing through these structures
+    // can be pipelined using threads.
+    //
+    // TODO: We could even make the store to the DB multithreaded by passing
+    // the RESERVE flag to LMDB which gives us back a pointer that we can
+    // divvy across all threads to write the serialised binary into the DB.
+    //
+    // This is not implemented because serialising is not as _bad_ as it was
+    // before where it stalled the entire pipeline for a couple of seconds
+    // as we approach pulse blocks and the amount of data that's getting
+    // written grows larger.
+    //
+    // Ultimately a better way to improve this would be to store deltas as
+    // the number of changes between blocks is not large typically.
+    //
+    // However that change is quite a lot more destructive and requires
+    // fundamentally changing a lot of how the SNL interops with historical
+    // data and so forth.
+    //
+    // Storing deltas would most likely eliminate the pipeline stalls
+    // entirely removing the need to multithread as well as also getting rid
+    // of the intermediate formats as this change has also done.
+    if (blockchain.db().get_service_node_data(db_blob, true /*long_term*/)) {
+        serialization::binary_string_unarchiver ar{db_blob};
+        std::vector<std::string> sn_blob_list;
+        serialize_db_blob(ar, sn_blob_list, nullptr);
+
+        std::mutex mutex;
+        for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
+            const auto& sn_blob = sn_blob_list[sn_blob_index];
+            serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
+            service_node_list::state_t state(snl);
+            serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
+
+            result.archive_with_quorums_only += state.only_loaded_quorums;
+            result.archive_min_height = std::min(result.archive_min_height, state.height);
+            result.archive_max_height = std::max(result.archive_max_height, state.height);
+
+            auto lock = std::unique_lock{mutex};
+            m_transient->state_archive.emplace_hint(
+                    m_transient->state_archive.end(), std::move(state));
+        }
+    }
+    result.bytes_loaded += db_blob.size();
+
+    if (!blockchain.db().get_service_node_data(db_blob, false /*long_term*/))
+        return result;
+
+    serialization::binary_string_unarchiver ar{db_blob};
+    std::vector<std::string> sn_blob_list;
+    serialize_db_blob(ar, sn_blob_list, &m_transient->old_quorum_states);
+
+    std::mutex mutex;
+    for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
+        const auto& sn_blob = sn_blob_list[sn_blob_index];
+        serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
+        service_node_list::state_t state(snl);
+        serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
+
+        result.recent_min_height = std::min(result.recent_min_height, state.height);
+        result.recent_max_height = std::max(result.recent_max_height, state.height);
+
+        auto lock = std::unique_lock{mutex};
+        if (sn_blob_index == sn_blob_list.size() - 1) {
+            m_state = std::move(state);
+        } else {
+            m_transient->state_history.emplace_hint(
+                    m_transient->state_history.end(), std::move(state));
+        }
+    }
+
+    result.bytes_loaded += db_blob.size();
+    result.success = true;
+    return result;
+}
+
 bool service_node_list::load(const uint64_t current_height) {
     ZoneScoped;
     log::info(logcat, "service_node_list::load()");
@@ -5931,124 +6038,37 @@ bool service_node_list::load(const uint64_t current_height) {
     }
 
     auto& db = blockchain.db();
-
-    // TODO: All the old code has been encapsulated to this function. After
-    // everyone migrates to HF20, everyone's blobs will have been updated. We
-    // can then just delete this entire function and promote the else branch
-    // below to the default code path to run.
-    try_load_as_old_result load_old_result = try_load_as_old_style_blobs(
-            current_height, this, m_transient.get(), blockchain, m_state, m_store_quorum_history);
-
-    uint64_t bytes_loaded = 0;
-    uint64_t archive_min_height = std::numeric_limits<uint64_t>::max();
-    uint64_t archive_max_height = 0;
-    uint64_t archive_with_quorums_only = 0;
-    uint64_t recent_max_height = std::numeric_limits<uint64_t>::max();
-    uint64_t recent_min_height = 0;
-
-    if (load_old_result.success) {
-        bytes_loaded = load_old_result.bytes_loaded;
-        archive_min_height = load_old_result.archive_min_height;
-        archive_max_height = load_old_result.archive_max_height;
-        archive_with_quorums_only = load_old_result.archive_with_quorums_only;
-        recent_max_height = load_old_result.recent_max_height;
-        recent_min_height = load_old_result.recent_min_height;
-    } else {
-        // NOTE: This person's node has migrated to the new version with the
-        // new serialisation code which completely dumps the old
-        // data_for_serialization which was silly and required copying all the
-        // structures into a special purpose data structure which then got
-        // serialised again into binary.
-        //
-        // Instead the new serialisation method works directly with the service
-        // node list state objects by walking through it directly and writing
-        // the fields to binary. This saves the wasteful compute work required
-        // to marshall the massive SNL state into an intermediate format which
-        // is then marshalled to binary, then memcopied into LMDB.
-        //
-        // Now it's just marshall massive SNL state to binary, then copy binary
-        // to LMDB. Each state is stored as a separate blob, this is intentional
-        // to eliminate the dependency chain we had with serialising the blobs as
-        // a singular binary stream where you can't jump ahead unless you know
-        // how much bytes the previous SNL state occupied. Instead storing SNL
-        // blobs as independent binary streams allows us to run the
-        // de/serialising step with multiple threads.
-        //
-        // Serialising is compute and memory unfriendly. There are multiple
-        // hash tables and trees to walk through that are full of STL containers
-        // and the work of processing through these structures can be pipelined
-        // using threads.
-        //
-        // TODO: We could even make the store to the DB multithreaded by passing
-        // the RESERVE flag to LMDB which gives us back a pointer that we can
-        // divvy across all threads to write the serialised binary into the DB.
-        //
-        // This is not implemented because serialising is not as _bad_ as it was
-        // before where it stalled the entire pipeline for a couple of seconds
-        // as we approach pulse blocks and the amount of data that's getting
-        // written grows larger.
-        //
-        // Ultimately a better way to improve this would be to store deltas as
-        // the number of changes between blocks is not large typically.
-        //
-        // However that change is quite a lot more destructive and requires
-        // fundamentally changing a lot of how the SNL interops with historical
-        // data and so forth.
-        //
-        // Storing deltas would most likely eliminate the pipeline stalls
-        // entirely removing the need to multithread as well as also getting rid
-        // of the intermediate formats as this change has also done.
-
-        std::string db_blob;
-        if (db.get_service_node_data(db_blob, true /*long_term*/)) {
-            serialization::binary_string_unarchiver ar{db_blob};
-            std::vector<std::string> sn_blob_list;
-            serialize_db_blob(ar, sn_blob_list, nullptr);
-
-            std::mutex mutex;
-            for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
-                const auto& sn_blob = sn_blob_list[sn_blob_index];
-                serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
-                state_t state(this);
-                serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
-
-                archive_with_quorums_only += state.only_loaded_quorums;
-                archive_min_height = std::min(archive_min_height, state.height);
-                archive_max_height = std::max(archive_max_height, state.height);
-
-                auto lock = std::unique_lock{mutex};
-                m_transient->state_archive.emplace_hint(
-                        m_transient->state_archive.end(), std::move(state));
-            }
-        }
-        bytes_loaded += db_blob.size();
-
-        if (db.get_service_node_data(db_blob, false /*long_term*/)) {
-            serialization::binary_string_unarchiver ar{db_blob};
-            std::vector<std::string> sn_blob_list;
-            serialize_db_blob(ar, sn_blob_list, &m_transient->old_quorum_states);
-
-            std::mutex mutex;
-            for (size_t sn_blob_index = 0; sn_blob_index < sn_blob_list.size(); sn_blob_index++) {
-                const auto& sn_blob = sn_blob_list[sn_blob_index];
-                serialization::binary_string_unarchiver sn_blob_ar{sn_blob};
-                state_t state(this);
-                serialize_snl_directly(sn_blob_ar, state);  // TODO: Multi-thread this step
-
-                recent_min_height = std::min(recent_min_height, state.height);
-                recent_max_height = std::max(recent_max_height, state.height);
-
-                auto lock = std::unique_lock{mutex};
-                if (sn_blob_index == sn_blob_list.size() - 1) {
-                    m_state = std::move(state);
-                } else {
-                    m_transient->state_history.emplace_hint(
-                            m_transient->state_history.end(), std::move(state));
-                }
-            }
-        }
-        bytes_loaded += db_blob.size();
+    try_load_blobs_result load_result = {};
+    try {
+        load_result = try_load_as_new_style_blobs(
+                current_height,
+                this,
+                m_transient.get(),
+                blockchain,
+                m_state,
+                m_store_quorum_history);
+    } catch (std::exception&) {
+        // NOTE: Try as old style blob then
     }
+
+    if (!load_result.success) {
+        *m_transient = {};
+
+        // TODO: All the old code has been encapsulated to this function. After
+        // everyone migrates to HF20, everyone's blobs will have been updated. We
+        // can then just delete this entire function and promote the else branch
+        // below to the default code path to run.
+        load_result = try_load_as_old_style_blobs(
+                current_height,
+                this,
+                m_transient.get(),
+                blockchain,
+                m_state,
+                m_store_quorum_history);
+    }
+
+    if (!load_result.success)
+        return false;
 
     // NOTE: Load uptime proof data
     proofs = db.get_all_service_node_proofs();
@@ -6071,13 +6091,13 @@ bool service_node_list::load(const uint64_t current_height) {
             "quorums) loaded ({}) @ height: {}",
             m_state.service_nodes_infos.size(),
             m_transient->state_history.size(),
-            recent_min_height,
-            recent_max_height,
+            load_result.recent_min_height,
+            load_result.recent_max_height,
             m_transient->state_archive.size(),
-            archive_min_height,
-            archive_max_height,
-            archive_with_quorums_only,
-            tools::get_human_readable_bytes(bytes_loaded),
+            load_result.archive_min_height,
+            load_result.archive_max_height,
+            load_result.archive_with_quorums_only,
+            tools::get_human_readable_bytes(load_result.bytes_loaded),
             m_state.height);
     return true;
 }
