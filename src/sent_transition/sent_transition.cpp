@@ -79,7 +79,7 @@ void transition(
     const auto& conv_ratio = conversion_ratio(net);
 
     const auto& unparsed_sent_addrs = addresses(net);
-    log::warning(logcat, "oxen -> sent addr map size: {}", unparsed_sent_addrs.size());
+    log::debug(logcat, "oxen -> sent addr map size: {}", unparsed_sent_addrs.size());
     std::unordered_map<cryptonote::account_public_address, eth::address> sent_addrs;
     for (const auto& [o, s] : unparsed_sent_addrs) {
         auto parsed_addr_info = address_info_from_str(net, o);
