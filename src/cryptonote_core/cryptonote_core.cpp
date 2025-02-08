@@ -35,6 +35,7 @@
 #include <oxenmq/fmt.h>
 #include <sodium.h>
 #include <sqlite3.h>
+
 #include <tracy/Tracy.hpp>
 
 #ifdef ENABLE_SYSTEMD
