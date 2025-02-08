@@ -42,8 +42,7 @@ static_assert(
         std::numeric_limits<uint64_t>::max() / 100'000000000);
 
 /// Returns the mapping of OXEN -> SENT addresses for the given network type.
-const std::unordered_map<std::string, eth::address>& addresses(
-        network_type net);
+const std::unordered_map<std::string, eth::address>& addresses(network_type net);
 
 /// Returns the OXEN -> SENT conversion ratio to apply to conversion-registered wallets at the
 /// SENT hardfork.  The first value is the numerator, second is the denominator (e.g. a return
@@ -57,9 +56,11 @@ const std::unordered_map<eth::address, uint64_t>& transition_bonus(network_type 
 
 /// Returns old not-quite-ed-key to proper ed key mapping, for nodes which were registered before
 /// we switched to proper ed25519.
-const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys(network_type net);
+const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys(
+        network_type net);
 
-const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys(network_type net);
+const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys(
+        network_type net);
 
 /// Performs the SENT service node transition, updating the service node list to replace OXEN
 /// addresses with ETH addresses, updating stakes to reflect the SENT staking requirement, and
@@ -82,6 +83,9 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
 /// Additionally we replace the primary pubkey of any old Oxen nodes with differing "pubkey" and
 /// "ed25519_pubkey" values (generally: SNs set up before Oxen 8) with the ed25519 pubkey; as of the
 /// SENT HF these are unifed, and SNs will start ignoring a non-ed25519 service node pubkey.
-void transition(service_nodes::service_node_list::state_t& sns, cryptonote::BlockchainSQLite& sql, network_type net);
+void transition(
+        service_nodes::service_node_list::state_t& sns,
+        cryptonote::BlockchainSQLite& sql,
+        network_type net);
 
 }  // namespace oxen::sent

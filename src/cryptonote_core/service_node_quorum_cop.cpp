@@ -466,7 +466,8 @@ void quorum_cop::process_quorums(cryptonote::block const& block) {
                                 if (!test_results.recent_l2_height)
                                     reason |=
                                             cryptonote::Decommission_Reason::l2_height_out_of_sync;
-                                if (test_results.failed_transition) // FIXME this bool is true bad, rest are true good
+                                if (test_results.failed_transition)  // FIXME this bool is true bad,
+                                                                     // rest are true good
                                     reason |= cryptonote::Decommission_Reason::failed_transition;
                                 int64_t credit = calculate_decommission_credit(
                                         m_core.get_nettype(), info, latest_height);
@@ -519,10 +520,10 @@ void quorum_cop::process_quorums(cryptonote::block const& block) {
                                 height - *cryptonote::get_hard_fork_heights(
                                                   m_core.get_nettype(), hf_version)
                                                         .first <
-                                                        netconf.HARDFORK_DEREGISTRATION_GRACE_PERIOD &&
-                                                        // 0 stake is a HF21 zombie, so don't apply the grace period.  (Can
-                                                        // remove this after the HF21 is passed and dust settled).
-                                                        info.staking_requirement) {
+                                        netconf.HARDFORK_DEREGISTRATION_GRACE_PERIOD &&
+                                // 0 stake is a HF21 zombie, so don't apply the grace period.  (Can
+                                // remove this after the HF21 is passed and dust settled).
+                                info.staking_requirement) {
                                 log::debug(
                                         logcat,
                                         "Decommissioned service node {} is still not passing "
@@ -533,9 +534,8 @@ void quorum_cop::process_quorums(cryptonote::block const& block) {
                                 continue;
                             }
 
-                            if (info.is_active() &&
-                                (vote_for_state == new_state::deregister ||
-                                 vote_for_state == new_state::decommission)) {
+                            if (info.is_active() && (vote_for_state == new_state::deregister ||
+                                                     vote_for_state == new_state::decommission)) {
                                 if (++deactivate_count > netconf.MAX_DEACTIVATE_PER_BLOCK) {
                                     log::debug(
                                             logcat,
@@ -543,8 +543,9 @@ void quorum_cop::process_quorums(cryptonote::block const& block) {
                                             "voted to deactivate the maximum number of nodes "
                                             "this block.",
                                             quorum->workers[node_index],
-                                            vote_for_state == new_state::deregister ?
-                                            "deregistered" : "decommissioned");
+                                            vote_for_state == new_state::deregister ? "deregistered"
+                                                                                    : "decommission"
+                                                                                      "ed");
                                     continue;
                                 }
                             }

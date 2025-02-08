@@ -3707,9 +3707,15 @@ block_add_result service_node_list::state_t::update_from_block(
                 std::vector<std::string> contributors;
                 for (const auto& c : info.second->contributors) {
                     auto a = cryptonote::get_account_address_as_str(nettype, 0, c.address);
-                    contributors.emplace_back(fmt::format("{} eth ({}) bene ({}): {}", a, c.ethereum_address, c.ethereum_beneficiary, c.amount));
+                    contributors.emplace_back(fmt::format(
+                            "{} eth ({}) bene ({}): {}",
+                            a,
+                            c.ethereum_address,
+                            c.ethereum_beneficiary,
+                            c.amount));
                 }
-                op_addr = cryptonote::get_account_address_as_str(nettype, 0, info.second->operator_address);
+                op_addr = cryptonote::get_account_address_as_str(
+                        nettype, 0, info.second->operator_address);
                 op_addr += fmt::format(" eth({})", info.second->operator_ethereum_address);
 
                 auto f = fmt::format("\noperator: {}\ncontributors:[", op_addr);
@@ -3727,7 +3733,11 @@ block_add_result service_node_list::state_t::update_from_block(
             log::warning(logcat, "\n\nFinished printing service node list.");
         };
 
-        log::warning(logcat, "Beginning hf21 transition, height = {}, nettype = {}", height, (uint8_t)nettype);
+        log::warning(
+                logcat,
+                "Beginning hf21 transition, height = {}, nettype = {}",
+                height,
+                (uint8_t)nettype);
         print_sns();
         auto& sqlite_db = *sqlite_db_ptr;
         oxen::sent::transition(*this, sqlite_db, nettype);
@@ -6722,14 +6732,16 @@ payout service_node_payout_portions(const crypto::public_key& key, const service
     return result;
 }
 
-service_node_list::hf21_transition_result service_node_list::hf21_dry_run(cryptonote::network_type nettype) const {
+service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
+        cryptonote::network_type nettype) const {
     service_node_list::state_t state_copy = m_state;
 
     cryptonote::BlockchainSQLite db_copy{nettype, ":memory:"};
     auto insert_payment = db_copy.prepared_st(
-            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, ?)");
+            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, "
+            "?)");
     auto old_rewards = blockchain.sqlite_db().get_all_accrued_rewards();
-    for (size_t i=0; i < old_rewards.first.size(); i++) {
+    for (size_t i = 0; i < old_rewards.first.size(); i++) {
         const auto& addr = old_rewards.first[i];
         const auto& amt = old_rewards.second[i];
 
