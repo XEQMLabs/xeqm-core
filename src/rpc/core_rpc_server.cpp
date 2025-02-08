@@ -3218,12 +3218,12 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
     auto& rewards_after = (req.response["after"]["rewards"] = json::object());
 
     auto rewards_before_pair = m_core.blockchain.sqlite_db().get_all_accrued_rewards();
-    for (size_t i=0; i < rewards_before_pair.first.size(); i++) {
+    for (size_t i = 0; i < rewards_before_pair.first.size(); i++) {
         const auto& addr = rewards_before_pair.first[i];
         const auto& amt = rewards_before_pair.second[i];
         rewards_before[addr] = amt;
     }
-    for (size_t i=0; i < transition_result.rewards_after.first.size(); i++) {
+    for (size_t i = 0; i < transition_result.rewards_after.first.size(); i++) {
         const auto& addr = transition_result.rewards_after.first[i];
         const auto& amt = transition_result.rewards_after.second[i];
         rewards_after[addr] = amt;
@@ -3240,7 +3240,7 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
                 *pubkey_info.info,
                 top_height,
                 &removable);
-    for (const auto& [pubkey,info] : transition_result.sns_after)
+    for (const auto& [pubkey, info] : transition_result.sns_after)
         fill_sn_response_entry(
                 sns_after.emplace_back(json::object()),
                 req.is_bt(),

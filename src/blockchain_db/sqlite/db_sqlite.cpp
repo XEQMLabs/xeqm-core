@@ -33,8 +33,8 @@
 #include <cryptonote_config.h>
 #include <cryptonote_core/blockchain.h>
 #include <cryptonote_core/cryptonote_tx_utils.h>
-#include <sent_transition/sent_transition.h>
 #include <fmt/core.h>
+#include <sent_transition/sent_transition.h>
 #include <sodium.h>
 #include <sqlite3.h>
 
@@ -626,7 +626,9 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
     bool pre_hf21_final_payout = false;
     auto hf21_begins = *cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth);
     if (block_height == hf21_begins - 1) {
-        log::debug(logcat, "block before hf21, doing final payout to addresses not registered for conversion");
+        log::debug(
+                logcat,
+                "block before hf21, doing final payout to addresses not registered for conversion");
         pre_hf21_final_payout = true;
         auto all_accrued_amounts = prepared_results<std::string_view, int64_t>(
                 "SELECT address, amount FROM batched_payments_accrued ORDER BY address ASC");
@@ -1134,14 +1136,16 @@ bool BlockchainSQLite::save_payments(
 }
 
 void BlockchainSQLite::set_rewards_hf21(const std::unordered_map<eth::address, uint64_t>& rewards) {
-    log::trace(logcat, "BlockchainSQLite::{} removing OXEN rewards and adding SENT rewards", __func__);
+    log::trace(
+            logcat, "BlockchainSQLite::{} removing OXEN rewards and adding SENT rewards", __func__);
 
     // values in `rewards` represent converted OXEN -> SENT rewards,
     // any unconverted are dropped (but were paid out last block anyway).
     db.exec("DELETE FROM batched_payments_accrued");
 
     auto insert_payment = prepared_st(
-            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, ?)");
+            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, "
+            "?)");
 
     for (auto& [addr, amt] : rewards) {
         auto address_str = "0x{:x}"_format(addr);

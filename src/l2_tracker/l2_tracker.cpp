@@ -646,7 +646,8 @@ void L2Tracker::update_purge_list(bool curr_height_fallback) {
                                     // with HF21, and those nodes will not be in the contract but
                                     // should be purged by decommission->deregister rather than this
                                     // mechanism
-                                    if (!info.contributors.empty() && is_node_purgeable(info.bls_public_key))
+                                    if (!info.contributors.empty() &&
+                                        is_node_purgeable(info.bls_public_key))
                                         to_purge.emplace_back(pubkey, info.bls_public_key);
                                 });
 

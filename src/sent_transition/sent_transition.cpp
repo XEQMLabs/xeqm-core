@@ -1,12 +1,12 @@
 #include "sent_transition.h"
-#include "detail.h"
 
 #include <ranges>
 
-#include "logging/oxen_logger.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
+#include "detail.h"
+#include "logging/oxen_logger.h"
 
 namespace oxen::sent {
 
@@ -27,38 +27,38 @@ namespace mainnet {
 }  // namespace mainnet
 
 const conv_ratio_t& conversion_ratio(network_type net) {
-    return net == network_type::DEVNET  ? devnet::conv_ratio
-         : net == network_type::TESTNET ? testnet::conv_ratio
+    return net == network_type::DEVNET   ? devnet::conv_ratio
+         : net == network_type::TESTNET  ? testnet::conv_ratio
          : net == network_type::LOCALDEV ? localdev::conv_ratio
-                                        : mainnet::conv_ratio;
+                                         : mainnet::conv_ratio;
 }
 
 const addrmap_t& addresses(network_type net) {
-    return net == network_type::DEVNET  ? devnet::addresses
-         : net == network_type::TESTNET ? testnet::addresses
+    return net == network_type::DEVNET   ? devnet::addresses
+         : net == network_type::TESTNET  ? testnet::addresses
          : net == network_type::LOCALDEV ? localdev::addresses
-                                        : mainnet::addresses;
+                                         : mainnet::addresses;
 }
 
 const bonus_map_t& transition_bonus(network_type net) {
-    return net == network_type::DEVNET  ? devnet::transition_bonus
-         : net == network_type::TESTNET ? testnet::transition_bonus
+    return net == network_type::DEVNET   ? devnet::transition_bonus
+         : net == network_type::TESTNET  ? testnet::transition_bonus
          : net == network_type::LOCALDEV ? localdev::transition_bonus
-                                        : mainnet::transition_bonus;
+                                         : mainnet::transition_bonus;
 }
 
 const proper_ed_keys_t proper_ed_keys(network_type net) {
-    return net == network_type::DEVNET  ? devnet::proper_ed_keys
-         : net == network_type::TESTNET ? testnet::proper_ed_keys
+    return net == network_type::DEVNET   ? devnet::proper_ed_keys
+         : net == network_type::TESTNET  ? testnet::proper_ed_keys
          : net == network_type::LOCALDEV ? localdev::proper_ed_keys
-                                        : mainnet::proper_ed_keys;
+                                         : mainnet::proper_ed_keys;
 }
 
 const bls_keys_t bls_keys(network_type net) {
-    return net == network_type::DEVNET  ? devnet::bls_keys
-         : net == network_type::TESTNET ? testnet::bls_keys
+    return net == network_type::DEVNET   ? devnet::bls_keys
+         : net == network_type::TESTNET  ? testnet::bls_keys
          : net == network_type::LOCALDEV ? localdev::bls_keys
-                                        : mainnet::bls_keys;
+                                         : mainnet::bls_keys;
 }
 
 void transition(
@@ -123,7 +123,12 @@ void transition(
 
         const auto& eth_addr = it->second;
         unallocated[eth_addr] += oxen_to_sent(val);
-        log::debug(logcat, "oxen -> sent ({} -> {}) accrued unpaid oxen rewards: {}", addr, eth_addr, val);
+        log::debug(
+                logcat,
+                "oxen -> sent ({} -> {}) accrued unpaid oxen rewards: {}",
+                addr,
+                eth_addr,
+                val);
         converted_rewards[oxen_addr] = val;
     }
 
@@ -149,9 +154,15 @@ void transition(
                     total += lc.amount;
                 }
                 unallocated[it->second] += oxen_to_sent(total);
-                log::debug(logcat, "old stake from {} of amount {} -> SENT {} of amount {}, SENT balance {}", addr, total, it->second, oxen_to_sent(total), unallocated[it->second]);
-            }
-            else
+                log::debug(
+                        logcat,
+                        "old stake from {} of amount {} -> SENT {} of amount {}, SENT balance {}",
+                        addr,
+                        total,
+                        it->second,
+                        oxen_to_sent(total),
+                        unallocated[it->second]);
+            } else
                 log::debug(logcat, "no SENT address for OXEN wallet {}", addr);
         }
     }
@@ -210,8 +221,8 @@ void transition(
     const auto& staking_ratio = net == network_type::MAINNET ? OXEN_SENT_STAKING_RATIO
                                                              : OXEN_SENT_TESTNET_STAKING_RATIO;
     const auto& oxen_staking_requirement = net == network_type::MAINNET
-                                            ? OXEN_STAKING_REQUIREMENT
-                                            : OXEN_STAKING_REQUIREMENT_TESTNET;
+                                                 ? OXEN_STAKING_REQUIREMENT
+                                                 : OXEN_STAKING_REQUIREMENT_TESTNET;
 
     for (const auto& [pk, sni] : sorted_sns) {
         bool zombie = false;
@@ -224,7 +235,9 @@ void transition(
             // guaranteed to have a sum of contributions at the end that are <= the required amount.
             // This is computed in tenths of an OXEN to ensure we won't overflow when applying the
             // ratio while still being able to get reasonably close to the precise number.
-            extra_ratio.emplace(oxen_staking_requirement / 100'000'000, sni->staking_requirement / 100'000'000 + 1);
+            extra_ratio.emplace(
+                    oxen_staking_requirement / 100'000'000,
+                    sni->staking_requirement / 100'000'000 + 1);
 
             // The maximum OXEN contribution amount we have is just under 17500, which means in the
             // code below we could (as an intermediate step) end up calculating up to just under 7/6
@@ -240,20 +253,30 @@ void transition(
         // Nodes with old monero-style key which did not broadcast a proper ed25519 key
         // shouldn't make it this far, but check just in case and zombie if so
         if (!remapped.contains(pk)) {
-            log::debug(logcat, "Node {} (monero-ed) not transitioning because there is no mapped proper ed25519 key", pk);
+            log::debug(
+                    logcat,
+                    "Node {} (monero-ed) not transitioning because there is no mapped proper "
+                    "ed25519 key",
+                    pk);
             zombie = true;
             bls_ok = false;
         }
         // Nodes with no ed->bls key mapping do not get transitioned
         else if (!node_bls_keys.contains(remapped[pk])) {
-            log::debug(logcat, "Node {} (ed) not transitioning because there is no mapped bls key", remapped[pk]);
+            log::debug(
+                    logcat,
+                    "Node {} (ed) not transitioning because there is no mapped bls key",
+                    remapped[pk]);
             zombie = true;
             bls_ok = false;
         }
         // Partially funded nodes at the time of transition just get dropped and will have to be
         // re-registered via a SENT multi-contributor contract.
         else if (!sni->is_fully_funded()) {
-            log::debug(logcat, "Node {} (ed) not transitioning because it is not fully funded", remapped[pk]);
+            log::debug(
+                    logcat,
+                    "Node {} (ed) not transitioning because it is not fully funded",
+                    remapped[pk]);
             zombie = true;
         }
 
@@ -277,7 +300,8 @@ void transition(
                     sent_required = sent_required * extra_ratio->first / extra_ratio->second;
 
                 sent_stake[it->second] += sent_required;
-                log::debug(logcat, "have {} from SENT {} for node {}", sent_required, it->second, pk);
+                log::debug(
+                        logcat, "have {} from SENT {} for node {}", sent_required, it->second, pk);
             }
         }
 
@@ -303,7 +327,12 @@ void transition(
             for (const auto& [eth, reqd] : sent_stake) {
                 assert(unallocated.count(eth));
                 if (unallocated[eth] - allocated[eth] < reqd) {
-                    log::debug(logcat, "insufficient sent from {}, have {} need {}", eth, unallocated[eth] - allocated[eth], reqd);
+                    log::debug(
+                            logcat,
+                            "insufficient sent from {}, have {} need {}",
+                            eth,
+                            unallocated[eth] - allocated[eth],
+                            reqd);
                     zombie = true;
                     break;
                 }
@@ -313,7 +342,13 @@ void transition(
             if (!zombie) {
                 for (auto& [eth, amt] : allocated) {
                     unallocated[eth] -= amt;
-                    log::debug(logcat, "allocated {} from SENT {} for node {}, new SENT balance {}", amt, eth, pk, unallocated[eth]);
+                    log::debug(
+                            logcat,
+                            "allocated {} from SENT {} for node {}, new SENT balance {}",
+                            amt,
+                            eth,
+                            pk,
+                            unallocated[eth]);
                 }
             }
         }
@@ -323,7 +358,6 @@ void transition(
         // after the fork.
         auto new_state = std::make_shared<service_nodes::service_node_info>(*sni);
         auto& sn = *new_state;
-
 
         if (!zombie) {
             auto& stakers = sn.contributors;
@@ -360,7 +394,8 @@ void transition(
                 stake.amount = amount;
             }
 
-            sn.bls_public_key = node_bls_keys.at(remapped[pk]); // operator [] and const being weird
+            sn.bls_public_key =
+                    node_bls_keys.at(remapped[pk]);  // operator [] and const being weird
             post_transition_sns.emplace_back(crypto::public_key{remapped[pk]}, new_state);
 
         } else {
@@ -394,8 +429,7 @@ void transition(
     // unconverted ones), so that you can't go back to the OXEN wallet and then convert
     // them through the external SENT conversion process.
     snl_state.key_image_blacklist.clear();
-    for (const crypto::key_image& img : permanent_stakes)
-    {
+    for (const crypto::key_image& img : permanent_stakes) {
         auto& bl_entry = snl_state.key_image_blacklist.emplace_back();
         bl_entry.key_image = img;
     }
@@ -407,6 +441,5 @@ void transition(
     for (auto& [pk, sni] : post_transition_sns)
         snl_state.service_nodes_infos[pk] = std::move(sni);
 }
-
 
 }  // namespace oxen::sent

@@ -580,7 +580,8 @@ bool core::init(
         sqlite_db_file_path = ":memory:";
     }
 
-    if ((m_nettype == network_type::STAGENET || m_nettype == network_type::DEVNET) && db->height() > 1) {
+    if ((m_nettype == network_type::STAGENET || m_nettype == network_type::DEVNET) &&
+        db->height() > 1) {
         // Hack to handle stage/devnet reboot by seeing if we have an old block at height 1:
         // if we do, we need to delete the blockchain database files and reinitialize the database.
         // (We can't properly pop blocks in such a case because the reboot changed the serialized
@@ -595,16 +596,15 @@ bool core::init(
                 "a9ef652d2867cc663388136c2e18c6d7f3bcaccd3c8615e8d8bc838aa8aae191"sv,
                 "2fc566f435bb0f70fd8d10eac54b229150470b3aaa02ca81104f1c7467a0d3a8"sv};
 
-        auto* hashes = m_nettype == network_type::STAGENET ? &STAGENET_OLD_BLOCK1_HASHES :
-                m_nettype == network_type::DEVNET ? &DEVNET_OLD_BLOCK1_HASHES : nullptr;
+        auto* hashes = m_nettype == network_type::STAGENET ? &STAGENET_OLD_BLOCK1_HASHES
+                     : m_nettype == network_type::DEVNET   ? &DEVNET_OLD_BLOCK1_HASHES
+                                                           : nullptr;
 
         if (!hashes)
             return false;
 
-        if (std::find(
-                    hashes->begin(),
-                    hashes->end(),
-                    tools::hex_guts(block1_hash)) != hashes->end()) {
+        if (std::find(hashes->begin(), hashes->end(), tools::hex_guts(block1_hash)) !=
+            hashes->end()) {
             log::warning(globallogcat, "Detected old stage/devnet data; resetting databases...");
 
             db->close();
@@ -783,12 +783,9 @@ bool core::init(
     if (height > 0) {
         auto hf21_height = hard_fork_begins(m_nettype, hf::hf21_eth);
         if (hf21_height && height > *hf21_height) {
-            service_node_list.while_locked([this](){
-                    init_service_keys(true);
-                    });
+            service_node_list.while_locked([this]() { init_service_keys(true); });
         }
     }
-
 
     bool show_time_stats = command_line::get_arg(vm, arg_show_time_stats) != 0;
     blockchain.set_show_time_stats(show_time_stats);
@@ -2167,7 +2164,8 @@ bool core::submit_uptime_proof() {
     try {
         cryptonote_connection_context fake_context{};
         bool relayed;
-        auto height = blockchain.get_current_blockchain_height() - 1;  // -1 or would use new rules 1 block too early
+        auto height = blockchain.get_current_blockchain_height() -
+                      1;  // -1 or would use new rules 1 block too early
         auto hf_version = get_network_version(m_nettype, height);
 
         auto proof = service_node_list.generate_uptime_proof(
@@ -2370,9 +2368,7 @@ bool core::add_new_block(
                                      // syncing
         auto hf21_height = hard_fork_begins(m_nettype, hf::hf21_eth);
         if (hf21_height && b.get_height() == *hf21_height) {
-            service_node_list.while_locked([this](){
-                    init_service_keys(true);
-                    });
+            service_node_list.while_locked([this]() { init_service_keys(true); });
         }
     }
     return result;
