@@ -36,7 +36,6 @@
 #include <fmt/std.h>
 #include <oxenc/endian.h>
 #include <sodium.h>
-#include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
 
 #include <algorithm>
@@ -45,6 +44,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <tracy/Tracy.hpp>
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -464,7 +464,6 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 // rescan which is slow serial-dependency-heavy process
                 cryptonote::get_block_hash(blk);
             }
-
         }
         return next_chunk;
     };
@@ -611,7 +610,8 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
 
             log::info(
                     globallogcat,
-                    "... scanning height {}/{} ({:.2f}s) (get blks: {:.2f}s; snl: {:.2f}s; ons: {:.2f}s; {:.1f} blks/s; {}/s)",
+                    "... scanning height {}/{} ({:.2f}s) (get blks: {:.2f}s; snl: {:.2f}s; ons: "
+                    "{:.2f}s; {:.1f} blks/s; {}/s)",
                     height,
                     end_height,
                     interval_duration.count(),
@@ -712,7 +712,8 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
 
         log::info(
                 globallogcat,
-                "Loaded subsystems in {:.2f}s (get blks: {:.2f}s; snl: {:.2f}s; ons: {:.2f}s; {:.1f} blks/s; {}/s)",
+                "Loaded subsystems in {:.2f}s (get blks: {:.2f}s; snl: {:.2f}s; ons: {:.2f}s; "
+                "{:.1f} blks/s; {}/s)",
                 duration.count(),
                 get_block_data_duration.count(),
                 snl_duration.count(),

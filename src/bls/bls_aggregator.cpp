@@ -11,11 +11,11 @@
 #include <logging/oxen_logger.h>
 #include <oxenc/bt_producer.h>
 #include <oxenmq/oxenmq.h>
-#include <tracy/Tracy.hpp>
 
 #include <chrono>
 #include <ethyl/utils.hpp>
 #include <memory>
+#include <tracy/Tracy.hpp>
 
 #include "bls_crypto.h"
 #include "crypto/eth.h"
