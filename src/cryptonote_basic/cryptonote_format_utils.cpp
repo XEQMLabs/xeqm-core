@@ -35,11 +35,11 @@
 #include <common/i18n.h>
 #include <common/meta.h>
 #include <oxenc/hex.h>
-#include <tracy/Tracy.hpp>
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 #include <limits>
+#include <tracy/Tracy.hpp>
 #include <variant>
 
 #include "crypto/crypto.h"
