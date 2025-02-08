@@ -234,9 +234,6 @@ struct service_node_list_transient_storage {
     // STORE_LONG_TERM_STATE_INTERVAL))
     service_node_list::state_set state_archive;
 
-    std::vector<std::string> archive_blob_list;
-    std::vector<std::string> history_blob_list;
-
     std::unordered_map<crypto::hash, service_node_list::state_t> alt_state;
 
     // SNL historical data is stored at intervals like a checkpoint. This flag is set if there's
@@ -4893,10 +4890,10 @@ bool service_node_list::store() {
     // NOTE: Convert the runtime SNL data into a format suitable for serialization into the DB
     std::lock_guard lock(m_sn_mutex);
 
-    m_transient->archive_blob_list.clear();
-    m_transient->history_blob_list.clear();
-    m_transient->archive_blob_list.resize(m_transient->state_archive.size());
-    m_transient->history_blob_list.resize(m_transient->state_history.size() + 1 /*curr*/);
+    std::vector<std::string> archive_blob_list;
+    std::vector<std::string> history_blob_list;
+    archive_blob_list.resize(m_transient->state_archive.size());
+    history_blob_list.resize(m_transient->state_history.size() + 1 /*curr*/);
 
     tools::threadpool& tpool = tools::threadpool::getInstance();
     tools::threadpool::waiter tpool_waiter = {};
@@ -4905,7 +4902,7 @@ bool service_node_list::store() {
     if (m_transient->long_term_data_dirty) {
         size_t archive_index = 0;
         for (auto& it : m_transient->state_archive) {
-            std::string& dest = m_transient->archive_blob_list[archive_index++];
+            std::string& dest = archive_blob_list[archive_index++];
             tpool.submit(&tpool_waiter, [&dest, &it]() {
                 serialization::binary_string_archiver ba;
                 dest = serialize_snl_directly(ba, const_cast<state_t&>(it));
@@ -4917,7 +4914,7 @@ bool service_node_list::store() {
     {
         size_t history_index = 0;
         for (auto& it : m_transient->state_history) {
-            std::string& dest = m_transient->history_blob_list[history_index++];
+            std::string& dest = history_blob_list[history_index++];
             tpool.submit(&tpool_waiter, [&dest, &it]() {
                 serialization::binary_string_archiver ba;
                 dest = serialize_snl_directly(ba, const_cast<state_t&>(it));
@@ -4925,7 +4922,7 @@ bool service_node_list::store() {
         }
 
         // NOTE: Serialize current state into the recent store
-        std::string& curr = m_transient->history_blob_list[history_index++];
+        std::string& curr = history_blob_list[history_index++];
         tpool.submit(&tpool_waiter, [&curr, this]() {
             serialization::binary_string_archiver ba;
             curr = serialize_snl_directly(ba, m_state);
@@ -4942,7 +4939,7 @@ bool service_node_list::store() {
         if (m_transient->long_term_data_dirty) {
             TracyCZoneN(serialize_step, "Serialize archive array of blobs", true);
             serialization::binary_string_archiver ar;
-            std::string db_blob = serialize_db_blob(ar, m_transient->archive_blob_list, nullptr);
+            std::string db_blob = serialize_db_blob(ar, archive_blob_list, nullptr);
             TracyCZoneEnd(serialize_step);
             db.set_service_node_data(db_blob, true /*long_term*/);
         }
@@ -4950,8 +4947,8 @@ bool service_node_list::store() {
         {
             TracyCZoneN(serialize_step, "Serialize history array of blobs", true);
             serialization::binary_string_archiver ar;
-            std::string db_blob = serialize_db_blob(
-                    ar, m_transient->history_blob_list, &m_transient->old_quorum_states);
+            std::string db_blob =
+                    serialize_db_blob(ar, history_blob_list, &m_transient->old_quorum_states);
             TracyCZoneEnd(serialize_step);
             db.set_service_node_data(db_blob, false /*long_term*/);
         }
