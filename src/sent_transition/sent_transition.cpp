@@ -413,6 +413,8 @@ void transition(
             // as its bls key will be in the contract until it is removed.
             if (bls_ok)
                 sn.bls_public_key = node_bls_keys.at(remapped[pk]);
+            else
+                sn.bls_public_key = crypto::null<eth::bls_public_key>;
 
             post_transition_sns.emplace_back(pk, new_state);
         }

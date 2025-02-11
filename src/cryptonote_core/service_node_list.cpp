@@ -5886,9 +5886,12 @@ service_nodes_infos_t::iterator service_node_list::state_t::erase_info(
 
     if (cryptonote::is_hard_fork_at_least(nettype, feature::ETH_BLS, height)) {
 
-        if (exit_type == recently_removed_node::type_t::purged) {
+        if (exit_type == recently_removed_node::type_t::purged || !it->second->bls_public_key) {
             // If purging then the node gets hard deleted so we remove its map entries now.  If we
             // go into the two-step process, below, then it happens later, in step 2.
+            //
+            // If the node has a null bls public key, it is to be purged regardless of 'removed
+            // node type' as we have no reason to keep it and no proper way to remove it later.
             x25519_map.erase(snpk_to_xpk(snpk));
             bls_map.erase(it->second->bls_public_key);
         } else {
