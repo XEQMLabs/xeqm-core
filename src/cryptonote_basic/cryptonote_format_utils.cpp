@@ -199,19 +199,6 @@ bool expand_transaction_1(transaction& tx, bool base_only) {
     return true;
 }
 
-#if defined(_LIBCPP_VERSION)
-#define BINARY_ARCHIVE_STREAM(stream_name, blob) \
-    std::stringstream stream_name;               \
-    stream_name.write(reinterpret_cast<const char*>(blob.data()), blob.size())
-#else
-#define BINARY_ARCHIVE_STREAM(stream_name, blob)                                                  \
-    auto buf =                                                                                    \
-            tools::one_shot_read_buffer{reinterpret_cast<const char*>(blob.data()), blob.size()}; \
-    std::istream stream_name {                                                                    \
-        &buf                                                                                      \
-    }
-#endif
-
 //---------------------------------------------------------------
 bool parse_and_validate_tx_from_blob(const std::string_view tx_blob, transaction& tx) {
     serialization::binary_string_unarchiver ba{tx_blob};
