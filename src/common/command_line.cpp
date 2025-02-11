@@ -48,6 +48,8 @@ namespace command_line {
 const arg_flag arg_help{"help", "Produce help message"};
 const arg_flag arg_version{"version", "Output version information"};
 
+// Network type arguments; We handle this in one spot here as other options rely
+// on the network type.
 const arg_flag arg_stagenet{"stagenet", "Run on stagenet."};
 const arg_flag arg_testnet{"testnet", "Run on testnet."};
 const arg_flag arg_devnet{"devnet", "Run on devnet."};
