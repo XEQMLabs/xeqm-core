@@ -32,8 +32,6 @@
 
 #include <boost/program_options/variables_map.hpp>
 
-#include "common/i18n.h"
-#include "common/string_util.h"
 #include "networks.h"
 #ifdef HAVE_READLINE
 #include "epee/readline_buffer.h"
