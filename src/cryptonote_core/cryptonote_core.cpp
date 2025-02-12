@@ -31,7 +31,6 @@
 
 #include <fmt/color.h>
 #include <fmt/std.h>
-#include <oxenc/base32z.h>
 #include <oxenmq/fmt.h>
 #include <sodium.h>
 #include <sqlite3.h>
@@ -44,19 +43,16 @@ extern "C" {
 
 #include <boost/algorithm/string.hpp>
 #include <csignal>
-#include <iomanip>
 #include <unordered_set>
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
 #include "bls/bls_crypto.h"
 #include "checkpoints/checkpoints.h"
-#include "common/base58.h"
 #include "common/command_line.h"
 #include "common/exception.h"
 #include "common/file.h"
 #include "common/guts.h"
-#include "common/i18n.h"
 #include "common/notify.h"
 #include "common/sha256sum.h"
 #include "common/threadpool.h"
@@ -69,7 +65,6 @@ extern "C" {
 #include "epee/net/local_ip.h"
 #include "epee/string_tools.h"
 #include "epee/warnings.h"
-#include "ethyl/utils.hpp"
 #include "logging/oxen_logger.h"
 #include "ringct/rctSigs.h"
 #include "ringct/rctTypes.h"
