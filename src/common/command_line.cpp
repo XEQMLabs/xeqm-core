@@ -30,16 +30,18 @@
 
 #include "command_line.h"
 
-#include <boost/program_options/variables_map.hpp>
-
 #include "networks.h"
+
 #ifdef HAVE_READLINE
 #include "epee/readline_buffer.h"
-#endif
-#include <iostream>
+#else
 #ifdef _WIN32
-#include "windows.h"
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #endif
+#endif
+
+#include <iostream>
 
 namespace command_line {
 
@@ -88,7 +90,6 @@ cryptonote::network_type get_network(const boost::program_options::variables_map
 #ifdef __linux__
 
 extern "C" {
-#include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 }
