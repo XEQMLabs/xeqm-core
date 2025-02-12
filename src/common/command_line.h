@@ -36,7 +36,6 @@
 #include <boost/program_options/variables_map.hpp>
 #include <concepts>
 #include <functional>
-#include <type_traits>
 #include <variant>
 
 #include "common/format.h"
