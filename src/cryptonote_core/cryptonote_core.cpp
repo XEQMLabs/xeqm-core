@@ -70,6 +70,7 @@ extern "C" {
 #include "ringct/rctTypes.h"
 #include "uptime_proof.h"
 #include "version.h"
+#include "network_config/mocknet.h"
 
 DISABLE_VS_WARNINGS(4355)
 
@@ -354,6 +355,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_omq_quorumnet_public);
     command_line::add_arg(desc, arg_disable_ip_check);
 
+    mocknet_add_cli_arg(desc);
     miner::init_options(desc);
     BlockchainDB::init_options(desc);
 }
@@ -449,6 +451,8 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
         }
     }
 
+    if (!mocknet_read_cli_for_mocknet_arg(vm, m_service_node))
+        return false;
     return true;
 }
 //-----------------------------------------------------------------------------------------------
@@ -1085,21 +1089,7 @@ bool core::init_service_keys(bool fixup_monero_ed) {
     // (which rely on the seed for signing).
     if (m_service_node) {
         if (std::error_code ec; fixup_monero_ed || !fs::exists(m_config_folder / "key", ec)) {
-            epee::wipeable_string privkey_signhash;
-            privkey_signhash.resize(crypto_hash_sha512_BYTES);
-            unsigned char* pk_sh_data = reinterpret_cast<unsigned char*>(privkey_signhash.data());
-            crypto_hash_sha512(pk_sh_data, keys.key_ed25519.data(), 32 /* first 32 bytes are the seed to be SHA512 hashed (the last 32 are just the pubkey) */);
-            // Clamp private key (as libsodium does and expects -- see
-            // https://www.jcraige.com/an-explainer-on-ed25519-clamping if you want the broader
-            // reasons)
-            pk_sh_data[0] &= 248;
-            pk_sh_data[31] &= 63;  // (some implementations put 127 here, but with the |64 in the
-                                   // next line it is the same thing)
-            pk_sh_data[31] |= 64;
-            // Monero crypto requires a pointless check that the secret key is < basepoint, so
-            // calculate it mod basepoint to make it happy:
-            sc_reduce32(pk_sh_data);
-            std::memcpy(keys.key.data(), pk_sh_data, 32);
+            keys.key = crypto::ed25519_to_monero_secret_key(keys.key_ed25519);
             if (!crypto::secret_key_to_public_key(keys.key, keys.pub))
                 throw oxen::traced<std::runtime_error>{
                         "Failed to derive primary key from ed25519 key"};
@@ -2364,6 +2354,7 @@ bool core::add_new_block(
         if (hf21_height && b.get_height() == *hf21_height) {
             service_node_list.while_locked([this]() { init_service_keys(true); });
         }
+        mocknet_on_cn_core_post_add_new_block(*this);
     }
     return result;
 }

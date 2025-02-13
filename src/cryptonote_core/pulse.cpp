@@ -12,6 +12,8 @@
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 
+#include "network_config/mocknet.h"
+
 extern "C" {
 #include <sodium/crypto_generichash.h>
 };
@@ -1244,7 +1246,8 @@ namespace {
                 hf_version,
                 active_node_list,
                 entropy,
-                context.prepare_for_round.round);
+                context.prepare_for_round.round,
+                context.wait_for_next_block.height);
 
         if (!service_nodes::verify_pulse_quorum_sizes(context.prepare_for_round.quorum)) {
             log::info(
@@ -2084,6 +2087,8 @@ void main(void* quorumnet_state, cryptonote::core& core) {
                         context, node_list, quorumnet_state, key, core);
                 break;
         }
+
+        mocknet_push_mock_pulse_block(core);
     }
 }
 
