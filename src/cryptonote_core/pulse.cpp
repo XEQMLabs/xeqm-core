@@ -13,6 +13,8 @@
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 
+#include "network_config/mocknet.h"
+
 extern "C" {
 #include <sodium/crypto_generichash.h>
 };
