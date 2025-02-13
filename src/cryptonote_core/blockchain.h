@@ -36,7 +36,6 @@
 
 // Workaround for boost::serialization issue #219
 #include <boost/version.hpp>
-#include <type_traits>
 #if BOOST_VERSION == 107400
 #include <boost/serialization/library_version_type.hpp>
 #endif
@@ -46,20 +45,16 @@ typedef io_context io_service;
 }
 
 #include <atomic>
-#include <boost/multi_index/global_fun.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index_container.hpp>
 #include <boost/serialization/list.hpp>
-#include <ethyl/provider.hpp>
 #include <functional>
+#include <set>
+#include <span>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "blockchain_db/blockchain_db.h"
 #include "checkpoints/checkpoints.h"
-#include "common/util.h"
 #include "crypto/eth.h"
 #include "crypto/hash.h"
 #include "cryptonote_basic/cryptonote_basic.h"
@@ -69,12 +64,9 @@ typedef io_context io_service;
 #include "cryptonote_protocol/cryptonote_protocol_defs.h"
 #include "cryptonote_tx_utils.h"
 #include "epee/rolling_median.h"
-#include "epee/span.h"
-#include "epee/string_tools.h"
 #include "l2_tracker/l2_tracker.h"
 #include "pulse.h"
 #include "rpc/core_rpc_server_binary_commands.h"
-#include "rpc/core_rpc_server_commands_defs.h"
 
 struct sqlite3;
 namespace service_nodes {
@@ -1088,7 +1080,7 @@ class Blockchain {
      */
     void block_longhash_worker(
             uint64_t height,
-            const epee::span<const block>& blocks,
+            const std::span<const block>& blocks,
             std::unordered_map<crypto::hash, crypto::hash>& map) const;
 
     /**
