@@ -3327,7 +3327,7 @@ bool oxen_pulse_non_participating_validator::generate(std::vector<test_event_ent
     {
       std::vector<service_nodes::pubkey_and_sninfo> active_snode_list = params.prev.service_node_state.active_service_nodes_infos();
       std::vector<crypto::hash> entropy = service_nodes::get_pulse_entropy_for_next_block(gen.db_, params.prev.block, entry.block.pulse.round);
-      quorum = generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, entry.block.major_version, active_snode_list, entropy, entry.block.pulse.round);
+      quorum = generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, entry.block.major_version, active_snode_list, entropy, entry.block.pulse.round, entry.block.get_height());
       assert(quorum.validators.size() == service_nodes::PULSE_QUORUM_NUM_VALIDATORS);
       assert(quorum.workers.size() == 1);
     }

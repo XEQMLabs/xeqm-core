@@ -1453,7 +1453,8 @@ service_nodes::quorum generate_pulse_quorum(
         cryptonote::hf hf_version,
         std::vector<pubkey_and_sninfo> const& active_snode_list,
         std::vector<crypto::hash> const& pulse_entropy,
-        uint8_t pulse_round);
+        uint8_t pulse_round,
+        uint64_t block_height);
 
 // The pulse entropy is generated for the next block after the top_block passed in.
 std::vector<crypto::hash> get_pulse_entropy_for_next_block(

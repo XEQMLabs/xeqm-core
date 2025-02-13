@@ -2450,7 +2450,8 @@ void core_rpc_server::invoke(GET_QUORUM_STATE& get_quorum_state, rpc_context con
                     hf_version,
                     sn_list.active_service_nodes_infos(),
                     entropy,
-                    pulse_round);
+                    pulse_round,
+                    curr_height - 1);
             if (verify_pulse_quorum_sizes(quorum)) {
                 auto& entry = quorums.emplace_back();
                 entry.height = curr_height;

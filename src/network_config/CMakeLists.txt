@@ -27,50 +27,18 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_subdirectory(sent_transition)
+oxen_add_library(network_config mocknet.cpp)
 
-oxen_add_library(cryptonote_core
-  blockchain.cpp
-  cryptonote_core.cpp
-  sent_transition/sent_transition.cpp
-  service_node_rules.cpp
-  service_node_list.cpp
-  service_node_voting.cpp
-  service_node_quorum_cop.cpp
-  service_node_swarm.cpp
-  tx_blink.cpp
-  oxen_name_system.cpp
-  tx_pool.cpp
-  tx_sanity_check.cpp
-  cryptonote_tx_utils.cpp
-  ethereum_transactions.cpp
-  pulse.cpp
-  uptime_proof.cpp)
-
-target_link_libraries(cryptonote_core
+target_link_libraries(network_config
   PUBLIC
-    version
+    cryptonote_core
     common
-    blockchain_db
-    multisig
-    ringct
-    device
-    checkpoints
-    SQLite::SQLite3
-    bls_aggregator
-    l2_tracker
-    sent_transition_data
-    ethyl
-    network_config
   PRIVATE
-    SQLiteCpp
-    systemd
-    logging
-    extra
-    zstd::zstd)
+    extra)
 
-if (PER_BLOCK_CHECKPOINT)
-  target_compile_definitions(cryptonote_core PUBLIC PER_BLOCK_CHECKPOINT)
-  target_link_libraries(cryptonote_core PUBLIC blocks)
+option(WITH_MOCKNET "Enable mocknet support for forking the blockchain to use pre-defined quorums with known keys" OFF)
+if (WITH_MOCKNET)
+    target_compile_definitions(network_config PUBLIC WITH_MOCKNET)
+    target_link_libraries(network_config PUBLIC cryptonote_protocol)
 endif()
 
