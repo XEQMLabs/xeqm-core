@@ -766,7 +766,6 @@ bool Blockchain::init(
         sqlite3* ons_db,
         cryptonote::BlockchainSQLite* sqlite_db,
         eth::L2Tracker* l2_tracker,
-        bool offline,
         const cryptonote::test_options* test_options,
         difficulty_type fixed_difficulty,
         const GetCheckpointsCallback& get_checkpoints /* = nullptr*/,
@@ -807,7 +806,6 @@ bool Blockchain::init(
 
     m_l2_tracker = l2_tracker;
 
-    m_offline = offline;
     m_fixed_difficulty = fixed_difficulty;
 
     if (test_options)  // Fakechain mode
