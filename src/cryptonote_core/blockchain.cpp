@@ -46,7 +46,6 @@
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
-#include "common/boost_serialization_helper.h"
 #include "common/exception.h"
 #include "common/guts.h"
 #include "common/lock.h"
@@ -60,16 +59,10 @@
 #include "common/util.h"
 #include "common/varint.h"
 #include "crypto/crypto.h"
-#include "crypto/eth.h"
-#include "crypto/hash.h"
-#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
-#include "cryptonote_basic/cryptonote_boost_serialization.h"
 #include "cryptonote_basic/hardfork.h"
-#include "cryptonote_basic/miner.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
-#include "cryptonote_core/cryptonote_tx_utils.h"
 #include "epee/int-util.h"
 #include "epee/warnings.h"
 #include "ethereum_transactions.h"
@@ -6075,7 +6068,7 @@ bool Blockchain::get_checkpoint(uint64_t height, checkpoint_t& checkpoint) const
 //------------------------------------------------------------------
 void Blockchain::block_longhash_worker(
         uint64_t height,
-        const epee::span<const block>& blocks,
+        const std::span<const block>& blocks,
         std::unordered_map<crypto::hash, crypto::hash>& map) const {
     for (const auto& block : blocks) {
         if (m_cancel)
