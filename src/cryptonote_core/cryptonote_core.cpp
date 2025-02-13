@@ -71,6 +71,7 @@ extern "C" {
 #include "ringct/rctTypes.h"
 #include "uptime_proof.h"
 #include "version.h"
+#include "network_config/mocknet.h"
 
 DISABLE_VS_WARNINGS(4355)
 

@@ -80,6 +80,7 @@
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
 #include "uptime_proof.h"
+#include "network_config/mocknet.h"
 
 using cryptonote::hf;
 namespace feature = cryptonote::feature;
@@ -3326,6 +3327,9 @@ service_nodes::quorum generate_pulse_quorum(
             pulse_round,
             block_height);
 
+    if (mocknet_has_forked(block_height)) {
+        mocknet_replace_quorum_with_mock_nodes(result, block_height);
+    }
     return result;
 }
 
