@@ -2408,7 +2408,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
 
     fmt::print(
             "\n\n\x1b[33;1m"
-            "Oxen Service Node Registration\n"
+            "Equilibria Service Node Registration\n"
             "------------------------------\n"
             "Service Node Pubkey: \x1b[32;1m{}\x1b[33;1m\n"
             "Staking requirement: {} from up to {} contributors\n\n",

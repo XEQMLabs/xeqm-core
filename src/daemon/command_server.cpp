@@ -139,7 +139,7 @@ void command_server::init_commands(cryptonote::rpc::core_rpc_server* rpc_server)
             "start_mining",
             [this](const auto& x) { return m_parser.start_mining(x); },
             "start_mining <addr> [threads=N] [num_blocks=B]",
-            "Start mining for specified address, primarily for debug and testing purposes as Oxen "
+            "Start mining for specified address, primarily for debug and testing purposes as Equilibria "
             "is proof-of-stake. Defaults to 1 thread. When num_blocks is set, continue mining "
             "until the blockchain reaches height (current + B).");
     m_command_lookup.set_handler(
@@ -339,7 +339,7 @@ bool command_server::help(const std::vector<std::string>& args) {
 
 std::string command_server::get_commands_str() {
     std::stringstream ss;
-    ss << "Oxen '" << OXEN_RELEASE_NAME << "' (v" << OXEN_VERSION_FULL << ")" << std::endl;
+    ss << "Equilibria '" << OXEN_RELEASE_NAME << "' (v" << OXEN_VERSION_FULL << ")" << std::endl;
     ss << "Commands:\n";
     m_command_lookup.for_each([&ss](const std::string&,
                                     const std::string& usage,

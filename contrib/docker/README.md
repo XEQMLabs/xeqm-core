@@ -44,11 +44,11 @@ Run the container, storing the blockchain in Docker volume `oxen-blockchain`:
 
 `$ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" oxend:9.1.0`
 
-Same as above, but additionally mounting the wallet directory `/home/<your_user>/Oxen` to `/wallet` in the container:
+Same as above, but additionally mounting the wallet directory `/home/<your_user>/Equilibria` to `/wallet` in the container:
 
 ```
 $ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
-                             --mount "source=/home/<your_user>/Oxen,target=/wallet,type=bind" oxend:9.1.0
+                             --mount "source=/home/<your_user>/Equilibria,target=/wallet,type=bind" oxend:9.1.0
 ```
 
 Check on how the synchronization is going:
@@ -64,7 +64,7 @@ specs are 4G memory, 2 CPUs, and 30G disk. The memory and CPUs can be limited ea
 
 ```
 $ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
-                             --mount "source=/home/<your_user>/Oxen,target=/wallet,type=bind" \
+                             --mount "source=/home/<your_user>/Equilibria,target=/wallet,type=bind" \
 			     --memory=4g --cpus=2 oxend:9.1.0
 ```
 

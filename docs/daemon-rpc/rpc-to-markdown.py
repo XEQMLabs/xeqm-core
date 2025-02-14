@@ -28,7 +28,7 @@ parser.add_argument("--dev", action='store_true', help="generate dev mode docs, 
 parser.add_argument("--no-sort", "-S", action='store_true', help="disable sorting endpoints by name (use file order)")
 parser.add_argument("--no-group", "-G", action='store_true', help="disable grouping endpoints by category")
 parser.add_argument("--no-emdash", "-M", action='store_true', help="disable converting ' -- ' to ' — ' (em-dashes)")
-parser.add_argument("--rpc", metavar='URL', default="http://public-na.optf.ngo:22023", help="URL to a running oxend RPC node for live example fetching")
+parser.add_argument("--rpc", metavar='URL', default="http://public-na.optf.ngo:22023", help="URL to a running equilibriad RPC node for live example fetching")
 parser.add_argument("filename", nargs="+")
 args = parser.parse_args()
 

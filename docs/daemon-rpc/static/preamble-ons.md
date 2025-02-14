@@ -1,3 +1,3 @@
-# Oxen Name System Query Endpoints
+# Equilibria Name System Query Endpoints
 
-This endpoints allow querying Oxen Name System records.
+This endpoints allow querying Equilibria Name System records.

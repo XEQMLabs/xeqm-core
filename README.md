@@ -1,13 +1,13 @@
-# Oxen
+# Equilibria
 
-Copyright (c) 2018-2022 The Oxen Project.   
+Copyright (c) 2018-2022 The Equilibria Project.   
 Portions Copyright (c) 2014-2019 The Monero Project.   
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
 
 - Web: [oxen.io](https://oxen.io)
-- Telegram: [t.me/OxenCommunity](https://t.me/Oxen_Community)
+- Telegram: [t.me/EquilibriaCommunity](https://t.me/Equilibria_Community)
 - Mail: [team@oxen.io](mailto:team@oxen.io)
 - GitHub: [https://github.com/oxen-io/oxen-core](https://github.com/oxen-io/oxen-core)
 - Discord: [https://discord.gg/67GXfD6](https://discord.gg/67GXfD6)
@@ -18,13 +18,13 @@ Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Information
 
-Oxen is a private cryptocurrency based on Monero. Oxen currently offers an incentivised full node layer, over the coming months we will be looking to support a secondary p2p network (Lokinet) and a messenger that offers private communications based on the Signal protocol (Session).
+Equilibria is a private cryptocurrency based on Monero. Equilibria currently offers an incentivised full node layer, over the coming months we will be looking to support a secondary p2p network (Lokinet) and a messenger that offers private communications based on the Signal protocol (Session).
 
 More information on the project can be found on the website and in the whitepaper.
 
-Oxen is an open source project, and we encourage contributions from anyone with something to offer. For more information on contributing, please contact team@oxen.io
+Equilibria is an open source project, and we encourage contributions from anyone with something to offer. For more information on contributing, please contact team@oxen.io
 
-## Compiling Oxen from source
+## Compiling Equilibria from source
 
 ### Dependencies
 
@@ -81,7 +81,7 @@ FreeBSD one liner for required to build dependencies
 
 ### Build instructions
 
-Oxen uses the CMake build system which is used by creating a build directory and invoke cmake before building.
+Equilibria uses the CMake build system which is used by creating a build directory and invoke cmake before building.
 
 #### On Linux and macOS
 
@@ -104,11 +104,11 @@ if you want to build a dev build you can do the following after installing the d
 	$ cmake ..
 	$ make -j$(nproc)
 
-* The resulting executables can be found in `~/oxen-core/build/bin`
+* The resulting executables can be found in `~/equilibria-core/build/bin`
 
-* Add `PATH="$PATH:$HOME/oxen-core/build/bin"` to `.profile`
+* Add `PATH="$PATH:$HOME/equilibria-core/build/bin"` to `.profile`
 
-* Run Oxen with `oxend --detach`
+* Run Equilibria with `equilibriad --detach`
 
 * **Optional**: build and run the test suite to verify the binaries:
 
@@ -206,7 +206,7 @@ application.
 ### On FreeBSD:
 
 The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`). 
-If you are running Oxen in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
+If you are running Equilibria in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
 
 ### On OpenBSD:
 
@@ -286,11 +286,11 @@ You can also cross-compile static binaries on Linux for Windows and macOS with t
 
 The required packages are the names for each toolchain on apt. Depending on your distro, they may have different names.
 
-Using `depends` might also be easier to compile Oxen on Windows than using MSYS. Activate Windows Subsystem for Linux (WSL) with a distro (for example Ubuntu), install the apt build-essentials and follow the `depends` steps as depicted above.
+Using `depends` might also be easier to compile Equilibria on Windows than using MSYS. Activate Windows Subsystem for Linux (WSL) with a distro (for example Ubuntu), install the apt build-essentials and follow the `depends` steps as depicted above.
 
 The produced binaries still link libc dynamically. If the binary is compiled on a current distribution, it might not run on an older distribution with an older installation of libc. Passing `-DBACKCOMPAT=ON` to cmake will make sure that the binary will run on systems having at least libc version 2.17.
 
-## Installing Oxen from a package
+## Installing Equilibria from a package
 
 Pre-built packages are available for recent Debian and Ubuntu systems (and are often usable on
 Debian or Ubuntu-derived Linux distributions).  For more details see https://deb.imaginary.stream
@@ -354,7 +354,7 @@ See [README.i18n.md](README.i18n.md).
 
 ## Debugging
 
-This section contains general instructions for debugging failed installs or problems encountered with Oxen. First ensure you are running the latest version built from the Github repo.
+This section contains general instructions for debugging failed installs or problems encountered with Equilibria. First ensure you are running the latest version built from the Github repo.
 
 ### Obtaining stack traces and core dumps on Unix systems
 
@@ -396,7 +396,7 @@ Print the stack trace with `bt`
 coredumpctl -1 gdb
 ```
 
-#### To run Oxen within gdb:
+#### To run Equilibria within gdb:
 
 Type `gdb /path/to/oxend`
 
@@ -410,7 +410,7 @@ There are two tools available:
 
 #### ASAN
 
-Configure Oxen with the -D SANITIZE=ON cmake flag, eg:
+Configure Equilibria with the -D SANITIZE=ON cmake flag, eg:
 
 ```bash
 cd build/debug && cmake -D SANITIZE=ON -D CMAKE_BUILD_TYPE=Debug ../..
@@ -462,7 +462,7 @@ Thereafter the script can be invoked to launch the local network.
 
 ### Socket-based
 
-Because of the nature of the socket-based protocols that drive Oxen, certain protocol weaknesses are somewhat unavoidable at this time. While these weaknesses can theoretically be fully mitigated, the effort required (the means) may not justify the ends. As such, please consider taking the following precautions if you are a Oxen node operator:
+Because of the nature of the socket-based protocols that drive Equilibria, certain protocol weaknesses are somewhat unavoidable at this time. While these weaknesses can theoretically be fully mitigated, the effort required (the means) may not justify the ends. As such, please consider taking the following precautions if you are a Equilibria node operator:
 
 - Run `oxend` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `oxend` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `oxend` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
 - If you plan on hosting a public "remote" node, start `oxend` with `--restricted-rpc`. This is a must.
@@ -471,4 +471,4 @@ Because of the nature of the socket-based protocols that drive Oxen, certain pro
 
 Certain blockchain "features" can be considered "bugs" if misused correctly. Consequently, please consider the following:
 
-- When receiving Oxen, be aware that it may be locked for an arbitrary time if the sender elected to, preventing you from spending that Oxen until the lock time expires. You may want to hold off acting upon such a transaction until the unlock time lapses. To get a sense of that time, you can consider the remaining blocktime until unlock as seen in the `show_transfers` command.
+- When receiving Equilibria, be aware that it may be locked for an arbitrary time if the sender elected to, preventing you from spending that Equilibria until the lock time expires. You may want to hold off acting upon such a transaction until the unlock time lapses. To get a sense of that time, you can consider the remaining blocktime until unlock as seen in the `show_transfers` command.

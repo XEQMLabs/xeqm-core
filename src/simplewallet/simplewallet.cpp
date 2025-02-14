@@ -321,7 +321,7 @@ namespace {
     const char* USAGE_HELP("help [<command>]");
 
     //
-    // Oxen
+    // Equilibria
     //
     const char* USAGE_REGISTER_SERVICE_NODE(
             "register_service_node [index=<N1>[,<N2>,...]] [<priority>] <operator cut> <address1> "
@@ -712,10 +712,10 @@ bool simple_wallet::spendkey(
         SCOPED_WALLET_UNLOCK();
 
         warn_msg_writer() << tr(
-                "NEVER give your Oxen wallet private spend key (or seed phrase) to ANYONE else. "
-                "NEVER input your Oxen private spend key (or seed phrase) into any software or "
+                "NEVER give your Equilibria wallet private spend key (or seed phrase) to ANYONE else. "
+                "NEVER input your Equilibria private spend key (or seed phrase) into any software or "
                 "website other than the OFFICIAL "
-                "Oxen CLI or GUI wallets, downloaded directly from the Oxen GitHub "
+                "Equilibria CLI or GUI wallets, downloaded directly from the Equilibria GitHub "
                 "(https://github.com/oxen-io/) or compiled from source.");
         std::string confirm =
                 input_line(tr("Are you sure you want to access your private spend key?"), true);
@@ -1988,38 +1988,38 @@ bool simple_wallet::net_stats(const std::vector<std::string>& args) {
 }
 
 bool simple_wallet::welcome(const std::vector<std::string>& args) {
-    message_writer() << tr("Welcome to Oxen, the private cryptocurrency based on Monero");
+    message_writer() << tr("Welcome to Equilibria, the private cryptocurrency based on Monero");
     message_writer() << "";
     message_writer() << tr(
-            "Oxen, like Bitcoin, is a cryptocurrency. That is, it is digital money.");
+            "Equilibria, like Bitcoin, is a cryptocurrency. That is, it is digital money.");
     message_writer() << tr(
-            "Unlike Bitcoin, your Oxen transactions and balance stay private and are not visible "
+            "Unlike Bitcoin, your Equilibria transactions and balance stay private and are not visible "
             "to the world by default.");
     message_writer() << tr(
             "However, you have the option of making those available to select parties if you "
             "choose to.");
     message_writer() << "";
     message_writer() << tr(
-            "Oxen protects your privacy on the blockchain, and while Oxen strives to improve all "
+            "Equilibria protects your privacy on the blockchain, and while Equilibria strives to improve all "
             "the time,");
     message_writer() << tr(
-            "no privacy technology can be 100% perfect, Monero and consequently Oxen included.");
+            "no privacy technology can be 100% perfect, Monero and consequently Equilibria included.");
     message_writer() << tr(
-            "Oxen cannot protect you from malware, and it may not be as effective as we hope "
+            "Equilibria cannot protect you from malware, and it may not be as effective as we hope "
             "against powerful adversaries.");
     message_writer() << tr(
-            "Flaws in Oxen may be discovered in the future, and attacks may be developed to peek "
+            "Flaws in Equilibria may be discovered in the future, and attacks may be developed to peek "
             "under some");
     message_writer() << tr(
-            "of the layers of privacy Oxen provides. Be safe and practice defense in depth.");
+            "of the layers of privacy Equilibria provides. Be safe and practice defense in depth.");
     message_writer() << "";
     message_writer() << tr(
-            "Welcome to Oxen and financial privacy. For more information, see https://oxen.io");
+            "Welcome to Equilibria and financial privacy. For more information, see https://oxen.io");
     return true;
 }
 
 bool simple_wallet::version(const std::vector<std::string>& args) {
-    message_writer() << "Oxen '" << OXEN_RELEASE_NAME << "' (v" << OXEN_VERSION_FULL << ")";
+    message_writer() << "Equilibria '" << OXEN_RELEASE_NAME << "' (v" << OXEN_VERSION_FULL << ")";
     return true;
 }
 
@@ -2682,12 +2682,12 @@ simple_wallet::simple_wallet() :
  refresh-from-block-height [n]
    Set the height before which to ignore blocks.
  segregate-pre-fork-outputs <1|0>
-   Set this if you intend to spend outputs on both Oxen AND a key reusing fork.
+   Set this if you intend to spend outputs on both Equilibria AND a key reusing fork.
  key-reuse-mitigation2 <1|0>
-   Set this if you are not sure whether you will spend on a key reusing Oxen fork later.
+   Set this if you are not sure whether you will spend on a key reusing Equilibria fork later.
  subaddress-lookahead <major>:<minor>
    Set the lookahead sizes for the subaddress hash table.
-   Set this if you are not sure whether you will spend on a key reusing Oxen fork later.
+   Set this if you are not sure whether you will spend on a key reusing Equilibria fork later.
  segregation-height <n>
    Set to the height of a key reusing fork you want to use, 0 to use default.
  ignore-outputs-above <amount>
@@ -2965,7 +2965,7 @@ Pending or Failed: "failed"|"pending",  "out", Lock, Checkpointed, Time, Amount*
             "mms signer",
             [this](const auto& x) { return mms(x); },
             tr(USAGE_MMS_SIGNER),
-            tr("Set or modify authorized signer info (single-word label, transport address, Oxen "
+            tr("Set or modify authorized signer info (single-word label, transport address, Equilibria "
                "address), or list all signers"));
     m_cmd_binder.set_handler(
             "mms list",
@@ -3134,7 +3134,7 @@ Pending or Failed: "failed"|"pending",  "out", Lock, Checkpointed, Time, Amount*
     m_cmd_binder.set_cancel_handler([this] { return on_cancelled_command(); });
 
     //
-    // Oxen
+    // Equilibria
     //
     m_cmd_binder.set_handler(
             "register_service_node",
@@ -3194,14 +3194,14 @@ Pending or Failed: "failed"|"pending",  "out", Lock, Checkpointed, Time, Amount*
             "ons_by_owner",
             [this](const auto& x) { return ons_by_owner(x); },
             tr(USAGE_ONS_BY_OWNER),
-            tr("Query the Oxen Name Service names that the keys have purchased. If no keys are "
+            tr("Query the Equilibria Name Service names that the keys have purchased. If no keys are "
                "specified, it defaults to the current wallet."));
 
     m_cmd_binder.set_handler(
             "ons_lookup",
             [this](const auto& x) { return ons_lookup(x); },
             tr(USAGE_ONS_LOOKUP),
-            tr("Query the ed25519 public keys that own the Oxen Name System names."));
+            tr("Query the ed25519 public keys that own the Equilibria Name System names."));
 
     m_cmd_binder.set_handler(
             "ons_make_update_mapping_signature",
@@ -3465,10 +3465,10 @@ void simple_wallet::print_seed(const epee::wipeable_string& seed) {
                                         m_wallet->multisig() ? tr("string") : tr("25 words"));
 
     warn_msg_writer() << tr(
-            "NEVER give your Oxen wallet seed to ANYONE else. NEVER input your Oxen "
-            "wallet seed into any software or website other than the OFFICIAL Oxen CLI or GUI "
+            "NEVER give your Equilibria wallet seed to ANYONE else. NEVER input your Equilibria "
+            "wallet seed into any software or website other than the OFFICIAL Equilibria CLI or GUI "
             "wallets, "
-            "downloaded directly from the Oxen GitHub (https://github.com/oxen-io/) or compiled "
+            "downloaded directly from the Equilibria GitHub (https://github.com/oxen-io/) or compiled "
             "from source.");
     std::string confirm = input_line(tr("Are you sure you want to access your wallet seed?"), true);
     if (std::cin.eof() || !command_line::is_yes(confirm))
@@ -4079,7 +4079,7 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
             message_writer(fmt::terminal_color::yellow)
                     << tr("Using your own without SSL exposes your RPC traffic to monitoring");
         message_writer(fmt::terminal_color::yellow)
-                << tr("You are strongly encouraged to connect to the Oxen network using your own "
+                << tr("You are strongly encouraged to connect to the Equilibria network using your own "
                       "daemon");
         message_writer(fmt::terminal_color::yellow)
                 << tr("If you or someone you trust are operating this daemon, you can use "
@@ -4107,7 +4107,7 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
 
     if (welcome)
         message_writer(fmt::terminal_color::yellow)
-                << tr("If you are new to Oxen, type \"welcome\" for a brief overview.");
+                << tr("If you are new to Equilibria, type \"welcome\" for a brief overview.");
 
     m_last_activity_time = time(NULL);
     return true;
@@ -5766,7 +5766,7 @@ void simple_wallet::check_for_inactivity_lock(bool user) {
             message_writer() << R"(
       ...........
     ...............
-  ....OOOOOOOOOOO....   Your Oxen Wallet was locked to
+  ....OOOOOOOOOOO....   Your Equilibria Wallet was locked to
  .......OOOOOOO.......  protect you while you were away.
  ..........O..........
  .......OOOOOOO.......  (Use `set inactivity-lock-timeout 0`
@@ -6752,7 +6752,7 @@ bool simple_wallet::ons_buy_mapping(std::vector<std::string> args) {
         info.is_subaddress = m_current_subaddress_account != 0;
         dsts.push_back(info);
 
-        std::cout << std::endl << tr("Buying Oxen Name System Record") << std::endl << std::endl;
+        std::cout << std::endl << tr("Buying Equilibria Name System Record") << std::endl << std::endl;
         if (*type == ons::mapping_type::session)
             std::cout << "Session Name: {}"_format(name) << std::endl;
         else if (*type == ons::mapping_type::wallet)
@@ -6844,7 +6844,7 @@ bool simple_wallet::ons_renew_mapping(std::vector<std::string> args) {
         info.is_subaddress = m_current_subaddress_account != 0;
         dsts.push_back(info);
 
-        std::cout << "\n" << tr("Renew Oxen Name System Record") << "\n\n";
+        std::cout << "\n" << tr("Renew Equilibria Name System Record") << "\n\n";
         if (ons::is_lokinet_type(type))
             std::cout << "Lokinet Name:  {}"_format(name) << "\n";
         else
@@ -6951,7 +6951,7 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
         info.is_subaddress = m_current_subaddress_account != 0;
         dsts.push_back(info);
 
-        std::cout << std::endl << tr("Updating Oxen Name System Record") << std::endl << std::endl;
+        std::cout << std::endl << tr("Updating Equilibria Name System Record") << std::endl << std::endl;
         if (type == ons::mapping_type::session)
             std::cout << "Session Name:     {}"_format(name) << std::endl;
         else if (ons::is_lokinet_type(type))
@@ -10158,8 +10158,8 @@ int main(int argc, char* argv[]) {
             argv,
             "oxen-wallet-cli [--wallet-file=<filename>|--generate-new-wallet=<filename>] "
             "[<COMMAND>]",
-            sw::tr("This is the command line Oxen wallet. It needs to connect to a Oxen\ndaemon to "
-                   "work correctly.\n\nWARNING: Do not reuse your Oxen keys on a contentious fork, "
+            sw::tr("This is the command line Equilibria wallet. It needs to connect to a Equilibria\ndaemon to "
+                   "work correctly.\n\nWARNING: Do not reuse your Equilibria keys on a contentious fork, "
                    "doing so will harm your privacy.\n Only consider reusing your key on a "
                    "contentious fork if the fork has key reuse mitigations built in."),
             desc_params,

@@ -1,5 +1,5 @@
 - [Network information](network.md)
 - [Blockchain data](blockchain.md)
-- [Oxen Name System](ons.md)
+- [Equilibria Name System](ons.md)
 - [Daemon administration](daemon.md)
 - [Service Node administration](service_node.md)

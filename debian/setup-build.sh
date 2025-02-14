@@ -47,7 +47,7 @@ oxen-snapshot ($pkg_ver) ${DEBIAN_CODENAME:-unstable}; urgency=medium
   * Snapshot build
   * Commit $git_commit
 
- -- Oxen Project <team@oxen.io>  $date_changelog
+ -- Equilibria Project <team@oxen.io>  $date_changelog
 CHANGELOG
 
 for sublib in "" "-wallet"; do

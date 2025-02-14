@@ -68,7 +68,7 @@ constexpr auto YELLOW = "\033[33;1m";
 constexpr auto CYAN = "\033[36;1m";
 
 const std::string coloured_oxen_release =
-        "{}Oxen '{}' (v{}){}"_format(CYAN, OXEN_RELEASE_NAME, OXEN_VERSION_FULL, RESET);
+        "{}Equilibria '{}' (v{}){}"_format(CYAN, OXEN_RELEASE_NAME, OXEN_VERSION_FULL, RESET);
 }  // namespace
 
 int main(int argc, char const* argv[]) {
@@ -322,7 +322,7 @@ int main(int argc, char const* argv[]) {
         Log::info(
                 globallogcat,
                 fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
-                "Oxen '{}' (v{})",
+                "Equilibria '{}' (v{})",
                 OXEN_RELEASE_NAME,
                 OXEN_VERSION_FULL);
 
@@ -364,7 +364,7 @@ int main(int argc, char const* argv[]) {
 
         Log::info(logcat, "Moving from main() into the daemonize now.");
 
-        return daemonizer::daemonize<daemonize::daemon>("Oxen Daemon", argc, argv, std::move(vm))
+        return daemonizer::daemonize<daemonize::daemon>("Equilibria Daemon", argc, argv, std::move(vm))
                      ? 0
                      : 1;
     } catch (std::exception const& ex) {

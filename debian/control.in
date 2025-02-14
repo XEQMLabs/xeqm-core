@@ -34,59 +34,59 @@ Homepage: https://oxen.io
 Package: liboxen-snapshot@LIBOXEN_VERSION@
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Oxen shared libraries (development version)
- This package contains the common Oxen library code used by the various Oxen
+Description: Equilibria shared libraries (development version)
+ This package contains the common Equilibria library code used by the various Equilibria
  binaries.
 
 Package: liboxen-wallet-snapshot@LIBOXEN_VERSION@
 Architecture: any
 Depends: liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
-Description: Oxen wallet shared libraries (development snapshot)
- This package contains the common Oxen library code used by the various Oxen
+Description: Equilibria wallet shared libraries (development snapshot)
+ This package contains the common Equilibria library code used by the various Equilibria
  wallet-related code.
 
 Package: oxend-snapshot
 Architecture: any
 Depends: liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}, debconf
 Suggests: oxen-blockchain-tools-snapshot
-Description: Oxen network daemon (development snapshot)
- This package contains the Oxen network daemon, oxend, for running an Oxen node
- as part of an Oxen service node.
+Description: Equilibria network daemon (development snapshot)
+ This package contains the Equilibria network daemon, oxend, for running an Equilibria node
+ as part of an Equilibria service node.
  .
  This is a development build of oxend; you should not use this package for a
- mainnet Oxen node.
+ mainnet Equilibria node.
 
 Package: oxen-wallet-cli-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
 Suggests: oxend-snapshot
-Description: Oxen command-line wallet and JSON RPC wallet (development snapshot)
- This package contains the Oxen command-line wallet for accessing a wallet
- stored on the Oxen blockchain.
+Description: Equilibria command-line wallet and JSON RPC wallet (development snapshot)
+ This package contains the Equilibria command-line wallet for accessing a wallet
+ stored on the Equilibria blockchain.
  .
  The wallets require a oxend node to work, such as the one provided in the
- oxend-snapshot package, but can also work with a remote Oxen node.
+ oxend-snapshot package, but can also work with a remote Equilibria node.
 
 Package: oxen-wallet-rpc-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
 Suggests: oxend-snapshot
-Description: Oxen RPC wallet (development snapshot)
- This package contains the Oxen JSON RPC wallet interface to accessing a wallet
- on the Oxen blockchain.  This wallet interface is typically used by external
+Description: Equilibria RPC wallet (development snapshot)
+ This package contains the Equilibria JSON RPC wallet interface to accessing a wallet
+ on the Equilibria blockchain.  This wallet interface is typically used by external
  software that needs to interact with a wallet.
  .
  The wallet requires a oxend node to work, such as the one provided in the
- oxend package, but can also work with a remote Oxen node.
+ oxend package, but can also work with a remote Equilibria node.
 
 Package: oxen-blockchain-tools-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
 Recommends: oxend
-Description: Oxen blockchain utilities (development snapshot)
+Description: Equilibria blockchain utilities (development snapshot)
  This contains the oxen-blockchain-* binaries for managing and querying the
  oxend blockchain database.  These tools are used for blockchain diagnostics
  and are not typically needed to run an ordinary node or service node.
@@ -99,7 +99,7 @@ Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen
  libboost-dev (>= 1.58), libboost-thread-dev, libboost-serialization-dev, libboost-program-options-dev,
  libsodium-dev, libreadline-dev, libhidapi-dev, liboxenmq-dev (>= 1.2.13-2~), liboxenc-dev (>= 1.1.0-3~),
  libsqlite3-dev, libcurl4-dev, ${misc:Depends}
-Description: Oxen development files
+Description: Equilibria development files
  This contains the headers needed to compile code that uses the oxen libraries.
 
 Package: session-stagenet-node
