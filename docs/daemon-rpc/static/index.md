@@ -1,8 +1,8 @@
-# Oxen Daemon RPC Endpoints
+# Equilibriad Daemon RPC Endpoints
 
-These pages describe the available RPC endpoints available from a running `oxend` node.  These
+These pages describe the available RPC endpoints available from a running `equilibriad` node.  These
 endpoints are used for querying blockchain data, submitting transactions, obtaining service node
-information, and controlling the running oxend.
+information, and controlling the running equilibriad.
 
 Many of the endpoints described here are publicly accessible; those that are not are marked
 accordingly and can only be used by a local administrator.
@@ -39,18 +39,18 @@ curl -sSX POST http://public-na.optf.ngo:22023/json_rpc \
 
 ## OxenMQ RPC access
 
-All oxend endpoints are also available via OxenMQ at either the `rpc.ENDPOINT` or `admin.ENDPOINT`
+All equilibriad endpoints are also available via OxenMQ at either the `rpc.ENDPOINT` or `admin.ENDPOINT`
 name (the latter if the endpoint is marked admin-only), with an optional additional data part
 containing a JSON or bencoded request.
 
 ### Command-line usage:
 
-The oxen-core source code contains a script (`utils/lmq-rpc.py`) that can invoke such a request:
+The equilibria-core source code contains a script (`utils/lmq-rpc.py`) that can invoke such a request:
 
 ```
-./utils/lmq-rpc.py ipc://$HOME/.oxen/oxend.sock rpc.get_info | jq .
+./utils/lmq-rpc.py ipc://$HOME/.equilibria/equilibriad.sock rpc.get_info | jq .
 ```
-to query a local oxend, or:
+to query a local equilibriad, or:
 ```
 ./utils/lmq-rpc.py tcp://public-na.optf.ngo:22027 02ae9aa1bdface3ce32488874d16671b04d44f611d1076033c92f3379f221161 rpc.get_info | jq .
 ```
@@ -59,4 +59,4 @@ or
 ./utils/lmq-rpc.py tcp://public-na.optf.ngo:22029 rpc.get_info '{}' | jq .
 ```
 to query a public node.  (The first version uses an encrypted public connection given the remote
-oxend's X25519 pubkey; the second version uses an unencrypted public connection).
+equilibriad's X25519 pubkey; the second version uses an unencrypted public connection).

@@ -8,7 +8,7 @@ node layer for two main purposes:
   converted to SENT during the Session network upgrade, we will retain support for OXEN transactions
   for the near future to allow held OXEN to still be swapped for SENT.
 
-- Using the oxen chain as the back end "state chain" for the oxen service node network.  This allows
+- Using the equilibria chain as the back end "state chain" for the equilibria service node network.  This allows
   Oxen nodes to manage earned rewards amounts, to self-police the network (decomms, recomms,
   deregs), and to precisely control when information from the L2 network starts applying to the Oxen
   chain without needing to add wallets (with live funds) to Service Nodes.
@@ -42,9 +42,9 @@ affecting the state.
 The first step of the confirmation process is collecting recent L2 state; each Oxen service node
 regularly queries its L2 provider to request any relevant events from SENT staking smart contract.
 New registrations, unlock requests, and removing nodes from the smart contract all trigger different
-events that oxend watches for.
+events that equilibriad watches for.
 
-As soon as such an event is observed, each oxend adds an L2 service node transaction recording the
+As soon as such an event is observed, each equilibriad adds an L2 service node transaction recording the
 information into its mempool of pending transactions so that, in general, it knows about the
 transactions that should be occuring.
 
@@ -68,7 +68,7 @@ off, that is all the validation needed for the service node network to accept su
 ## Pulse confirmations
 
 While the above approach avoids the network disagreeing as to the current state, it introduces a new
-problem: pulse quorums in oxend are relatively small, and thus are vulnerable to compromise by a
+problem: pulse quorums in equilibriad are relatively small, and thus are vulnerable to compromise by a
 malicious entity who controls a significant portion of the network.
 
 The basic structure of a pulse quorum consists of 12 service nodes: 1 "leader" which creates the
@@ -89,7 +89,7 @@ existing transactions.
 With the ethereum transition, however, the pulse quorum's role takes on considerably more weight: it
 is the one that signs off on observed registration details, stakes, unlocks, and so on.  While there
 *are* protections against who can initiate such requests on the smart contract, there is a layer of
-trust introduced between the Oxen node and the L2 RPC provider that feeds oxend the information
+trust introduced between the Oxen node and the L2 RPC provider that feeds equilibriad the information
 about what has happened in the smart contract.  Thus both the L2 provider and the pulse quorum
 itself become a source of possible error (intentional or otherwise).
 

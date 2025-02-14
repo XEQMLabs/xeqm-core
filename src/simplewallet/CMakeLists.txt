@@ -27,7 +27,7 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-oxen_add_executable(simplewallet "oxen-wallet-cli"
+oxen_add_executable(simplewallet "equilibria-wallet-cli"
   simplewallet.cpp
   )
 target_link_libraries(simplewallet
