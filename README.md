@@ -6,12 +6,11 @@ Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
 
-- Web: [oxen.io](https://oxen.io)
-- Telegram: [t.me/EquilibriaCommunity](https://t.me/Equilibria_Community)
-- Mail: [team@oxen.io](mailto:team@oxen.io)
+- Web: [equilibria.network](https://https://www.equilibria.cc/)
+- Telegram: [t.me/EquilibriaCommunity](https://telegram.equilibriacc.com/)
+- Mail: [team@equilibira.cc](mailto:team@equilibira.cc)
 - GitHub: [https://github.com/oxen-io/oxen-core](https://github.com/oxen-io/oxen-core)
-- Discord: [https://discord.gg/67GXfD6](https://discord.gg/67GXfD6)
-
+- Discord: [https://discord.gg/67GXfD6](https://discord.equilibriacc.com/)
 ## Vulnerability disclosure
 
 - Check out our [Vulnerability Response Process](https://github.com/oxen-io/oxen-docs/blob/master/docs/Contributing/VULNERABILITY_RESPONSE_LOKI.md), encourages prompt disclosure of any Vulnerabilities
