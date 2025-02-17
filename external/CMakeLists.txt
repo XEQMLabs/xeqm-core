@@ -159,4 +159,6 @@ set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON CACHE BOOL "")
 add_subdirectory(cpptrace EXCLUDE_FROM_ALL)
 
 option(TRACY_ENABLE "Enable the profiler markers to be captured and displayable with the Tracy Profiler" OFF)
-add_subdirectory(tracy)
+if (TRACY_ENABLE)
+    add_subdirectory(tracy)
+endif()

@@ -29,7 +29,6 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
-#include <tracy/Tracy.hpp>
 #include <unordered_map>
 
 #include "account.h"
@@ -38,6 +37,7 @@
 #include "common/string_util.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
+#include "common/tracy_shim.h"
 #include "cryptonote_basic_impl.h"
 #include "l2_tracker/events.h"
 #include "logging/oxen_logger.h"
