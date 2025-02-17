@@ -251,11 +251,38 @@ static_assert(
 static uint64_t min_recent_height(cryptonote::network_type nettype, uint64_t height) {
     const uint64_t KEEP_WINDOW = cryptonote::get_config(nettype).HISTORY_RECENT_KEEP_WINDOW;
 
-    // NOTE: Arbitrary limit, to notify developer if the global limit changes.
-    // 360 is derived via (6 * VOTE_LIFETIME) where VOTE_LIFETIME is 60 blocks,
-    // e.g. Keep atleast the last 360 blocks worth of votes (which is short for
-    // state change TXs in this codebase)
-    assert(KEEP_WINDOW >= 360 && "Not enough recent backups for blink quorum retrieval!");
+    // NOTE: Blink requires two quorums for a given height `h`, they are calculated as follos
+    //  1. Round down `h` to the nearest multiple of `BLINK_QUORUM_INTERVAL`
+    //  2. Calculate `blink_height` by subtracting `BLINK_QUORUM_LAG` from the rounded down `h`
+    //  3. Generate the 2 quorum heights as `blink_height + BLINK_QUORUM_INTERVAL` and
+    //     `blink_height + BLINK_QUORUM_INTERVAL`
+    //
+    // For example currently BLINK_QUORUM_INTERVAL is 5 and BLINK_QUORUM_INTERVAL is 35. Given the
+    // height is 101:
+    //
+    //  blink_height => 101 - (101 % 5) - 35
+    //               => 65
+    //
+    // This means at any given height we need at most ((BLINK_QUORUM_INTERVAL - 1) +
+    // BLINK_QUORUM_LAG) quorums to support blink, or, the previous (4 + 35) heights worth of
+    // quorums.
+    assert(KEEP_WINDOW >= ((BLINK_QUORUM_INTERVAL - 1) + BLINK_QUORUM_LAG) &&
+           "Insufficient quorums for blink TXs");
+
+    // NOTE: The SNL uses state-change TXs to transition a node from
+    // registered <=> decomission <=> deregistered. These state-change TXs are formed by collecting
+    // votes from SNs. A SN can submit a vote for a quorum of up to at least VOTE_LIFETIME blocks
+    // ago.
+    //
+    // This means at any given height we need at most VOTE_LIFETIME quorums to support the SN
+    // network. There's an additional safety buffer VOTE_OR_TX_VERIFY_HEIGHT_BUFFER that is applied
+    // for arbitrary reasons.
+    //
+    // There's a much more detailed breakdown on how these heights are calculated in `process_block`
+    // where a snapshot of the SNL is taken.
+    assert(KEEP_WINDOW >= (VOTE_LIFETIME + VOTE_OR_TX_VERIFY_HEIGHT_BUFFER) &&
+           "Insufficient quorums for handling state change TXs");
+
     uint64_t result = (height < KEEP_WINDOW) ? 0 : height - KEEP_WINDOW;
     return result;
 }
