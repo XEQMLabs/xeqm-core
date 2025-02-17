@@ -38,8 +38,8 @@
 #include <string_view>
 #include <type_traits>
 
-#include "common/util.h"
 #include "common/tracy_shim.h"
+#include "common/util.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/cryptonote_basic.h"

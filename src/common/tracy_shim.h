@@ -14,8 +14,9 @@
 // headers and the correct definitions for their profiling markers.
 
 #if defined(TRACY_ENABLE)
-#include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
+
+#include <tracy/Tracy.hpp>
 #else
 #define ZoneScoped
 #define ZoneScopedN(...)
