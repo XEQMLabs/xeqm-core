@@ -36,7 +36,6 @@
 #include <fmt/std.h>
 #include <oxenc/endian.h>
 #include <sodium.h>
-#include <tracy/TracyC.h>
 
 #include <algorithm>
 #include <chrono>
@@ -44,7 +43,6 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
-#include <tracy/Tracy.hpp>
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -60,6 +58,7 @@
 #include "common/threadpool.h"
 #include "common/util.h"
 #include "common/varint.h"
+#include "common/tracy_shim.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "crypto/hash.h"

@@ -34,14 +34,12 @@
 #include <oxenc/endian.h>
 #include <oxenc/hex.h>
 #include <sodium.h>
-#include <tracy/TracyC.h>
 
 #include <algorithm>
 #include <chrono>
 #include <limits>
 #include <mutex>
 #include <stdexcept>
-#include <tracy/Tracy.hpp>
 
 #include "blockchain.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -51,6 +49,7 @@
 #include "common/lock.h"
 #include "common/random.h"
 #include "common/threadpool.h"
+#include "common/tracy_shim.h"
 #include "common/util.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"

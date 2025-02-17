@@ -36,7 +36,6 @@
 #include <sodium.h>
 #include <sqlite3.h>
 
-#include <tracy/Tracy.hpp>
 
 #ifdef ENABLE_SYSTEMD
 extern "C" {
@@ -62,6 +61,7 @@ extern "C" {
 #include "common/notify.h"
 #include "common/sha256sum.h"
 #include "common/threadpool.h"
+#include "common/tracy_shim.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"

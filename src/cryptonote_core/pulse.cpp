@@ -2,6 +2,7 @@
 #include <chrono>
 
 #include "common/random.h"
+#include "common/tracy_shim.h"
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_core.h"
 #include "epee/memwipe.h"
@@ -15,7 +16,6 @@ extern "C" {
 #include <sodium/crypto_generichash.h>
 };
 
-#include <tracy/Tracy.hpp>
 
 namespace pulse {
 

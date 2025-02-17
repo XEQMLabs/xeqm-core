@@ -36,10 +36,10 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string_view>
-#include <tracy/Tracy.hpp>
 #include <type_traits>
 
 #include "common/util.h"
+#include "common/tracy_shim.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/cryptonote_basic.h"

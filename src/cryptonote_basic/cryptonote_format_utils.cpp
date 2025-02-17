@@ -39,9 +39,9 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 #include <limits>
-#include <tracy/Tracy.hpp>
 #include <variant>
 
+#include "common/tracy_shim.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
 #include "cryptonote_basic/verification_context.h"
