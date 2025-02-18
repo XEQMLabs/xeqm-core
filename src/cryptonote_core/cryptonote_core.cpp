@@ -36,7 +36,6 @@
 #include <sodium.h>
 #include <sqlite3.h>
 
-
 #ifdef ENABLE_SYSTEMD
 extern "C" {
 #include <systemd/sd-daemon.h>
