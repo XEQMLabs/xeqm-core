@@ -299,7 +299,7 @@ class SNRewardsContract:
         assert self.foundation_pool_address.lower() == '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'.lower(), (f'{address_check_err_msg}\n\nAddress was: {self.foundation_pool_address}')
 
         # Increase the signature expiry to 10hrs. We don't have a mechanism to fake time
-        # advancement in the Oxen layer. In the liquidate test, a signature produced by the network
+        # advancement in the Equilibria layer. In the liquidate test, a signature produced by the network
         # is only valid for 10 minutes by default this increases it to 10 hrs.
         #
         # The reason for this is that when we try and execute a liquidation, we need to advance the

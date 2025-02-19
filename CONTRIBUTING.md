@@ -1,4 +1,4 @@
-# Contributing to Oxen
+# Contributing to Equilibria
 
 A good way to help is to test, and report bugs. See
 [How to Report Bugs Effectively (by Simon Tatham)](https://www.chiark.greenend.org.uk/~sgtatham/bugs.html)
@@ -119,7 +119,7 @@ C4 is meant to provide a reusable optimal collaboration model for open source so
 - To request changes, a user SHOULD log an issue on the project Platform issue tracker.
 - The user or Contributor SHOULD write the issue by describing the problem they face or observe.
 - The user or Contributor SHOULD seek consensus on the accuracy of their observation, and the value of solving the problem.
-- Users MUST NOT log feature requests, ideas, or suggestions unrelated to Oxen code or Oxen's dependency code or Oxen's potential/future dependency code or research which successfully implements Oxen.
+- Users MUST NOT log feature requests, ideas, or suggestions unrelated to Equilibria code or Equilibria's dependency code or Equilibria's potential/future dependency code or research which successfully implements Equilibria.
 - Users MUST NOT log any solutions to problems (verifiable or hypothetical) of which are not explicitly documented and/or not provable and/or cannot be reasonably proven.
 - Thus, the release history of the project MUST be a list of meaningful issues logged and solved.
 - To work on an issue, a Contributor MUST fork the project repository and then work on their forked repository.

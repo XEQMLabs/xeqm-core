@@ -45,50 +45,50 @@ Description: Equilibria wallet shared libraries (development snapshot)
  This package contains the common Equilibria library code used by the various Equilibria
  wallet-related code.
 
-Package: oxend-snapshot
+Package: equilibriad-snapshot
 Architecture: any
 Depends: liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}, debconf
 Suggests: oxen-blockchain-tools-snapshot
 Description: Equilibria network daemon (development snapshot)
- This package contains the Equilibria network daemon, oxend, for running an Equilibria node
+ This package contains the Equilibria network daemon, equilibriad, for running an Equilibria node
  as part of an Equilibria service node.
  .
- This is a development build of oxend; you should not use this package for a
+ This is a development build of equilibriad; you should not use this package for a
  mainnet Equilibria node.
 
 Package: oxen-wallet-cli-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
-Suggests: oxend-snapshot
+Suggests: equilibriad-snapshot
 Description: Equilibria command-line wallet and JSON RPC wallet (development snapshot)
  This package contains the Equilibria command-line wallet for accessing a wallet
  stored on the Equilibria blockchain.
  .
- The wallets require a oxend node to work, such as the one provided in the
- oxend-snapshot package, but can also work with a remote Equilibria node.
+ The wallets require a equilibriad node to work, such as the one provided in the
+ equilibriad-snapshot package, but can also work with a remote Equilibria node.
 
 Package: oxen-wallet-rpc-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
-Suggests: oxend-snapshot
+Suggests: equilibriad-snapshot
 Description: Equilibria RPC wallet (development snapshot)
  This package contains the Equilibria JSON RPC wallet interface to accessing a wallet
  on the Equilibria blockchain.  This wallet interface is typically used by external
  software that needs to interact with a wallet.
  .
- The wallet requires a oxend node to work, such as the one provided in the
- oxend package, but can also work with a remote Equilibria node.
+ The wallet requires a equilibriad node to work, such as the one provided in the
+ equilibriad package, but can also work with a remote Equilibria node.
 
 Package: oxen-blockchain-tools-snapshot
 Architecture: any
 Depends: liboxen-wallet-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}), liboxen-snapshot@LIBOXEN_VERSION@ (= ${binary:Version}),
     ${shlibs:Depends}, ${misc:Depends}
-Recommends: oxend
+Recommends: equilibriad
 Description: Equilibria blockchain utilities (development snapshot)
  This contains the oxen-blockchain-* binaries for managing and querying the
- oxend blockchain database.  These tools are used for blockchain diagnostics
+ equilibriad blockchain database.  These tools are used for blockchain diagnostics
  and are not typically needed to run an ordinary node or service node.
 
 Package: liboxen-snapshot-dev
@@ -105,7 +105,7 @@ Description: Equilibria development files
 Package: session-stagenet-node
 Architecture: all
 Pre-Depends: curl
-Depends: oxend-snapshot (=${binary:Version}), ucf
+Depends: equilibriad-snapshot (=${binary:Version}), ucf
 Description: Session stagenet service node metapackage
  This package depends on the necessary components to run a Session Service Node
  on the public "stagenet" test network.

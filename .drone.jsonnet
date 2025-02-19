@@ -46,7 +46,7 @@ local debian_pipeline(name,
                       werror=false,  // FIXME
                       build_tests=true,
                       build_everything=false,
-                      test_oxend=true,  // Simple oxend offline startup test
+                      test_equilibriad=true,  // Simple equilibriad offline startup test
                       run_tests=false,  // Runs full test suite
                       cmake_extra='',
                       extra_cmds=[],
@@ -81,7 +81,7 @@ local debian_pipeline(name,
           ] else []
       ) + [
         'eatmydata ' + apt_get_quiet + ' install -y --no-install-recommends cmake git ninja-build ccache '
-        + (if test_oxend then 'gdb ' else '') + std.join(' ', deps),
+        + (if test_equilibriad then 'gdb ' else '') + std.join(' ', deps),
         'mkdir build',
         'cd build',
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fdiagnostics-color=always -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
@@ -96,8 +96,8 @@ local debian_pipeline(name,
         else
           ['ninja -j' + jobs + ' -v']
       ) + (
-        if test_oxend then [
-          '(sleep 3; echo "status\ndiff\nexit") | TERM=xterm ../utils/build_scripts/drone-gdb.sh ./bin/oxend --offline --data-dir=startuptest',
+        if test_equilibriad then [
+          '(sleep 3; echo "status\ndiff\nexit") | TERM=xterm ../utils/build_scripts/drone-gdb.sh ./bin/equilibriad --offline --data-dir=startuptest',
         ] else []
       ) + (
         if run_tests then [
@@ -182,7 +182,7 @@ local mac_builder(name,
                   lto=false,
                   werror=false,  // FIXME
                   build_tests=true,
-                  test_oxend=true,
+                  test_equilibriad=true,
                   run_tests=false,
                   cmake_extra='',
                   extra_cmds=[],
@@ -212,8 +212,8 @@ local mac_builder(name,
         cmake_extra,
         'ninja -j' + jobs + ' -v',
       ] + (
-        if test_oxend then [
-          '(sleep 3; echo "status\ndiff\nexit") | TERM=xterm ./bin/oxend --offline --data-dir=startuptest',
+        if test_equilibriad then [
+          '(sleep 3; echo "status\ndiff\nexit") | TERM=xterm ./bin/equilibriad --offline --data-dir=startuptest',
         ] else []
       ) + (
         if run_tests then [
@@ -275,7 +275,7 @@ local gui_wallet_step(image, wine=false) = {
     'eatmydata ' + apt_get_quiet + ' update',
     'eatmydata ' + apt_get_quiet + ' install -y nodejs',
     'git clone https://github.com/loki-project/loki-electron-gui-wallet.git',
-    'cp -v build/bin/oxend' + (if wine then '.exe' else '') + ' loki-electron-gui-wallet/bin',
+    'cp -v build/bin/equilibriad' + (if wine then '.exe' else '') + ' loki-electron-gui-wallet/bin',
     'cp -v build/bin/oxen-wallet-rpc' + (if wine then '.exe' else '') + ' loki-electron-gui-wallet/bin',
     'cd loki-electron-gui-wallet',
     'eatmydata npm install',
@@ -291,7 +291,7 @@ local gui_wallet_step_darwin = {
   environment: { SSH_KEY: { from_secret: 'SSH_KEY' }, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
   commands: [
     'git clone https://github.com/loki-project/loki-electron-gui-wallet.git',
-    'cp -v build/bin/{oxend,oxen-wallet-rpc} loki-electron-gui-wallet/bin',
+    'cp -v build/bin/{equilibriad,oxen-wallet-rpc} loki-electron-gui-wallet/bin',
     'cd loki-electron-gui-wallet',
     'sed -i -e \'s/^\\\\( *"version": ".*\\\\)",/\\\\1-${DRONE_COMMIT_SHA:0:8}",/\' package.json',
     'npm install',
@@ -368,7 +368,7 @@ local gui_wallet_step_darwin = {
     cmake_extra='-DCMAKE_TOOLCHAIN_FILE=../cmake/64-bit-toolchain.cmake -DBUILD_STATIC_DEPS=ON -DARCH=x86-64',
     build_tests=false,
     lto=false,
-    test_oxend=false,
+    test_equilibriad=false,
     extra_cmds=[
       'ninja strip_binaries',
       'ninja create_zip',
@@ -397,7 +397,7 @@ local gui_wallet_step_darwin = {
 
   // Android builds; we do them all in one image because the android NDK is huge
 
-  // TODO FIXME: both android and iOS wallet builds need fixes for recent Oxen 11 changes!
+  // TODO FIXME: both android and iOS wallet builds need fixes for recent Equilibria 11 changes!
 ] + if true then [] else [
   {
     name: 'Android wallet_api',

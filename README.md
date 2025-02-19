@@ -91,7 +91,7 @@ You can install these using:
 	$ sudo curl -so /etc/apt/trusted.gpg.d/oxen.gpg https://deb.oxen.io/pub.gpg
 	$ echo "deb https://deb.oxen.io $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/oxen.list
 	$ sudo apt update
-	$ sudo apt install oxend
+	$ sudo apt install equilibriad
 
 if you want to build a dev build you can do the following after installing the dependancies above:
 
@@ -315,17 +315,17 @@ You can also build a docker package using:
 * The build needs 3 GB space.
 * Wait one hour or more. For docker, the collect_from_docker_container.sh script will automate downloading the binaries from the docker container.
 
-## Running oxend
+## Running equilibriad
 
 The build places the binary in `bin/` sub-directory within the build directory
 from which cmake was invoked (repository root by default). To run in
 foreground:
 
 ```bash
-./bin/oxend
+./bin/equilibriad
 ```
 
-To list all available options, run `./bin/oxend --help`.  Options can be
+To list all available options, run `./bin/equilibriad --help`.  Options can be
 specified either on the command line or in a configuration file passed by the
 `--config-file` argument.  To specify an option in the configuration file, add
 a line with the syntax `argumentname=value`, where `argumentname` is the name
@@ -334,18 +334,18 @@ of the argument without the leading dashes, for example `log-level=1`.
 To run in background:
 
 ```bash
-./bin/oxend --log-file oxend.log --detach
+./bin/equilibriad --log-file equilibriad.log --detach
 ```
 
 To run as a systemd service, copy
-[oxend.service](utils/systemd/oxend.service) to `/etc/systemd/system/` and
-[oxend.conf](utils/conf/oxend.conf) to `/etc/`. The [example
-service](utils/systemd/oxend.service) assumes that the user `oxen` exists
+[equilibriad.service](utils/systemd/equilibriad.service) to `/etc/systemd/system/` and
+[equilibriad.conf](utils/conf/equilibriad.conf) to `/etc/`. The [example
+service](utils/systemd/equilibriad.service) assumes that the user `oxen` exists
 and its home is the data directory specified in the [example
-config](utils/conf/oxend.conf).
+config](utils/conf/equilibriad.conf).
 
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
-oxen-wallet-cli, and possibly oxend, if you get crashes refreshing.
+oxen-wallet-cli, and possibly equilibriad, if you get crashes refreshing.
 
 ## Internationalization
 
@@ -366,7 +366,7 @@ Run the build.
 Once it stalls, enter the following command:
 
 ```bash
-gdb /path/to/oxend `pidof oxend`
+gdb /path/to/equilibriad `pidof equilibriad`
 ```
 
 Type `thread apply all bt` within gdb in order to obtain the stack trace
@@ -379,12 +379,12 @@ Enter `echo core | sudo tee /proc/sys/kernel/core_pattern` to stop cores from be
 
 Run the build.
 
-When it terminates with an output along the lines of "Segmentation fault (core dumped)", there should be a core dump file in the same directory as oxend. It may be named just `core`, or `core.xxxx` with numbers appended.
+When it terminates with an output along the lines of "Segmentation fault (core dumped)", there should be a core dump file in the same directory as equilibriad. It may be named just `core`, or `core.xxxx` with numbers appended.
 
 You can now analyse this core dump with `gdb` as follows:
 
 ```bash
-gdb /path/to/oxend /path/to/dumpfile`
+gdb /path/to/equilibriad /path/to/dumpfile`
 ```
 
 Print the stack trace with `bt`
@@ -397,11 +397,11 @@ coredumpctl -1 gdb
 
 #### To run Equilibria within gdb:
 
-Type `gdb /path/to/oxend`
+Type `gdb /path/to/equilibriad`
 
 Pass command-line options with `--args` followed by the relevant arguments
 
-Type `run` to run oxend
+Type `run` to run equilibriad
 
 ### Analysing memory corruption
 
@@ -419,7 +419,7 @@ You can then run the oxen tools normally. Performance will typically halve.
 
 #### valgrind
 
-Install valgrind and run as `valgrind /path/to/oxend`. It will be very slow.
+Install valgrind and run as `valgrind /path/to/equilibriad`. It will be very slow.
 
 ### LMDB
 
@@ -463,8 +463,8 @@ Thereafter the script can be invoked to launch the local network.
 
 Because of the nature of the socket-based protocols that drive Equilibria, certain protocol weaknesses are somewhat unavoidable at this time. While these weaknesses can theoretically be fully mitigated, the effort required (the means) may not justify the ends. As such, please consider taking the following precautions if you are a Equilibria node operator:
 
-- Run `oxend` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `oxend` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `oxend` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
-- If you plan on hosting a public "remote" node, start `oxend` with `--restricted-rpc`. This is a must.
+- Run `equilibriad` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `equilibriad` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `equilibriad` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
+- If you plan on hosting a public "remote" node, start `equilibriad` with `--restricted-rpc`. This is a must.
 
 ### Blockchain-based
 

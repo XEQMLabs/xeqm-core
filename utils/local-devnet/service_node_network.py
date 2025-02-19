@@ -162,7 +162,7 @@ class SNNetwork:
         # Multi-contrib Factory
         self.sn_contrib_factory = SNContribFactoryContract(contract_json=sn_contrib_factory_json);
 
-        # Setup Oxen ###############################################################################
+        # Setup Equilibria ###############################################################################
         # Nodes ####################################################################################
         # Setup directories
         self.datadir      = datadir
@@ -207,7 +207,7 @@ class SNNetwork:
         thread_pool                              = concurrent.futures.ThreadPoolExecutor()
         futures: List[concurrent.futures.Future] = []
 
-        # Start Oxen SNs ###########################################################################
+        # Start Equilibria SNs ###########################################################################
         vprint("Starting new oxend service nodes with RPC".format(self.sns[0].listen_ip), end="")
         for sn in self.sns:
             futures.append(thread_pool.submit(sn.start))
@@ -223,7 +223,7 @@ class SNNetwork:
         for sn in self.eth_sns:
             vprint(" {}".format(sn.rpc_port), end="", flush=True, timestamp=False)
 
-        # Start Oxen Nodes #########################################################################
+        # Start Equilibria Nodes #########################################################################
         vprint(timestamp=False)
         vprint("Starting new regular oxend nodes with RPC on {} ports".format(self.nodes[0].listen_ip), end="")
         for d in self.nodes:
@@ -235,7 +235,7 @@ class SNNetwork:
         for d in self.all_nodes:
             d.wait_for_json_rpc("get_info")
 
-        vprint("Oxends are ready. Starting wallets in parallel")
+        vprint("Equilibriads are ready. Starting wallets in parallel")
         # Start wallet executables #################################################################
         for w in self.wallets:
             vprint("Starting new RPC wallet {w.name} at {w.listen_ip}:{w.rpc_port}".format(w=w))
@@ -604,7 +604,7 @@ class SNNetwork:
             vprint("Initiating exit for node w/ BLS key {} (id {})".format(sn_to_exit_bls_pubkey, sn_to_exit_contract_id))
             self.sn_contract.initiateExitBLSPublicKey(sn_to_exit_contract_id)
 
-            # Advance the Arbitrum blockchain so that Oxen witnesses it (remember that Oxen lags
+            # Advance the Arbitrum blockchain so that Equilibria witnesses it (remember that Equilibria lags
             # behind the tip for safety! In localdev this is configured to 1 block of lag).
             ethereum.evm_mine();
 
@@ -613,7 +613,7 @@ class SNNetwork:
         for i in range(len(SNExitMode)):
             unlocks_confirmed.append(False)
 
-        vprint(f"Sleeping now, waiting for confirmation of voluntary exit on Oxen, blockchain height is {self.sns[0].height()}")
+        vprint(f"Sleeping now, waiting for confirmation of voluntary exit on Equilibria, blockchain height is {self.sns[0].height()}")
         total_sleep_time            = 0
         sleep_time                  = 8
         current_height              = 0
@@ -743,7 +743,7 @@ class SNNetwork:
                 assert self.sn_contract.serviceNodes(sn_to_exit_contract_id).operator == zero_account
                 assert contract_sn_count_after  == contract_sn_count_before - 1
 
-            # Advance the Arbitrum blockchain so that Oxen witnesses it (remember that Oxen lags
+            # Advance the Arbitrum blockchain so that Equilibria witnesses it (remember that Equilibria lags
             # behind the tip for safety! In localdev this is configured to 1 block of lag).
             ethereum.evm_mine();
 
@@ -821,7 +821,7 @@ class SNNetwork:
         # Verify batch_db_info height rewinded #####################################################
         row_result           = sql_cursor.execute("SELECT height FROM batch_db_info").fetchone()
         sql_db_height        = row_result[0] if row_result else 0
-        assert sql_db_height == self.sns[0].height() - 1, "Expected batch_db_info table 'height' ({}) to be undone as well. Oxen block index is {}".format(sql_db_height, self.sns[0].height() - 1)
+        assert sql_db_height == self.sns[0].height() - 1, "Expected batch_db_info table 'height' ({}) to be undone as well. Equilibria block index is {}".format(sql_db_height, self.sns[0].height() - 1)
 
         # Verify that deregistration stake is claimable ############################################
         vprint(f"Sleeping until dereg stake is unlocked, blockchain height is {self.sns[0].height()} (after popping, we will resync the chain)")
@@ -873,7 +873,7 @@ class SNNetwork:
         # IMPORTANT: This test must be run last because it advances the L2 blockchain by 31 days.
         # This method of exit does _not_ require a signature. The other methods require a
         # timestamp embedded in the signature. We don't have a way to manipulate timestamps on the
-        # Oxen blockchain hence the signature tests are run before this test.
+        # Equilibria blockchain hence the signature tests are run before this test.
         #
         # This test will advance time by 31 days. A signature that is then generated by the Session
         # node will be generated but failed to be applied because the node will generate a signature
@@ -899,7 +899,7 @@ class SNNetwork:
                 assert self.sn_contract.serviceNodes(sn_to_exit_contract_id).operator == zero_account
                 assert contract_sn_count_after  == contract_sn_count_before - 1
 
-                # Advance the Arbitrum blockchain so that Oxen witnesses it (remember that Oxen lags
+                # Advance the Arbitrum blockchain so that Equilibria witnesses it (remember that Equilibria lags
                 # behind the tip for safety! In localdev this is configured to 1 block of lag).
                 ethereum.evm_mine();
 
@@ -1009,7 +1009,7 @@ snn = None
 def run():
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('--oxen-bin-dir',
-                            help=('Set the directory where Oxen binaries (oxend, wallet rpc, ...) '
+                            help=('Set the directory where Equilibria binaries (oxend, wallet rpc, ...) '
                                   'are located.'),
                             default="../../build/bin",
                             type=pathlib.Path)
@@ -1019,7 +1019,7 @@ def run():
                                   'running at localhost:8545.'),
                             type=pathlib.Path)
     arg_parser.add_argument('--eth-sn-contracts-dir',
-                            help=('Set the path to Oxen\'s `eth-sn-contracts` repository is '
+                            help=('Set the path to Equilibria\'s `eth-sn-contracts` repository is '
                                   'located. The script will programmatically launch and deploy the '
                                   'contracts specified via `make deploy-local`. If omitted, the '
                                   'private Ethereum blockchain must already be deployed with the '

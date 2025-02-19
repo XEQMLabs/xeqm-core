@@ -105,7 +105,7 @@ RUN set -ex && \
     make -j$(nproc) VERBOSE=1
 
 RUN set -ex && \
-    ldd /src/build/release/bin/oxend
+    ldd /src/build/release/bin/equilibriad
 
 # runtime stage
 FROM ubuntu:16.04
@@ -137,4 +137,4 @@ EXPOSE 22023
 # switch to user oxen
 USER oxen
 
-ENTRYPOINT ["oxend", "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=22022", "--rpc-bind-ip=0.0.0.0", "--rpc-bind-port=22023", "--non-interactive", "--confirm-external-bind"]
+ENTRYPOINT ["equilibriad", "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=22022", "--rpc-bind-ip=0.0.0.0", "--rpc-bind-port=22023", "--non-interactive", "--confirm-external-bind"]

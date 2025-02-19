@@ -245,8 +245,8 @@ struct GET_HEIGHT : PUBLIC, LEGACY, NO_ARGS {
 ///         - `"pulse"` -- the service node missed too many recent pulse votes
 ///         - `"storage"` -- the service node's storage server was unreachable for too long
 ///         - `"lokinet"` -- the service node's lokinet router was unreachable for too long
-///         - `"timecheck"` -- the service node's oxend was not reachable for too many recent
-///           time synchronization checks.  (This generally means oxend's quorumnet port is not
+///         - `"timecheck"` -- the service node's equilibriad was not reachable for too many recent
+///           time synchronization checks.  (This generally means equilibriad's quorumnet port is not
 ///           reachable).
 ///         - `"timesync"` -- the service node's clock was too far out of sync
 ///         The list is omitted entirely if there are no reasons at all or if there are no reasons
@@ -1209,7 +1209,7 @@ struct IN_PEERS : LEGACY {
 ///   the blockchain height is at or above the requested hardfork).
 /// - `earliest_height` -- Block height at which the hard fork will become enabled.
 /// - `last_height` -- The last block height at which this hard fork will be active; will be
-///   omitted if this oxend is not aware of any following hard fork.
+///   omitted if this equilibriad is not aware of any following hard fork.
 ///
 /// Example input:
 ///
@@ -1772,7 +1772,7 @@ void to_json(nlohmann::json& j, const GET_QUORUM_STATE::quorum_for_height& q);
 /// RPC: service_node/get_service_node_registration_cmd_raw
 ///
 /// Generates a signed service node registration command for use in the operator's Oxen wallet.
-/// This endpoint is primarily for internal use by the `oxend prepare_registration` command.
+/// This endpoint is primarily for internal use by the `equilibriad prepare_registration` command.
 ///
 /// Inputs:
 ///
@@ -1949,8 +1949,8 @@ struct GET_SERVICE_PRIVKEYS : NO_ARGS {
 ///     - `0x02` - Missed too many checkpoint votes
 ///     - `0x04` - Missed too many pulse blocks
 ///     - `0x08` - Storage server unreachable
-///     - `0x10` - oxend quorumnet unreachable for timesync checks
-///     - `0x20` - oxend system clock is too far off
+///     - `0x10` - equilibriad quorumnet unreachable for timesync checks
+///     - `0x20` - equilibriad system clock is too far off
 ///     - `0x40` - Lokinet unreachable
 ///     - other bit values are reserved for future use.
 ///   - `last_decommission_reason_consensus_any` -- The reason for the last decommission as voted
@@ -2022,7 +2022,7 @@ struct GET_SERVICE_PRIVKEYS : NO_ARGS {
 ///     uptime proof yet.
 ///   - `storage_lmq_port` -- The port number associated with the storage server (oxenmq interface);
 ///     omitted if we have no uptime proof yet.
-///   - `quorumnet_port` -- The port for direct SN-to-SN oxend communication (oxenmq interface).
+///   - `quorumnet_port` -- The port for direct SN-to-SN equilibriad communication (oxenmq interface).
 ///     Omitted if we have no uptime proof yet.
 ///   - `pubkey_ed25519` -- The service node's ed25519 public key for auxiliary services. Omitted if
 ///     we have no uptime proof yet.  Note that for newer registrations this will be the same as
@@ -2034,11 +2034,11 @@ struct GET_SERVICE_PRIVKEYS : NO_ARGS {
 ///   - `storage_server_reachable` -- True if this storage server is currently passing tests for the
 ///     purposes of SN node testing: true if the last test passed, or if it has been unreachable
 ///     for less than an hour; false if it has been failing tests for more than an hour (and thus
-///     is considered unreachable).  This field is omitted if the queried oxend is not a service
+///     is considered unreachable).  This field is omitted if the queried equilibriad is not a service
 ///     node.
 ///   - `storage_server_first_unreachable` -- If the last test we received was a failure, this field
 ///     contains the timestamp when failures started.  Will be 0 if the last result was a success,
-///     and will be omitted if the node has not yet been tested since this oxend last restarted.
+///     and will be omitted if the node has not yet been tested since this equilibriad last restarted.
 ///   - `storage_server_last_unreachable` -- The last time this service node's storage server failed
 ///     a ping test (regardless of whether or not it is currently failing). Will be omitted if it
 ///     has never failed a test since startup.
@@ -2170,12 +2170,12 @@ struct GET_SERVICE_NODE_STATUS : NO_ARGS {
 ///   - SN info (see below)
 ///   - common fields (see below)
 ///
-/// - `purges` -- array of service nodes being purged by oxend.  Oxend service nodes issue purges
-///   when a service node is discovered in oxend that does *not* exist in the contract.  Such cases
+/// - `purges` -- array of service nodes being purged by equilibriad.  equilibriad service nodes issue purges
+///   when a service node is discovered in equilibriad that does *not* exist in the contract.  Such cases
 ///   are typically only the result of some adverse network event (such as an L2 rollback) and serve
-///   to let oxend sync the network state with what exists in the contract.  Each element contains
+///   to let equilibriad sync the network state with what exists in the contract.  Each element contains
 ///   fields:
-///   - `bls_pubkey` -- the BLS pubkey that exists in oxend, but not in the contract.
+///   - `bls_pubkey` -- the BLS pubkey that exists in equilibriad, but not in the contract.
 ///   - SN info (see below)
 ///   - common fields (see below)
 ///
@@ -2270,8 +2270,8 @@ struct GET_ACCRUED_REWARDS : PUBLIC {
 /// - `omq_port` -- Storage server oxenmq port to include in uptime proofs.
 /// - `pubkey_ed25519` -- Service node Ed25519 pubkey for verifying that storage server is running
 ///   with the correct service node keys.
-/// - `error` -- If given and non-empty then this is an error message telling oxend to *not*
-///   submit an uptime proof and to report this error in the logs instead.  Oxend won't send
+/// - `error` -- If given and non-empty then this is an error message telling equilibriad to *not*
+///   submit an uptime proof and to report this error in the logs instead.  equilibriad won't send
 ///   proofs until it gets another ping (without an error).
 ///
 /// Outputs:
@@ -2301,8 +2301,8 @@ struct STORAGE_SERVER_PING : RPC_COMMAND {
 /// - `version` -- Lokinet version (as an array of three integers).
 /// - `pubkey_ed25519` -- Service node Ed25519 pubkey for verifying that lokinet is running with
 ///   the correct service node keys.
-/// - `error` -- If given and non-empty then this is an error message telling oxend to *not*
-///   submit an uptime proof and to report this error in the logs instead.  Oxend won't send
+/// - `error` -- If given and non-empty then this is an error message telling equilibriad to *not*
+///   submit an uptime proof and to report this error in the logs instead.  equilibriad won't send
 ///   proofs until it gets another ping (without an error).
 ///
 /// Outputs:
@@ -2381,7 +2381,7 @@ struct BLS_EXIT_LIQUIDATION_LIST : PUBLIC, NO_ARGS {
 ///   block.  If 0 or negative, then this is relative to the current top block height (as known by
 ///   *this* node).  That is: 0 returns the current value, -1 returns the balance from a block ago.
 ///   The default, if omitted, is -1: using -1 or -2 is recommended over 0 because lagging by a
-///   blocks helps avoid signing problems where the oxend where this RPC request is being made has
+///   blocks helps avoid signing problems where the equilibriad where this RPC request is being made has
 ///   an updated block that is still being distributed across the network to some service nodes, and
 ///   so there is a higher likelihood that some service nodes will be unable to sign the balance for
 ///   the 0 height request.
@@ -2434,9 +2434,9 @@ struct BLS_REWARDS_REQUEST : PUBLIC {
 /// - if there is an associated main service node pubkey, that is the one to be exited/liquidated
 ///   and functions identically to passing that associated pubkey as `pubkey`.
 /// - if there is no associated primary pubkey found, *and* `liquidate` is true, then a BLS
-///   liquidation request will be performed for a oxend-missing BLS pubkey (to allow removing
-///   contract nodes that failed to make it to oxend for some reason).
-/// - otherwise, for exit (non-liquidation) mode, an error occurs: oxend-missing BLS keys can only
+///   liquidation request will be performed for a equilibriad-missing BLS pubkey (to allow removing
+///   contract nodes that failed to make it to equilibriad for some reason).
+/// - otherwise, for exit (non-liquidation) mode, an error occurs: equilibriad-missing BLS keys can only
 ///   be removed through liquidation.
 ///
 /// Outputs:
@@ -2459,7 +2459,7 @@ struct BLS_EXIT_LIQUIDATION_REQUEST : PUBLIC {
 ///
 /// Obtains contract registration information (pubkeys and signatures) needed to register this
 /// service node with the L2 service node smart contract.  This request only obtains the required
-/// signatures, but does not affect the state of the current oxend, nor does it invalidate any
+/// signatures, but does not affect the state of the current equilibriad, nor does it invalidate any
 /// previously issued registration signatures.
 ///
 /// Inputs:
@@ -2715,7 +2715,7 @@ void to_json(nlohmann::json& j, const ONS_OWNERS_TO_NAMES::response_entry& r);
 ///   not registered.
 ///
 /// Technical details: the returned value is encrypted using the name itself so that neither this
-/// oxend responding to the RPC request nor any other blockchain observers can (easily) obtain the
+/// equilibriad responding to the RPC request nor any other blockchain observers can (easily) obtain the
 /// name of registered addresses or the registration details.  Thus, from a client's point of
 /// view, resolving an ONS record involves:
 ///
