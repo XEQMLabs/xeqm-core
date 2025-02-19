@@ -1,28 +1,28 @@
-# SENT (L2 chain) -> Oxen chain interaction
+# SENT (L2 chain) -> Equilibria chain interaction
 
-Oxen 11, as has been widely discussed for some time, moves the fundamental registration, staking,
-and rewards to an Ethereum L2 chain (Arbitrum), but still persists the Oxen chain at the service
+Equilibria 11, as has been widely discussed for some time, moves the fundamental registration, staking,
+and rewards to an Ethereum L2 chain (Arbitrum), but still persists the Equilibria chain at the service
 node layer for two main purposes:
 
-- retaining support for Oxen currency transactions.  Although we expect the majority of OXEN to be
+- retaining support for Equilibria currency transactions.  Although we expect the majority of OXEN to be
   converted to SENT during the Session network upgrade, we will retain support for OXEN transactions
   for the near future to allow held OXEN to still be swapped for SENT.
 
 - Using the equilibria chain as the back end "state chain" for the equilibria service node network.  This allows
-  Oxen nodes to manage earned rewards amounts, to self-police the network (decomms, recomms,
-  deregs), and to precisely control when information from the L2 network starts applying to the Oxen
+  Equilibria nodes to manage earned rewards amounts, to self-police the network (decomms, recomms,
+  deregs), and to precisely control when information from the L2 network starts applying to the Equilibria
   chain without needing to add wallets (with live funds) to Service Nodes.
 
 The complication of such a mechanism is that, unlike when dealing with just one chain, the
 interactions can get complicated in various ways:
 
 - An L2 RPC provider might be lagging behind, in which case the  registrataions and other activity
-  that it learns about would lag the rest of the Oxen network, causing it to fall behind.
+  that it learns about would lag the rest of the Equilibria network, causing it to fall behind.
 
-- A malicious L2 provider who provides a significant amount of the Oxen network could provide false
+- A malicious L2 provider who provides a significant amount of the Equilibria network could provide false
   information regarding registration activity.
 
-- A malicious Oxen pulse quorum could lie about L2 activity that it has observed (for example:
+- A malicious Equilibria pulse quorum could lie about L2 activity that it has observed (for example:
   adding fake registrations, or changing the manipulating the contributor list or fees of actual
   registrations).
 
@@ -33,13 +33,13 @@ Session network because it means these nodes could potentially disagree on the c
 network swarms, pulse quorums, deregistrations, and so on (at least until the problem is resolved
 and they can catch up).
 
-To avoid this, the Oxen service nodes are used to track the L2 chain but with a delay and
+To avoid this, the Equilibria service nodes are used to track the L2 chain but with a delay and
 confirmation mechanism built in so that malicious or innocent mistakes can be overcome without
 affecting the state.
 
 ## Pulse construction
 
-The first step of the confirmation process is collecting recent L2 state; each Oxen service node
+The first step of the confirmation process is collecting recent L2 state; each Equilibria service node
 regularly queries its L2 provider to request any relevant events from SENT staking smart contract.
 New registrations, unlock requests, and removing nodes from the smart contract all trigger different
 events that equilibriad watches for.
@@ -78,7 +78,7 @@ the network once seven (of the possible eleven) signatures are accumulated.  (Al
 nodes are recorded, but only the first seven signatures are broadcast to the network so as to
 slightly reduce block size).
 
-This leader + 7/11 mechanism is enough for the current Oxen chain because there are various other
+This leader + 7/11 mechanism is enough for the current Equilibria chain because there are various other
 signatures involved in what can be put into a block in the first place (for instance: you can't
 manipulate registration details because the registration signature produced by the old
 `prepare_registration` command completely signs all registration details, and service node stakes
@@ -89,7 +89,7 @@ existing transactions.
 With the ethereum transition, however, the pulse quorum's role takes on considerably more weight: it
 is the one that signs off on observed registration details, stakes, unlocks, and so on.  While there
 *are* protections against who can initiate such requests on the smart contract, there is a layer of
-trust introduced between the Oxen node and the L2 RPC provider that feeds equilibriad the information
+trust introduced between the Equilibria node and the L2 RPC provider that feeds equilibriad the information
 about what has happened in the smart contract.  Thus both the L2 provider and the pulse quorum
 itself become a source of possible error (intentional or otherwise).
 
@@ -118,15 +118,15 @@ unlock, etc.) takes effect.
   where N is the quorum round: so flags in the first backup round (the second overall quorum round
   for a block) contribute 0.5 points; flags in the 4th backup round would contribute 0.2 points, and
   99th backup quorum would contribute 0.01 points.
-- Mined blocks contribute a full-weight vote to the process.  Oxen mined blocks are only accepted on
-  the Oxen chain in one of two cases of extreme conditions: a complete network pulse failure to
+- Mined blocks contribute a full-weight vote to the process.  Equilibria mined blocks are only accepted on
+  the Equilibria chain in one of two cases of extreme conditions: a complete network pulse failure to
   create a block for more than 4 hours; or a drop in the number of active service nodes below the
   threshold needed to create a pulse quorum (12).  The former case has happened just one (at the
   initial pulse hard fork, due to a bug in the pulse activation code), and the latter has never
   happened on mainnet (though happens from time to time on the ~20 node private testnet/devnet).
 
   In either case, however, the mined block fallback votes are likely needed to fix the service node
-  state (e.g. to get new L2 node registrations or removals applied to the Oxen chain), and so such
+  state (e.g. to get new L2 node registrations or removals applied to the Equilibria chain), and so such
   extreme fallback cases need to have the potential to push through votes.  It is worth pointing out
   that a mined block is not accepted and cannot be triggered by the network outside of the two
   extremes described above.
@@ -135,10 +135,10 @@ unlock, etc.) takes effect.
   passed since its inclusion without otherwise finalizing it (and in such a case, it is resolved as
   denied).
 
-Thus, when all quorums are in agreement (which will be the typical case), it takes 5 Oxen blocks to
+Thus, when all quorums are in agreement (which will be the typical case), it takes 5 Equilibria blocks to
 achieve consensus: first the pulse quorum mines it, then the next 4 pulse quorums confirm it, and
 upon this third confirmation the state change has +5, -0 and so the registration/unlock/etc.  takes
-effect on the Oxen network, adding a new service node, initiating an unlock, etc.
+effect on the Equilibria network, adding a new service node, initiating an unlock, etc.
 
 The reason for reducing the score of backup quorums is that it takes fewer nodes to disrupt a quorum
 than it does to compromise a quorum (a compromised quorum able to produce a block requires the
@@ -160,7 +160,7 @@ hours have passed since its inclusion.
 
 A failed inclusion is also not the end of the world and mainly introduces delays, not stake losses:
 a failed registration would be removable from the smart contract after a waiting period (and could
-then be resubmitted), and a failed unlock or failed removal will be noticed by Oxen nodes as a
+then be resubmitted), and a failed unlock or failed removal will be noticed by Equilibria nodes as a
 service node that no longer exists in the smart contract and needs to be removed, which will be
 noticed and re-submitted as removal for confirmation, even if the original removal gets denied.
 
@@ -263,7 +263,7 @@ piling onto the same one.
 
 ## Block rewards
 
-Unlike Oxen's simple, fixed per-block payout, in the SENT era contributors earn a small portion of
+Unlike Equilibria's simple, fixed per-block payout, in the SENT era contributors earn a small portion of
 the L2 staking pool (enough so that a continual, compounding removal would result in 14% of the pool
 getting paid out over a 1-year period, assuming no replenishment; see details in the staking
 contracts for more info).
@@ -271,17 +271,17 @@ contracts for more info).
 Rewards, however, are computed entirely on the OXEN side, and thus being able to advance the chain
 requires an exact consensus of what the reward is at any given time.
 
-Oxen nodes thus record the recent L2 reward rate (queried from the contract) in each block, and
+Equilibria nodes thus record the recent L2 reward rate (queried from the contract) in each block, and
 verifying this value is part of the duties of pulse quorum validators.  For all the same reasons
 discussed above, however, this means that it could be a target of abuse by a malicious pulse quorum.
 
 For example, just after launch, the per-block SENT reward (distributed across all service nodes) to
-be a little bit less than 23 SENT per 2-minutes (i.e. per Oxen block).  An adversary controlling a
+be a little bit less than 23 SENT per 2-minutes (i.e. per Equilibria block).  An adversary controlling a
 large number of service nodes (either directly, or via L2 control) could simply lie about the state
-of the contract and set an Oxen block's reward rate to 40 million SENT per block, then racing to be
+of the contract and set an Equilibria block's reward rate to 40 million SENT per block, then racing to be
 the first to unstake and cash out.
 
-To mitigate this, the Oxen 11 design uses two mechanisms:
+To mitigate this, the Equilibria 11 design uses two mechanisms:
 
 ### Smallest recent reward rate
 
@@ -327,7 +327,7 @@ about 1.45% of the pool (that is about 560k per day being added to a 40M pool).
 
 Sudden, large increases, however, take more time to adjust.  The instant 20M increase discussed
 above, for instance, would require about 28 days to be fully reflected in the reward rate earned by
-Oxen nodes (although rewards would be continually increasing over this period at the maximum
+Equilibria nodes (although rewards would be continually increasing over this period at the maximum
 increase rate) starting from a 40M pool.  Albeit slow, this is an exponential process, and so as the
 pool becomes larger, increases of the same size can be adjusted to more quickly.  For instance, a
 60M pool would fully accommodate a 20M increase in 20 days, and a 100M pool would fully accommodate
@@ -348,7 +348,7 @@ permitted under various RPC provider plans.
 To address this, we only fetch updated reward values once every 2400 blocks (approximately once
 every 10 minutes), and our canonical "proper" reward for a height is the reward rate at previous
 such fetched height before the l2 height indicated in the block itself.  For example, when
-constructing a hypothetical Oxen block with `l2_height = 23456789`, the "true" reward rate used to
+constructing a hypothetical Equilibria block with `l2_height = 23456789`, the "true" reward rate used to
 compute the reward value that gets recorded into a block would be the reward rate for L2 height
 23455200 (i.e. the last height before 23456789 divisible by 2400).
 

@@ -6,17 +6,17 @@ For users who take comfort in containerization.
 
 - Distro agnostic: run on any Linux distro with docker installed
 - Security isolation: run untrusted software without fear
-- Resource isolation: run oxend with a specific amount of CPU and memory
+- Resource isolation: run equilibriad with a specific amount of CPU and memory
 - Simplicity: get up and running with only a few commands
 
 ## Quickstart
 
-If you just want to build the container image and get oxend running:
+If you just want to build the container image and get equilibriad running:
 
 ```
 $ sh build_base_container.sh
-$ sh build_oxend_container.sh
-$ docker run -d -p 22022:22022 --name oxend oxend:9.1.0
+$ sh build_equilibriad_container.sh
+$ docker run -d -p 22022:22022 --name equilibriad equilibriad:9.1.0
 ```
 
 The blockchain and wallet won't be persisted beyond the containers lifetime, so you probably want to continue reading if
@@ -32,40 +32,40 @@ The `RELEASE` variable can be updated for any release version. Once built, the c
 ```
 $ docker images
 REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
-oxend               9.1.0               17046241ccc2        3 minutes ago       159MB
+equilibriad               9.1.0               17046241ccc2        3 minutes ago       159MB
 ```
 
-The image can be used to run the oxend container locally. The image can also be uploaded to a docker registry so that
+The image can be used to run the equilibriad container locally. The image can also be uploaded to a docker registry so that
 other users can use it without needing to build it.
 
 ### Run the container
 
 Run the container, storing the blockchain in Docker volume `oxen-blockchain`:
 
-`$ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" oxend:9.1.0`
+`$ docker run --name equilibriad -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" equilibriad:9.1.0`
 
 Same as above, but additionally mounting the wallet directory `/home/<your_user>/Equilibria` to `/wallet` in the container:
 
 ```
-$ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
-                             --mount "source=/home/<your_user>/Equilibria,target=/wallet,type=bind" oxend:9.1.0
+$ docker run --name equilibriad -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
+                             --mount "source=/home/<your_user>/Equilibria,target=/wallet,type=bind" equilibriad:9.1.0
 ```
 
 Check on how the synchronization is going:
 
 ```
-$ docker logs oxend
+$ docker logs equilibriad
 ```
 
 #### Limiting resource usage
 
-On a shared server, it may be useful to limit the amount of resources the oxend container can consume. The recommended minimum
+On a shared server, it may be useful to limit the amount of resources the equilibriad container can consume. The recommended minimum
 specs are 4G memory, 2 CPUs, and 30G disk. The memory and CPUs can be limited easily in the `run` command:
 
 ```
-$ docker run --name oxend -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
+$ docker run --name equilibriad -d --mount "source=oxen-blockchain,target=/home/oxen/.oxen,type=volume" \
                              --mount "source=/home/<your_user>/Equilibria,target=/wallet,type=bind" \
-			     --memory=4g --cpus=2 oxend:9.1.0
+			     --memory=4g --cpus=2 equilibriad:9.1.0
 ```
 
 Note: the blockchain sync speed will be impacted by limiting the CPU allocation.
@@ -76,16 +76,16 @@ easily-resizable volumes to a VPS; such a volume can be used to grow the volume 
 
 ### Run the wallet CLI
 
-These steps assume the oxend container was started with your walled directory bind mounted to `/wallet` inside the container.
+These steps assume the equilibriad container was started with your walled directory bind mounted to `/wallet` inside the container.
 
-To run against your local oxend:
+To run against your local equilibriad:
 
-`$ docker exec -it oxend oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name>`
+`$ docker exec -it equilibriad oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name>`
 
 To run against a public daemon:
 
 ```
-$ docker exec -it oxend oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name> \
+$ docker exec -it equilibriad oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name> \
                                         --daemon-address public.loki.foundation:22023
 ```
 
@@ -94,14 +94,14 @@ $ docker exec -it oxend oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_na
 Stop the container from running:
 
 ```
-$ docker stop oxend
+$ docker stop equilibriad
 ```
 
 After the container is no longer running, it can be deleted. Assuming you mounted the `oxen-blockchain` volume, the
 blockchain will *not* be deleted:
 
 ```
-$ docker rm oxend
+$ docker rm equilibriad
 ```
 
 If you add the `--rm` flag to the `docker run` command, then the container will be automatically removed when it is stopped.

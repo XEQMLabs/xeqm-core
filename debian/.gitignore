@@ -8,7 +8,7 @@
 /liboxen-snapshot[0-9]*/
 /liboxen-wallet-snapshot[0-9]*
 /liboxen-snapshot-dev/
-/oxend-snapshot/
+/equilibriad-snapshot/
 /oxen-stagenet-node/
 /oxen-wallet-cli-snapshot/
 /oxen-wallet-rpc-snapshot/

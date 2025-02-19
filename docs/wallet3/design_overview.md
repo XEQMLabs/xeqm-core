@@ -54,7 +54,7 @@ here, is "running".
 
 ## DaemonComms
 
-DaemonComms handles communication with an oxend.  This consists of:
+DaemonComms handles communication with an equilibriad.  This consists of:
 
 - fetching batches of blocks for synchronizing a new (or behind) Wallet with the
 blockchain

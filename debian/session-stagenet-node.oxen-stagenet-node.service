@@ -1,5 +1,5 @@
 [Unit]
-Description=Session node - Oxen blockchain node
+Description=Session node - Equilibria blockchain node
 After=network-online.target
 PartOf=session-stagenet-node.target
 

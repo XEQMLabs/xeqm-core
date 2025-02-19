@@ -37,9 +37,9 @@ curl -sSX POST http://public-na.optf.ngo:22023/json_rpc \
     -d '{"jsonrpc":"2.0","id":"0","method":"get_info"}' | jq .
 ```
 
-## OxenMQ RPC access
+## EquilibriaMQ RPC access
 
-All equilibriad endpoints are also available via OxenMQ at either the `rpc.ENDPOINT` or `admin.ENDPOINT`
+All equilibriad endpoints are also available via EquilibriaMQ at either the `rpc.ENDPOINT` or `admin.ENDPOINT`
 name (the latter if the endpoint is marked admin-only), with an optional additional data part
 containing a JSON or bencoded request.
 

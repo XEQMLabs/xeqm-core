@@ -20,7 +20,7 @@ name_hash_b64 = b64encode(name_hash)
 
 print("Name: {}, hashed+base64: {}".format(name, name_hash_b64.decode()))
 
-# Make the RPC request to some oxend
+# Make the RPC request to some equilibriad
 r = requests.post('http://public.loki.foundation:22023/json_rpc',
         json={ "jsonrpc": "2.0", "id": "0",
             "method": "lns_resolve",

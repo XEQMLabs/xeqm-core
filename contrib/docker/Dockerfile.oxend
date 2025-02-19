@@ -1,6 +1,6 @@
 FROM oxen-ubuntu:20.04
 
-RUN apt-get -y install oxend oxen-wallet-cli
+RUN apt-get -y install equilibriad oxen-wallet-cli
 
 ARG USER_ID
 ARG GROUP_ID
@@ -24,4 +24,4 @@ EXPOSE 22023
 USER oxen
 WORKDIR /home/oxen
 
-ENTRYPOINT ["oxend", "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=22022", "--rpc-admin=0.0.0.0:22023", "--non-interactive"]
+ENTRYPOINT ["equilibriad", "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=22022", "--rpc-admin=0.0.0.0:22023", "--non-interactive"]
