@@ -1,13 +1,12 @@
+#if defined(WITH_MOCKNET)
 #include "mocknet.h"
 
-#if defined(OXEN_WITH_MOCKNET)
 #include <boost/program_options/options_description.hpp>
 #include <string_view>
 
 #include "bls/bls_crypto.h"
 #include "common/command_line.h"
 #include "common/guts.h"
-#include "logging/oxen_logger.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/verification_context.h"
@@ -17,7 +16,6 @@
 #include "cryptonote_core/service_node_rules.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "logging/oxen_logger.h"
-#include "p2p/net_node_common.h"
 
 static auto logcat = oxen::log::Cat("mocknet");
 
@@ -39,8 +37,7 @@ static const command_line::arg_descriptor<uint64_t> MOCKNET_FORK_AT_HEIGHT_ARG{
         "Fork the current chain at the specified height into mocknet where Pulse quorums are "
         "hardcoded"};
 
-struct mocknet_global_data
-{
+struct mocknet_global_data {
     // If specified on the command line, forking to mocknet at `fork_at_height`
     // will occur.
     bool fork_enabled;
@@ -55,7 +52,8 @@ struct mocknet_key {
     crypto::ed25519_public_key ed25519_pubkey;
 };
 
-const eth::address MOCK_ETH_ADDRESS = tools::make_from_hex_guts<eth::address>("485973e8dfFA8Abd3AB91292bFCE25896C687bA5"sv, false);
+const eth::address MOCK_ETH_ADDRESS = tools::make_from_hex_guts<eth::address>(
+        "485973e8dfFA8Abd3AB91292bFCE25896C687bA5"sv, false);
 
 // NOTE: Ed25519 public key is stuffed in the last 32 bytes of the secret key
 // but it's to have the pubkey separated to visually grok instantly for
@@ -156,13 +154,12 @@ const static inline mocknet_key MOCKNET_KEYS[] = {
 };
 // clang-format on
 
-void mocknet_add_cli_arg(boost::program_options::options_description& desc)
-{
+void mocknet_add_cli_arg(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, MOCKNET_FORK_AT_HEIGHT_ARG);
 }
 
-bool mocknet_read_cli_for_mocknet_arg(const boost::program_options::variables_map& vm, bool is_service_node)
-{
+bool mocknet_read_cli_for_mocknet_arg(
+        const boost::program_options::variables_map& vm, bool is_service_node) {
     if (!is_arg_defaulted(vm, MOCKNET_FORK_AT_HEIGHT_ARG)) {
         globals.fork_enabled = true;
         globals.fork_at_height = get_arg(vm, MOCKNET_FORK_AT_HEIGHT_ARG);
@@ -186,9 +183,11 @@ bool mocknet_has_forked(uint64_t top_block_height) {
     return result;
 }
 
-void mocknet_replace_quorum_with_mock_nodes(service_nodes::quorum& quorum, uint64_t top_block_height) {
+void mocknet_replace_quorum_with_mock_nodes(
+        service_nodes::quorum& quorum, uint64_t top_block_height) {
     // NOTE: Replace each node in the quorum with the mock keys sequentially
-    assert(quorum.workers.size() + quorum.validators.size() < sizeof(MOCKNET_KEYS)/sizeof(MOCKNET_KEYS[0]));
+    assert(quorum.workers.size() + quorum.validators.size() <
+           sizeof(MOCKNET_KEYS) / sizeof(MOCKNET_KEYS[0]));
 
     size_t key_index = 0;
     for (size_t index = 0; index < quorum.workers.size(); index++) {
@@ -260,7 +259,8 @@ void mocknet_on_cn_core_post_add_new_block(cryptonote::core& core) {
     if (top_block_height != globals.fork_at_height)
         return;
 
-    auto *protocol = reinterpret_cast<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>*>(core.get_protocol());
+    auto* protocol = reinterpret_cast<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>*>(
+            core.get_protocol());
     if (protocol) {
         protocol->set_no_sync(true);
         protocol->set_max_out_peers(0);
@@ -276,7 +276,8 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
         return;
 
     pulse::timings timings = {};
-    pulse::get_round_timings(core.blockchain, top_block.get_height() + 1, top_block.timestamp, timings);
+    pulse::get_round_timings(
+            core.blockchain, top_block.get_height() + 1, top_block.timestamp, timings);
     int64_t now = time(nullptr);
     int64_t r0_unix_ts = std::chrono::duration_cast<std::chrono::seconds>(
                                  timings.r0_timestamp.time_since_epoch())
@@ -324,7 +325,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
             block,
             block_producer_payouts,
             /*pulse round*/ 0,
-            /*validator handshake bitset*/ 0b0111'1111'1111, // Full participation
+            /*validator handshake bitset*/ 0b0111'1111'1111,  // Full participation
             generated_height);
 
     // NOTE: This can fail if the L2 tracker has not yet initialised or retrieved the rewards yet
@@ -335,7 +336,10 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     crypto::hash hash = cryptonote::get_block_hash(block);
     fmt::memory_buffer log;
     fmt::format_to(
-            std::back_inserter(log), "Generating mocknet block {} ({}) signed by mock validators:\n", generated_height, hash);
+            std::back_inserter(log),
+            "Generating mocknet block {} ({}) signed by mock validators:\n",
+            generated_height,
+            hash);
 
     // NOTE: Generate the signatures from each member of the quorum
     assert(quorum.validators.size() >= service_nodes::PULSE_BLOCK_REQUIRED_SIGNATURES);

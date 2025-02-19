@@ -1,7 +1,6 @@
 #pragma once
 
-#define OXEN_WITH_MOCKNET
-#if defined(OXEN_WITH_MOCKNET)
+#if defined(WITH_MOCKNET)
 #include <stdint.h>
 namespace service_nodes {
 struct quorum;
@@ -12,9 +11,9 @@ class core;
 };
 
 namespace boost::program_options {
-    class options_description;
-    class variables_map;
-};
+class options_description;
+class variables_map;
+};  // namespace boost::program_options
 
 void mocknet_add_cli_arg(boost::program_options::options_description& desc);
 bool mocknet_read_cli_for_mocknet_arg(
@@ -36,4 +35,3 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core);
 #define mocknet_on_cn_core_post_add_new_block(...)
 #define mocknet_push_mock_pulse_block(...)
 #endif
-
