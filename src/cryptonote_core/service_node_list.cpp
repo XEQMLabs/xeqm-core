@@ -2787,10 +2787,41 @@ void service_node_list::verify_block(
                 false,
                 alt_block ? &alt_quorums : nullptr);
 
-        if (!quorum)
-            throw oxen::traced<std::runtime_error>{
-                    "Failed to get testing quorum checkpoint for {} {}"_format(
-                            block_type, cryptonote::get_block_hash(block))};
+        if (!quorum) {
+            fmt::memory_buffer buffer;
+            fmt::format_to(
+                    std::back_inserter(buffer),
+                    "Failed to get checkpoint quorum for {} {} (blk height: {}, quorum: "
+                    "{}",
+                    block_type,
+                    cryptonote::get_block_hash(block),
+                    offset_testing_quorum_height(quorum_type::checkpointing, checkpoint->height),
+                    checkpoint->height);
+
+            uint64_t min_archive = m_transient->state_archive.size()
+                                         ? m_transient->state_archive.begin()->height
+                                         : 0;
+            uint64_t max_archive = m_transient->state_archive.size()
+                                         ? m_transient->state_archive.rbegin()->height
+                                         : 0;
+
+            uint64_t min_history = m_transient->state_history.size()
+                                         ? m_transient->state_history.begin()->height
+                                         : 0;
+            uint64_t max_history = m_transient->state_history.size()
+                                         ? m_transient->state_history.rbegin()->height
+                                         : 0;
+
+            fmt::format_to(
+                    std::back_inserter(buffer),
+                    ", history: [{}, {}], archive: [{}, {}])",
+                    min_history,
+                    max_history,
+                    min_archive,
+                    max_archive);
+
+            throw oxen::traced<std::runtime_error>{fmt::to_string(buffer)};
+        }
 
         bool failed_checkpoint_verify =
                 !service_nodes::verify_checkpoint(block.major_version, *checkpoint, *quorum);
