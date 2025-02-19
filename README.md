@@ -152,6 +152,9 @@ Dependencies need to be built with -fPIC. Static libraries usually aren't, so yo
   Run the `oxend` and then launch the profiler and connect to the instance
   on `127.0.0.1` to get profiler timings live as the application runs.
 
+* **Optional**: build with stack traces in thrown exceptions with `-D WITH_STACKTRACE`. This incurs
+  a large performance penalty on thrown exceptions on Linux.
+
 #### On the Raspberry Pi (and similar ARM-based devices)
 
 The build process is exactly the same, but note that some parts of the build require around 3GB of
