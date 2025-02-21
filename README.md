@@ -138,6 +138,14 @@ Dependencies need to be built with -fPIC. Static libraries usually aren't, so yo
     HAVE_DOT=YES doxygen Doxyfile
     ```
 
+* **Optional**: to build with profiling support set `-D TRACY_ENABLE=ON` on the
+  CMake configuration line. Then compile the profiler located at
+  `external/tracy/profiler` or use a pre-built binary from their Github (as long as the
+  binary's version is forwards/backwards compatible with the submodule version).
+
+  Run the `oxend` and then launch the profiler and connect to the instance
+  on `127.0.0.1` to get profiler timings live as the application runs.
+
 #### On the Raspberry Pi (and similar ARM-based devices)
 
 The build process is exactly the same, but note that some parts of the build require around 3GB of
