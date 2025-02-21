@@ -138,7 +138,10 @@ void BlockchainSQLite::upgrade_schema() {
             have_offset = true;
     }
 
-    SQLite::Transaction transaction{db, SQLite::TransactionBehavior::DEFERRED};
+    std::optional<SQLite::Transaction> transaction{std::nullopt};
+    if (!rescan_tx) {
+        transaction.emplace(db, SQLite::TransactionBehavior::DEFERRED);
+    }
     // NOTE: Rename 'batched_payments_accrued_archive' 'archive_height' column to 'height'. This
     // unifies the height label across the batch payment, recent and archive table making querying
     // from them require less code.
@@ -393,7 +396,8 @@ void BlockchainSQLite::upgrade_schema() {
     db.exec(R"(DROP TABLE IF EXISTS batched_payments_accrued_raw;
                DROP VIEW  IF EXISTS batched_payments_accrued_paid;)");
 
-    transaction.commit();
+    if (transaction)
+        transaction->commit();
 }
 
 void BlockchainSQLite::reset_database() {
@@ -441,7 +445,8 @@ void BlockchainSQLite::update_height(
         prepared_exec("UPDATE batch_db_info SET height = ?", static_cast<int64_t>(height));
 }
 
-void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t new_height) {
+void BlockchainSQLite::blockchain_detached(
+        PaymentTableType history, uint64_t new_height, uint64_t target_height) {
     const auto& netconf = get_config(m_nettype);
 
     // NOTE: Execute detach
@@ -484,6 +489,14 @@ void BlockchainSQLite::blockchain_detached(PaymentTableType history, uint64_t ne
             detach_label,
             rows_removed,
             rows_restored);
+
+    if (height + 5000 < target_height) {
+        log::debug(logcat, "large rescan starting");
+        rescan_target = target_height;
+        rescan_start();
+    } else
+        log::debug(
+                logcat, "not large rescan, height = {}, target_height = {}", height, target_height);
 }
 
 const std::string& BlockchainSQLite::get_address_str(const cryptonote::batch_sn_payment& addr) {
@@ -568,6 +581,21 @@ size_t BlockchainSQLite::batch_payments_accrued_row_count(
     }
 
     return result;
+}
+
+void BlockchainSQLite::rescan_start() {
+    assert(!rescan_tx);
+    log::debug(logcat, "(re)-starting rescan tx");
+    rescan_tx.emplace(db, SQLite::TransactionBehavior::IMMEDIATE);
+}
+
+void BlockchainSQLite::rescan_stop() {
+    if (rescan_tx) {
+        log::debug(logcat, "committing rescan tx at height {}", height);
+        rescan_tx->commit();
+        rescan_tx = std::nullopt;
+        rescan_count = 0;
+    }
 }
 
 std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint64_t block_height) {
@@ -882,14 +910,25 @@ bool BlockchainSQLite::add_block(
             miner_tx_vouts.emplace_back(var::get<txout_to_key>(vout.target).key, vout.amount);
 
     try {
-        SQLite::Transaction transaction{db, SQLite::TransactionBehavior::IMMEDIATE};
+        std::optional<SQLite::Transaction> transaction{std::nullopt};
+        if (!rescan_tx) {
+            transaction.emplace(db, SQLite::TransactionBehavior::IMMEDIATE);
+        }
         // Goes through the miner transactions vouts checks they are right and marks them as paid in
         // the database
         if (!validate_batch_payment(miner_tx_vouts, calculated_rewards, block_height, rescan))
             return false;
         reward_handler(block, service_nodes_state, block_add, get_delayed_payments(block_height));
         update_height(height + 1, rescan);
-        transaction.commit();
+        if (transaction)
+            transaction->commit();
+        else {  // rescanning
+            if (++rescan_count >= 100 || height >= rescan_target) {
+                rescan_stop();
+                if (height < rescan_target)
+                    rescan_start();
+            }
+        }
     } catch (std::exception& e) {
         log::error(logcat, "Error adding reward payments: {}", e.what());
         return false;
@@ -902,7 +941,10 @@ bool BlockchainSQLite::add_delayed_payments(
     ZoneScoped;
     log::trace(logcat, "BlockchainSQLite::{} called", __func__);
     try {
-        SQLite::Transaction transaction{db, SQLite::TransactionBehavior::IMMEDIATE};
+        std::optional<SQLite::Transaction> transaction{std::nullopt};
+        if (!rescan_tx) {
+            transaction.emplace(db, SQLite::TransactionBehavior::IMMEDIATE);
+        }
 
         // Basic checks can be done here
         // if (amount > max_staked_amount)
@@ -940,7 +982,8 @@ bool BlockchainSQLite::add_delayed_payments(
             insert_payment->reset();
         }
 
-        transaction.commit();
+        if (transaction)
+            transaction->commit();
     } catch (std::exception& e) {
         log::error(logcat, "Error returning stakes: {}", e.what());
         return false;

@@ -33,6 +33,7 @@
 #include <cryptonote_core/service_node_list.h>  // service_node_list::state_t...
 
 #include <filesystem>
+#include <optional>
 #include <sqlitedb/database.hpp>
 #include <string>
 
@@ -45,6 +46,8 @@ class BlockchainSQLite : public db::Database {
   public:
     explicit BlockchainSQLite(cryptonote::network_type nettype, std::filesystem::path db_path);
     BlockchainSQLite(const BlockchainSQLite&) = delete;
+
+    ~BlockchainSQLite() { rescan_stop(); }
 
     // Database management functions. Should be called on creation of BlockchainSQLite
     void create_schema();
@@ -66,7 +69,7 @@ class BlockchainSQLite : public db::Database {
 
     // Rewinds the SQL DB to the specified height. This function is called internally by the SNL on
     // detach.
-    void blockchain_detached(PaymentTableType type, uint64_t height);
+    void blockchain_detached(PaymentTableType type, uint64_t height, uint64_t target_height = 0);
 
     // Return the number of rows for the desired batched payments accrued table. The row count will
     // be for the 'height' specified. 'height' is ignored if type is nil as the default accrued
@@ -104,6 +107,16 @@ class BlockchainSQLite : public db::Database {
 
     bool table_exists(const std::string& name);
     bool trigger_exists(const std::string& name);
+
+    // Long rescans can take quite a while to process.  Batching block inserts into one database
+    // transaction speeds this up considerably.  This is called automatically if a rescan is
+    // larger than 5000 blocks.
+    void rescan_start();
+    void rescan_stop();
+
+    std::optional<SQLite::Transaction> rescan_tx{std::nullopt};
+    size_t rescan_count{0};
+    uint64_t rescan_target{0};
 
   public:
     // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.
