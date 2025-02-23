@@ -1,7 +1,7 @@
 # Equilibria
 
-Copyright (c) 2018-2022 The Equilibria Project.   
-Portions Copyright (c) 2014-2019 The Monero Project.   
+Copyright (c) 2018-2022 The Equilibria Project.
+Portions Copyright (c) 2014-2019 The Monero Project.
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
@@ -70,7 +70,7 @@ breakdown of the minimum set of required boost packages.
 Install all dependencies at once on Debian/Ubuntu:
 
 ```
-sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libgmp-dev libzstd-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-dev
+sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libgmp-dev libzstd-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-dev libcurl4-openssl-dev
 ```
 
 Install all dependencies at once on macOS with the provided Brewfile:
@@ -96,8 +96,8 @@ You can install these using:
 
 if you want to build a dev build you can do the following after installing the dependancies above:
 
-	$ git clone --recursive https://github.com/oxen-io/oxen-core.git
-	$ cd oxen-core
+	$ git clone --recursive https://github.com/EquilibriaHorizon/equilibria-core.git
+	$ cd equilibria-core
 	$ git submodule update --init --recursive
 	$ mkdir build
 	$ cd build
@@ -220,7 +220,7 @@ application.
 
 ### On FreeBSD:
 
-The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`). 
+The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`).
 If you are running Equilibria in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
 
 ### On OpenBSD:
@@ -317,15 +317,15 @@ You can also build a docker package using:
     ```bash
     # Build using all available cores
     docker build -t oxen-daemon-image .
-    
+
     # or build using a specific number of cores (reduce RAM requirement)
     docker build --build-arg NPROC=1 -t oxen .
-    
+
     # either run in foreground
-    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
-    
+    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
+
     # or in background
-    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
+    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
     ```
 
 * The build needs 3 GB space.
