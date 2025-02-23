@@ -69,7 +69,7 @@ breakdown of the minimum set of required boost packages.
 Install all dependencies at once on Debian/Ubuntu:
 
 ```
-sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-dev
+sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-openssl-dev
 ```
 
 Install all dependencies at once on macOS with the provided Brewfile:
@@ -95,8 +95,8 @@ You can install these using:
 
 if you want to build a dev build you can do the following after installing the dependancies above:
 
-	$ git clone --recursive https://github.com/oxen-io/oxen-core.git
-	$ cd oxen-core
+	$ git clone --recursive https://github.com/EquilibriaHorizon/equilibria-core.git
+	$ cd equilibria-core
 	$ git submodule update --init --recursive
 	$ mkdir build
 	$ cd build
