@@ -17,6 +17,7 @@
 
 #include "contracts.h"
 #include "events.h"
+#include "network_config/mocknet.h"
 
 namespace eth {
 
@@ -638,18 +639,22 @@ void L2Tracker::update_purge_list(bool curr_height_fallback) {
                         // validator) even if we don't have it in our mempool as long as the
                         // purgeable conditions are met when we vote on it.
                         std::vector<std::pair<crypto::public_key, bls_public_key>> to_purge;
-                        core.service_node_list.for_each_service_node(
-                                [this, &to_purge](
-                                        const crypto::public_key& pubkey,
-                                        const service_nodes::service_node_info& info) {
-                                    // contributors will be empty for nodes which did not transition
-                                    // with HF21, and those nodes will not be in the contract but
-                                    // should be purged by decommission->deregister rather than this
-                                    // mechanism
-                                    if (!info.contributors.empty() &&
-                                        is_node_purgeable(info.bls_public_key))
-                                        to_purge.emplace_back(pubkey, info.bls_public_key);
-                                });
+                        if (mocknet_has_forked(core.blockchain.get_current_blockchain_height() - 1) ||
+                            mocknet_is_forking(core.blockchain.get_current_blockchain_height() - 1)) {
+                        } else {
+                            core.service_node_list.for_each_service_node(
+                                    [this, &to_purge](
+                                            const crypto::public_key& pubkey,
+                                            const service_nodes::service_node_info& info) {
+                                        // contributors will be empty for nodes which did not
+                                        // transition with HF21, and those nodes will not be in the
+                                        // contract but should be purged by decommission->deregister
+                                        // rather than this mechanism
+                                        if (!info.contributors.empty() &&
+                                            is_node_purgeable(info.bls_public_key))
+                                            to_purge.emplace_back(pubkey, info.bls_public_key);
+                                    });
+                        }
 
                         if (!to_purge.empty()) {
                             event::ServiceNodePurge purge{chain_id, purge_height};

@@ -126,6 +126,9 @@ static constexpr std::array mainnet_hard_forks = {
                 1253039,
                 1675900800 /*Thursday, February 9, 2023 0:00 UTC */},  // Oxen 10.3: Mandatory
                                                                        // SS 2.5.0 update
+
+        hard_fork{hf::hf20_eth_transition, 0, 1788080, 1675900800},
+        hard_fork{hf::hf21_eth,            0, 1788085, 1675900800},
 };
 
 static constexpr std::array testnet_hard_forks = {

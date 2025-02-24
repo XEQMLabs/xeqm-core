@@ -3747,7 +3747,7 @@ block_add_result service_node_list::state_t::update_from_block(
     auto hf21_height = hard_fork_begins(nettype, hf::hf21_eth);
     if (hf21_height && height == *hf21_height && sqlite_db_ptr) {
         auto print_sns = [&]() {
-            log::warning(logcat, "Printing service node list:\n\n");
+            log::debug(logcat, "Printing service node list:\n\n");
             for (const auto& info : service_nodes_infos) {
                 std::string op_addr;
                 std::string op_addr_eth;
@@ -3775,12 +3775,12 @@ block_add_result service_node_list::state_t::update_from_block(
                 f += fmt::format("\nstaking_requirement: {}", info.second->staking_requirement);
                 f += fmt::format("\ned_pubkey: {}", info.first);
                 f += fmt::format("\nbls_pubkey: {}", info.second->bls_public_key);
-                log::warning(logcat, "{}", f);
+                log::debug(logcat, "{}", f);
             }
-            log::warning(logcat, "\n\nFinished printing service node list.");
+            log::debug(logcat, "\n\nFinished printing service node list.");
         };
 
-        log::warning(
+        log::debug(
                 logcat,
                 "Beginning hf21 transition, height = {}, nettype = {}",
                 height,
