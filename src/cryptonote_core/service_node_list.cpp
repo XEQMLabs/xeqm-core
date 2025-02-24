@@ -328,6 +328,12 @@ void service_node_list::init() {
                 static_cast<uint8_t>(blockchain.nettype()),
                 &m_state,
                 static_cast<uint8_t>(blockchain.get_network_version()));
+
+        if (m_state.quorums.pulse) {
+            quorum copy = *m_state.quorums.pulse;
+            mocknet_replace_quorum_with_mock_nodes(copy, m_state.height);
+            m_state.quorums.pulse = std::make_shared<const quorum>(copy);
+        }
     }
 }
 
@@ -3277,6 +3283,10 @@ static service_nodes::quorum generate_pulse_quorum_with_candidates(
     result.validators.reserve(PULSE_QUORUM_NUM_VALIDATORS);
     for (auto it = pulse_candidates.begin(); it != running_it; it++)
         result.validators.push_back(it->first);
+
+    if (mocknet_has_forked(block_height)) {
+        mocknet_replace_quorum_with_mock_nodes(result, block_height);
+    }
     return result;
 }
 
@@ -3317,9 +3327,6 @@ service_nodes::quorum generate_pulse_quorum(
             pulse_round,
             block_height);
 
-    if (mocknet_has_forked(block_height)) {
-        mocknet_replace_quorum_with_mock_nodes(result, block_height);
-    }
     return result;
 }
 
@@ -3649,6 +3656,13 @@ block_add_result service_node_list::state_t::update_from_block(
                     }
                 }
             }
+        }
+
+        if (mocknet_has_forked(height + 1)) {
+            crypto::public_key pkey = mocknet_get_deterministic_block_leader();
+            next_block_leader_cache =
+                    service_node_payout_portions(pkey, *service_nodes_infos.at(pkey));
+            pre_block_precomputed.block_leader = pkey;
         }
     }
 
@@ -4399,6 +4413,22 @@ void service_node_list::blockchain_detached(uint64_t height) {
 
 service_nodes::payout service_node_list::state_t::get_next_block_leader() const {
     ZoneScoped;
+
+    // TODO: This function should calculate all the metadata we need for the
+    // next update. It should merge the walk of the SN list at the start of
+    // `update_from_block` and compute that data upfront and also cache it as we
+    // do for the block leader.
+    //
+    // It's confusing to have multiple places where we overwrite the
+    // `next_block_leader_cache` that we should just fold them into one.
+    //
+    // Right now this branch to calculate the next leader will execute when
+    // you receive a block via P2P, to validate the block it will call the
+    // function to verify the miner TX.
+    //
+    // We want to minimise the number of times we have to walk the entire SNL
+    // and calculate everything we need from it in one walk to give the CPU less
+    // work and improve syncing/rescanning speed.
     if (!next_block_leader_cache) {
         crypto::public_key key{};
         service_node_info const* info = nullptr;
@@ -4423,6 +4453,12 @@ service_nodes::payout service_node_list::state_t::get_next_block_leader() const 
         next_block_leader_cache =
                 key ? service_node_payout_portions(key, *info) : service_nodes::null_payout;
     }
+
+    if (mocknet_has_forked(height + 1)) {
+        crypto::public_key pkey = mocknet_get_deterministic_block_leader();
+        next_block_leader_cache = service_node_payout_portions(pkey, *service_nodes_infos.at(pkey));
+    }
+
     return *next_block_leader_cache;
 }
 

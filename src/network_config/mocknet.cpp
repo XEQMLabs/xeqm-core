@@ -42,6 +42,7 @@ struct mocknet_global_data {
     // will occur.
     bool fork_enabled;
     uint64_t fork_at_height;  // The height to fork at from the current chain
+    bool protocol_is_disabled;
 };
 static mocknet_global_data globals;
 
@@ -183,6 +184,14 @@ bool mocknet_has_forked(uint64_t top_block_height) {
     return result;
 }
 
+crypto::public_key mocknet_get_deterministic_block_leader() {
+    crypto::public_key result;
+    const crypto::ed25519_secret_key& ed25519_skey = MOCKNET_KEYS[0].ed25519;
+    const crypto::secret_key& skey = crypto::ed25519_to_monero_secret_key(ed25519_skey);
+    crypto::secret_key_to_public_key(skey, result);
+    return result;
+}
+
 void mocknet_replace_quorum_with_mock_nodes(
         service_nodes::quorum& quorum, uint64_t top_block_height) {
     // NOTE: Replace each node in the quorum with the mock keys sequentially
@@ -222,6 +231,18 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
         assert(info->bls_public_key == key.bls_pubkey);
         info->registration_hf_version = static_cast<cryptonote::hf>(hf_version);
 
+        // NOTE: Add contributor
+        {
+            service_nodes::service_node_info::contributor_t contributor = {};
+            contributor.amount = state->get_staking_requirement(nettype);
+
+            service_nodes::service_node_info::contribution_t contribution = {};
+            contribution.amount = contributor.amount;
+            contributor.locked_contributions.push_back(contribution);
+
+            info->contributors.push_back(contributor);
+        }
+
         crypto::secret_key skey = crypto::ed25519_to_monero_secret_key(key.ed25519);
         crypto::public_key pkey;
         crypto::secret_key_to_public_key(skey, pkey);
@@ -254,26 +275,20 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
     oxen::log::info(globallogcat, "{}", fmt::to_string(log));
 }
 
-void mocknet_on_cn_core_post_add_new_block(cryptonote::core& core) {
-    uint64_t top_block_height = core.blockchain.get_current_blockchain_height() - 1;
-    if (top_block_height != globals.fork_at_height)
-        return;
-
-    auto* protocol = reinterpret_cast<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>*>(
-            core.get_protocol());
-    if (protocol) {
-        protocol->set_no_sync(true);
-        protocol->set_max_out_peers(0);
-        protocol->set_p2p_endpoint(nullptr);
-    }
-
-}
-
 void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     cryptonote::block top_block = core.blockchain.db().get_top_block();
     crypto::hash top_hash = cryptonote::get_block_hash(top_block);
     if (!globals.fork_enabled || top_block.get_height() < globals.fork_at_height)
         return;
+
+    auto* protocol = reinterpret_cast<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>*>(
+            core.get_protocol());
+    if (!globals.protocol_is_disabled && protocol) {
+        globals.protocol_is_disabled = true;
+        protocol->set_no_sync(true);
+        protocol->set_max_out_peers(0);
+        protocol->set_p2p_endpoint(nullptr);
+    }
 
     pulse::timings timings = {};
     pulse::get_round_timings(
@@ -306,8 +321,12 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     crypto::public_key mock_producer;
     std::memcpy(mock_producer.data(), MOCKNET_KEYS[0].ed25519_pubkey.data(), sizeof(mock_producer));
 
+    [[maybe_unused]] crypto::public_key mock_validator0;
+    std::memcpy(mock_validator0.data(), MOCKNET_KEYS[1].ed25519_pubkey.data(), sizeof(mock_validator0));
+
     assert(quorum.workers.size());
     assert(mock_producer == quorum.workers[0]);
+    assert(mock_validator0 == quorum.validators[0]);
     assert(mock_producer);
 
     std::vector<service_nodes::service_node_pubkey_info> list_state =
