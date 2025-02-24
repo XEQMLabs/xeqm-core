@@ -2462,7 +2462,6 @@ bool core::add_new_block(
         if (hf21_height && b.get_height() == *hf21_height) {
             service_node_list.while_locked([this]() { init_service_keys(true); });
         }
-        mocknet_on_cn_core_post_add_new_block(*this);
     }
     return result;
 }

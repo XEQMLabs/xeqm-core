@@ -251,17 +251,26 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
     }
 
     // NOTE: Log that we hit the mocknet pre-conditions
-    fmt::memory_buffer log;
+    cryptonote::account_public_address zero_cn_address = {};
+    std::string zero_cn_address_str = cryptonote::get_account_address_as_str(nettype, false, zero_cn_address);
+
+    fmt::memory_buffer debug_log;
     fmt::format_to(
-            std::back_inserter(log),
-            "Registering {} mock nodes:\n",
-            sizeof(MOCKNET_KEYS) / sizeof(MOCKNET_KEYS[0]));
+            std::back_inserter(debug_log),
+            "Registering {} mock nodes (w/ ETH and CN wallets {}, {}):\n",
+            sizeof(MOCKNET_KEYS) / sizeof(MOCKNET_KEYS[0]),
+            MOCK_ETH_ADDRESS,
+            zero_cn_address_str);
 
     for (const auto& key : MOCKNET_KEYS) {
         crypto::secret_key skey = crypto::ed25519_to_monero_secret_key(key.ed25519);
         crypto::public_key pkey;
         crypto::secret_key_to_public_key(skey, pkey);
-        fmt::format_to(std::back_inserter(log), "  PKEY: {} BLS: {}\n", pkey, eth::get_pubkey(key.bls));
+        fmt::format_to(
+                std::back_inserter(debug_log),
+                "  PKEY: {} BLS: {}\n",
+                pkey,
+                eth::get_pubkey(key.bls));
     }
 
     oxen::log::info(
@@ -272,7 +281,7 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
             state->height,
             static_cast<uint8_t>(hf_version));
 
-    oxen::log::info(globallogcat, "{}", fmt::to_string(log));
+    oxen::log::debug(logcat, "{}", fmt::to_string(debug_log));
 }
 
 void mocknet_push_mock_pulse_block(cryptonote::core& core) {
@@ -290,15 +299,22 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
         protocol->set_p2p_endpoint(nullptr);
     }
 
-    pulse::timings timings = {};
-    pulse::get_round_timings(
-            core.blockchain, top_block.get_height() + 1, top_block.timestamp, timings);
-    int64_t now = time(nullptr);
-    int64_t r0_unix_ts = std::chrono::duration_cast<std::chrono::seconds>(
-                                 timings.r0_timestamp.time_since_epoch())
-                                 .count();
-    if (now < r0_unix_ts)
-        return;  // NOTE: Too early to generate a block
+    constexpr bool adhere_to_pulse_timings = false;
+    const int64_t now = time(nullptr);
+    if (adhere_to_pulse_timings) {
+        pulse::timings timings = {};
+        pulse::get_round_timings(
+                core.blockchain, top_block.get_height() + 1, top_block.timestamp, timings);
+        int64_t r0_unix_ts = std::chrono::duration_cast<std::chrono::seconds>(
+                                     timings.r0_timestamp.time_since_epoch())
+                                     .count();
+        if (now < r0_unix_ts)
+            return;  // NOTE: Too early to generate a block
+    } else {
+        int64_t time_since_last_block_s = now - top_block.timestamp;
+        if (time_since_last_block_s < 10)
+            return;
+    }
 
     // NOTE: Cruft to generate a pulse block
     std::vector<crypto::hash> const entropy = service_nodes::get_pulse_entropy_for_next_block(
@@ -340,12 +356,17 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     // NOTE: Generate the next block. The random value in the block is skipped and
     // set to all 0s
     uint64_t generated_height = 0;
-    bool generated = core.blockchain.create_next_pulse_block_template(
-            block,
-            block_producer_payouts,
-            /*pulse round*/ 0,
-            /*validator handshake bitset*/ 0b0111'1111'1111,  // Full participation
-            generated_height);
+    bool generated = false;
+    try {
+        generated = core.blockchain.create_next_pulse_block_template(
+                block,
+                block_producer_payouts,
+                /*pulse round*/ 0,
+                /*validator handshake bitset*/ 0b0111'1111'1111,  // Full participation
+                generated_height);
+    } catch(const std::exception& e) {
+        oxen::log::error(logcat, "Failed to generate block: {}", e.what());
+    }
 
     // NOTE: This can fail if the L2 tracker has not yet initialised or retrieved the rewards yet
     if (!generated)
@@ -353,12 +374,15 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
 
     assert(generated_height == top_block.get_height() + 1);
     crypto::hash hash = cryptonote::get_block_hash(block);
-    fmt::memory_buffer log;
-    fmt::format_to(
-            std::back_inserter(log),
-            "Generating mocknet block {} ({}) signed by mock validators:\n",
+    oxen::log::info(
+            globallogcat,
+            fg(fmt::terminal_color::magenta) | fmt::emphasis::bold,
+            "Generating mocknet block {} ({}) signed by mock validators",
             generated_height,
             hash);
+
+    fmt::memory_buffer debug_log;
+    fmt::format_to(std::back_inserter(debug_log), "Block {} signed by:\n", generated_height);
 
     // NOTE: Generate the signatures from each member of the quorum
     assert(quorum.validators.size() >= service_nodes::PULSE_BLOCK_REQUIRED_SIGNATURES);
@@ -381,7 +405,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
         mock_signature.voter_index = index;
         crypto::generate_signature(hash, mock_pkey, mock_skey, mock_signature.signature);
         fmt::format_to(
-                std::back_inserter(log),
+                std::back_inserter(debug_log),
                 "  {:02d} PKEY: {} SIG: {}\n",
                 index,
                 mock_pkey,
@@ -391,7 +415,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
         block.signatures.push_back(mock_signature);
     }
 
-    oxen::log::info(globallogcat, "{}", fmt::to_string(log));
+    oxen::log::debug(logcat, "{}", fmt::to_string(debug_log));
 
     // NOTE: Submit the block to core
     assert(block.signatures.size() == service_nodes::PULSE_BLOCK_REQUIRED_SIGNATURES);
