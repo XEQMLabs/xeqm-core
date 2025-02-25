@@ -421,8 +421,7 @@ void BlockchainSQLite::reset_database() {
     log::debug(logcat, "Database reset complete");
 }
 
-void BlockchainSQLite::update_height(
-        uint64_t new_height, const std::optional<service_nodes::rescan_context>& rescan) {
+void BlockchainSQLite::update_height(uint64_t new_height) {
     ZoneScoped;
     log::trace(
             logcat,
@@ -431,18 +430,7 @@ void BlockchainSQLite::update_height(
             new_height,
             height);
     height = new_height;
-
-    bool commit = true;
-    if (rescan) {
-        const auto& netconf = get_config(m_nettype);
-        uint64_t block_count = rescan->top_block_height + 1;
-        uint64_t commit_from_height = block_count - netconf.HISTORY_RECENT_KEEP_WINDOW;
-        bool is_archive_height = height % netconf.HISTORY_ARCHIVE_INTERVAL == 0;
-        commit = is_archive_height || height >= commit_from_height;
-    }
-
-    if (commit)
-        prepared_exec("UPDATE batch_db_info SET height = ?", static_cast<int64_t>(height));
+    prepared_exec("UPDATE batch_db_info SET height = ?", static_cast<int64_t>(height));
 }
 
 void BlockchainSQLite::blockchain_detached(
@@ -879,7 +867,7 @@ bool BlockchainSQLite::add_block(
 
     auto hf_version = block.major_version;
     if (hf_version < hf::hf19_reward_batching) {
-        update_height(block_height, rescan);
+        update_height(block_height);
         return true;
     }
 
@@ -887,7 +875,7 @@ bool BlockchainSQLite::add_block(
         cryptonote::hard_fork_begins(m_nettype, hf::hf19_reward_batching).value_or(0)) {
         log::debug(logcat, "Batching of Service Node Rewards Begins");
         reset_database();
-        update_height(block_height - 1, rescan);
+        update_height(block_height - 1);
     }
 
     if (block_height != height + 1) {
@@ -926,7 +914,7 @@ bool BlockchainSQLite::add_block(
         if (!validate_batch_payment(miner_tx_vouts, calculated_rewards, block_height, rescan))
             return false;
         reward_handler(block, service_nodes_state, block_add, get_delayed_payments(block_height));
-        update_height(height + 1, rescan);
+        update_height(height + 1);
         if (transaction)
             transaction->commit();
         else {  // rescanning
