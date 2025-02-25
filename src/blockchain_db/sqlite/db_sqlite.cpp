@@ -449,38 +449,53 @@ void BlockchainSQLite::blockchain_detached(
         PaymentTableType history, uint64_t new_height, uint64_t target_height) {
     const auto& netconf = get_config(m_nettype);
 
-    // NOTE: Execute detach
     std::string detach_label = "";
     int rows_restored = 0;
-    int rows_removed = batch_payments_accrued_row_count(PaymentTableType::Nil, std::nullopt);
-    switch (history) {
-        case PaymentTableType::Nil: {
-            reset_database();
-            detach_label = " (via reset)";
-        } break;
+    int rows_removed = 0;
+    if (new_height == height) {
+        detach_label = " (DB is already at requested height)";
+    } else {
+        // NOTE: Execute detach
+        rows_removed = batch_payments_accrued_row_count(PaymentTableType::Nil, std::nullopt);
+        switch (history) {
+            case PaymentTableType::Nil: {
+                reset_database();
+                detach_label = " (via reset)";
+            } break;
 
-        default: {
-            std::string batched_payments_history_table = "batched_payments_accrued_{}"_format(
-                    history == PaymentTableType::Archive ? "archive" : "recent");
-            rows_restored = batch_payments_accrued_row_count(history, new_height);
+            default: {
+                std::string batched_payments_history_table = "batched_payments_accrued_{}"_format(
+                        history == PaymentTableType::Archive ? "archive" : "recent");
+                rows_restored = batch_payments_accrued_row_count(history, new_height);
 
-            db.exec(R"(DELETE FROM batched_payments_accrued;
-                       INSERT INTO batched_payments_accrued
-                       SELECT address, amount, payout_offset
-                       FROM {1} WHERE height = {0};
-              )"_format(new_height, batched_payments_history_table));
+                db.exec(R"(DELETE FROM batched_payments_accrued;
+                           INSERT INTO batched_payments_accrued
+                           SELECT address, amount, payout_offset
+                           FROM {1} WHERE height = {0};
+                  )"_format(new_height, batched_payments_history_table));
 
-            std::string delayed_payments_history_table = "delayed_payments_{}"_format(
-                    history == PaymentTableType::Archive ? "archive" : "recent");
-            db.exec(R"(DELETE FROM delayed_payments;
-                       INSERT INTO delayed_payments
-                       SELECT *
-                       FROM {1} WHERE {0} >= height AND {0} <= payout_height;
-              )"_format(new_height, delayed_payments_history_table));
-        } break;
+                std::string delayed_payments_history_table = "delayed_payments_{}"_format(
+                        history == PaymentTableType::Archive ? "archive" : "recent");
+                db.exec(R"(DELETE FROM delayed_payments;
+                           INSERT INTO delayed_payments
+                           SELECT *
+                           FROM {1} WHERE {0} >= height AND {0} <= payout_height;
+                  )"_format(new_height, delayed_payments_history_table));
+            } break;
+        }
     }
 
     update_height(new_height);
+
+    if (height + 5000 < target_height) {
+        log::debug(logcat, "large rescan starting");
+        rescan_target = target_height;
+        rescan_start();
+    } else {
+        log::debug(
+                logcat, "not large rescan, height = {}, target_height = {}", height, target_height);
+    }
+
     log::debug(
             logcat,
             "Detach request for SQL @ {} executed to {}{} (-{} rows deleted, +{} restored)",
@@ -489,14 +504,6 @@ void BlockchainSQLite::blockchain_detached(
             detach_label,
             rows_removed,
             rows_restored);
-
-    if (height + 5000 < target_height) {
-        log::debug(logcat, "large rescan starting");
-        rescan_target = target_height;
-        rescan_start();
-    } else
-        log::debug(
-                logcat, "not large rescan, height = {}, target_height = {}", height, target_height);
 }
 
 const std::string& BlockchainSQLite::get_address_str(const cryptonote::batch_sn_payment& addr) {
