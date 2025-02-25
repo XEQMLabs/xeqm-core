@@ -4958,13 +4958,17 @@ bool service_node_list::store(uint64_t state_height) {
     tools::threadpool::waiter tpool_waiter = {};
 
     // NOTE: Serialize archive
+    int long_term_size = 0;
+    std::atomic<int> long_term_count = 0;
     if (m_transient->long_term_data_dirty) {
         size_t archive_index = 0;
+        long_term_size = m_transient->state_archive.size();
         for (auto& it : m_transient->state_archive) {
             std::string& dest = archive_blob_list[archive_index++];
-            tpool.submit(&tpool_waiter, [&dest, &it]() {
+            tpool.submit(&tpool_waiter, [&dest, &it, &long_term_count]() {
                 serialization::binary_string_archiver ba;
                 dest = serialize_snl_directly(ba, const_cast<state_t&>(it));
+                long_term_count++;
             });
         }
     }
@@ -4987,11 +4991,40 @@ bool service_node_list::store(uint64_t state_height) {
             curr = serialize_snl_directly(ba, m_state);
         });
     }
+
+    bool reporting_long_term = false;
     tpool.run(true);
     while (!tpool_waiter.wait_for(10s)) {
+        if (long_term_size > 0) {
+            int done = long_term_count.load();
+            if (done < long_term_size) {
+                // We are >=10s in and aren't done with long term states, so start (or continue)
+                // logging updates about it:
+                reporting_long_term = true;
+                log::info(
+                        globallogcat,
+                        "Serializing long-term SN state archive data ({}/{})",
+                        done,
+                        long_term_size);
+            } else if (reporting_long_term) {
+                // We're still waiting on something else, but we're done with the long-term
+                // data:
+                log::info(
+                        globallogcat,
+                        "Finished serializing {} long-term SN state archives",
+                        long_term_size);
+                reporting_long_term = false;
+            }
+        }
         log::debug(logcat, "SNL store, waiting on serialization");
         blockchain.extend_watchdog_timeout(state_height);
     }
+    // Print the final one if we started printing but didn't finish in the wait loop above
+    if (reporting_long_term)
+        log::info(
+                globallogcat,
+                "Finished serializing {} long-term SN state archives",
+                long_term_size);
 
     // NOTE: Store blobs to DB
     {
