@@ -29,10 +29,10 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/version.hpp>
-#include <boost/asio/executor_work_guard.hpp>
 
 // Workaround for boost::serialization issue #219
 #include <boost/version.hpp>
