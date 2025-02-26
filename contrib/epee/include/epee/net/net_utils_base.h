@@ -47,11 +47,9 @@
 #define MAKE_IP( a1, a2, a3, a4 )	(a1|(a2<<8)|(a3<<16)|(((uint32_t)a4)<<24))
 #endif
 
-#if BOOST_VERSION >= 108700
 namespace boost::asio {
   typedef io_context io_service;
 }
-#endif
 
 #if BOOST_VERSION >= 107000
 #define GET_IO_SERVICE(s) ((boost::asio::io_context&)(s).get_executor().context())

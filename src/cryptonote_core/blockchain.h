@@ -40,11 +40,9 @@
 #include <boost/serialization/library_version_type.hpp>
 #endif
 
-#if BOOST_VERSION >= 108700
 namespace boost::asio {
   typedef io_context io_service;
 }
-#endif
 
 #include <atomic>
 #include <boost/multi_index/global_fun.hpp>
