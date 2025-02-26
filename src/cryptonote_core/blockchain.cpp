@@ -6112,7 +6112,8 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync) {
             if (m_db_sync_mode == db_async) {
                 m_sync_counter = 0;
                 m_bytes_to_sync = 0;
-                m_async_service.get_executor().dispatch([this] { return store_blockchain(); }, std::allocator<void>{});
+                m_async_service.get_executor().dispatch(
+                        [this] { return store_blockchain(); }, std::allocator<void>{});
             } else if (m_db_sync_mode == db_sync) {
                 store_blockchain();
             } else  // db_nosync
