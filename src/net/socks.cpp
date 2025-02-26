@@ -290,12 +290,14 @@ bool client::send(std::shared_ptr<client> self) {
 void client::async_close::operator()(boost::system::error_code error) {
     if (self_ && error != boost::system::errc::operation_canceled) {
         const std::shared_ptr<client> self = std::move(self_);
-        self->strand_.dispatch([self]() {
-            if (self && self->proxy_.is_open()) {
-                self->proxy_.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-                self->proxy_.close();
-            }
-        }, std::allocator<void>{});
+        self->strand_.dispatch(
+                [self]() {
+                    if (self && self->proxy_.is_open()) {
+                        self->proxy_.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+                        self->proxy_.close();
+                    }
+                },
+                std::allocator<void>{});
     }
 }
 }  // namespace net::socks

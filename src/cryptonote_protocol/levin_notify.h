@@ -38,7 +38,7 @@
 #include "epee/span.h"
 
 namespace boost::asio {
-  typedef io_context io_service;
+typedef io_context io_service;
 }
 
 namespace epee::levin {
