@@ -41,11 +41,9 @@
 #include "epee/span.h"
 #include "net/fwd.h"
 
-#if BOOST_VERSION >= 108700
 namespace boost::asio {
 typedef io_context io_service;
 }
-#endif
 
 namespace epee::net_utils {
 class ipv4_network_address;
