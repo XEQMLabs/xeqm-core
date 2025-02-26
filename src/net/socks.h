@@ -28,7 +28,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/system/error_code.hpp>
@@ -40,6 +40,12 @@
 
 #include "epee/span.h"
 #include "net/fwd.h"
+
+#if BOOST_VERSION >= 108700
+namespace boost::asio {
+typedef io_context io_service;
+}
+#endif
 
 namespace epee::net_utils {
 class ipv4_network_address;

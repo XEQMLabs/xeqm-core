@@ -28,7 +28,7 @@
 
 #pragma once
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <memory>
 #include <vector>
 
@@ -36,6 +36,12 @@
 #include "epee/net/net_utils_base.h"
 #include "epee/shared_sv.h"
 #include "epee/span.h"
+
+#if BOOST_VERSION >= 108700
+namespace boost::asio {
+  typedef io_context io_service;
+}
+#endif
 
 namespace epee::levin {
 template <typename>

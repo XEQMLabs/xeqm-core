@@ -33,7 +33,7 @@
 
 #include <array>
 #include <atomic>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -63,6 +63,12 @@
 
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
+
+#if BOOST_VERSION >= 108700
+namespace boost::asio {
+  typedef io_context io_service;
+}
+#endif
 
 namespace nodetool {
 struct proxy {
