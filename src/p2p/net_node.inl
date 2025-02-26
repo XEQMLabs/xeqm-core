@@ -547,20 +547,19 @@ inline bool append_net_address(
 
     io_service io_srv;
     ip::tcp::resolver resolver(io_srv);
-    ip::tcp::resolver::query query(
-            host, port, boost::asio::ip::tcp::resolver::query::canonical_name);
     boost::system::error_code ec;
-    ip::tcp::resolver::iterator i = resolver.resolve(query, ec);
+    ip::tcp::resolver::results_type result = resolver.resolve(host, port, boost::asio::ip::tcp::resolver::canonical_name, ec);
     CHECK_AND_ASSERT_MES(
             !ec, false, "Failed to resolve host name '{}': {}:{}", host, ec.message(), ec.value());
 
-    ip::tcp::resolver::iterator iend;
+    auto i = result.begin();
+    auto iend = result.end();
     for (; i != iend; ++i) {
         ip::tcp::endpoint endpoint = *i;
         if (endpoint.address().is_v4()) {
             epee::net_utils::network_address na{epee::net_utils::ipv4_network_address{
                     boost::asio::detail::socket_ops::host_to_network_long(
-                            endpoint.address().to_v4().to_ulong()),
+                            endpoint.address().to_v4().to_uint()),
                     endpoint.port()}};
             seed_nodes.push_back(na);
             log::info(logcat, "Added node: {}", na.str());
