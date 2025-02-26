@@ -643,15 +643,24 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
     for (const auto& pair : accrued_pairs) {
         const auto& address = pair.first;
         const auto& amount = pair.second;
+        const uint64_t truncated_db_amount =
+                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR; // truncate to atomic OXEN
+
         if (pre_hf21_final_payout) {
             log::debug(logcat, "address {} has amount {}", address, amount);
-            if (sent_addr_map.contains(std::string{address}))
+            if (sent_addr_map.contains(std::string{address})) // Registered for transition
                 continue;
-            log::debug(logcat, "pre_hf21_final_payout, paying out address {}", address);
+
+            if (truncated_db_amount > 0) {
+                log::debug(logcat, "pre_hf21_final_payout, paying out {}", address);
+            } else {
+                log::debug(logcat, "pre_hf21_final_payout, skipping {} (truncated to 0)", address);
+                continue;  // Insufficient OXEN to payout
+            }
         }
+
         auto& p = payments.emplace_back();
-        p.amount = reward_money::db_amount(
-                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR); /* truncate to atomic OXEN */
+        p.amount = reward_money::db_amount(truncated_db_amount);
         [[maybe_unused]] bool addr_ok =
                 cryptonote::get_account_address_from_str(p.address_info, m_nettype, address);
         assert(addr_ok);
