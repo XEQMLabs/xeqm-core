@@ -320,7 +320,7 @@ namespace net_utils
     template<class t_handler>
     bool async_call(t_handler t_callback)
     {
-      boost::asio::post(io_service_, std::move(t_callback), std::allocator<void>{});
+      boost::asio::post(io_service_, std::move(t_callback));
       return true;
     }
 
