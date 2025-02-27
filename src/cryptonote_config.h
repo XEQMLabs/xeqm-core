@@ -46,12 +46,12 @@ namespace cryptonote {
 inline constexpr uint64_t MAX_BLOCK_NUMBER = 500000000;
 inline constexpr size_t MAX_TX_SIZE = 1000000;
 inline constexpr uint64_t MAX_TX_PER_BLOCK = 0x10000000;
-inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 30;
-inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 10;
-inline constexpr uint64_t TX_OUTPUT_DECOYS = 9;
+inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 20;
+inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 6;
+inline constexpr uint64_t TX_OUTPUT_DECOYS = 11;
 inline constexpr size_t TX_BULLETPROOF_MAX_OUTPUTS = 16;
 
-inline constexpr uint64_t DEFAULT_DUST_THRESHOLD = 2'000'000'000;  // 2 * pow(10, 9)
+inline constexpr uint64_t DEFAULT_DUST_THRESHOLD = 1'000'000'000;  // 2 * pow(10, 9)
 
 inline constexpr uint64_t BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW = 11;
 
@@ -63,15 +63,15 @@ inline constexpr uint64_t BLOCK_GRANTED_FULL_REWARD_ZONE_V1 = 20000;
 // second change, from v5
 inline constexpr uint64_t BLOCK_GRANTED_FULL_REWARD_ZONE_V5 = 300000;
 // size in blocks of the long term block weight median window
-inline constexpr uint64_t LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE = 100000;
+inline constexpr uint64_t LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE = 50000;
 inline constexpr uint64_t SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR = 50;
 inline constexpr uint64_t COINBASE_BLOB_RESERVED_SIZE = 600;
 
 inline constexpr uint64_t LOCKED_TX_ALLOWED_DELTA_BLOCKS = 1;
 
-inline constexpr auto MEMPOOL_TX_LIVETIME = 3 * 24h;
-inline constexpr auto MEMPOOL_TX_FROM_ALT_BLOCK_LIVETIME = 7 * 24h;
-inline constexpr auto MEMPOOL_PRUNE_NON_STANDARD_TX_LIFETIME = 2h;
+inline constexpr auto MEMPOOL_TX_LIVETIME = 24h;
+inline constexpr auto MEMPOOL_TX_FROM_ALT_BLOCK_LIVETIME = 48h;
+inline constexpr auto MEMPOOL_PRUNE_NON_STANDARD_TX_LIFETIME = 1h;
 // 3 days worth of full 300kB blocks:
 inline constexpr size_t DEFAULT_MEMPOOL_MAX_WEIGHT = 72h / 2min * 300'000;
 
