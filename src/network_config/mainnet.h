@@ -6,12 +6,12 @@
 using namespace std::literals;
 namespace cryptonote::config::mainnet {
 
-inline constexpr auto TARGET_BLOCK_TIME = 2min;
+inline constexpr auto TARGET_BLOCK_TIME = 1min;
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::MAINNET,
         .DEFAULT_CONFIG_SUBDIR = ""sv,
         .HEIGHT_ESTIMATE_HEIGHT = 582088,
-        .HEIGHT_ESTIMATE_TIMESTAMP = 1595359932,
+        .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
         .PUBLIC_ADDRESS_BASE58_PREFIX = 114,
         .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 115,
         .PUBLIC_SUBADDRESS_BASE58_PREFIX = 116,
@@ -19,28 +19,13 @@ inline constexpr network_config config{
         .RPC_DEFAULT_PORT = 22023,
         .QNET_DEFAULT_PORT = 22025,
         .NETWORK_ID =
-                {{0x46,
-                  0x61,
-                  0x72,
-                  0x62,
-                  0x61,
-                  0x75,
-                  0x74,
-                  0x69,
-                  0x2a,
-                  0x4c,
-                  0x61,
-                  0x75,
-                  0x66,
-                  0x65,
-                  0x79}},
+                {{0x45, 0x51, 0x55, 0x49, 0x4c, 0x49, 0x42, 0x52,  // "EQUILIBR"
+                       0x49, 0x41, 0x4e, 0x45, 0x54, 0x57, 0x4f, 0x52}},
         .GENESIS_TX =
-                "021e01ff000380808d93f5d771027c4fd4553bc9886f1f49e3f76d945bf71e8632a94e6c177b19cbc7"
-                "80e7e6bdb48080b4ccd4dfc60302c8b9f6461f58ef3f2107e577c7425d06af584a1c7482bf19060e84"
-                "059c98b4c3808088fccdbcc32302732b53b0b0db706fcc3087074fb4b786da5ab72b2065699f945344"
-                "8b0db27f892101ed71f2ce3fc70d7b2036f8a4e4b3fb75c66c12184b55a908e7d1a1d6995566cf00"sv,
-        .GENESIS_NONCE = 1022201,
-        .GOVERNANCE_REWARD_INTERVAL = 7 * 24h,
+                "020102ff000180808081b1d4808081b1d4808081b1d4c0c7c2869a37e1c1c3c6c2869a37e1c1c3c6c2869a37e1"
+                "c1c3b8e4a1cec6b7a2b9486d361c5c8f25f4c3c6b7a2b9486d361c5c8f25f4c3c6b7a2b9486d361c5c8f25f4"sv,
+        .GENESIS_NONCE = 10000,
+        .GOVERNANCE_REWARD_INTERVAL = 24h,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
                         "LCFxT37LAogDn1jLQKf4y7aAqfi21DjovX9qyijaLYQSdrxY1U5VGcnMJMjWrD9RhjeK5Lym67"
@@ -56,11 +41,11 @@ inline constexpr network_config config{
         .HAVE_STORAGE_AND_LOKINET = true,
         .TARGET_BLOCK_TIME = TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = 10s,
-        .PULSE_ROUND_TIMEOUT = 1min,
-        .PULSE_MAX_START_ADJUSTMENT = 30s,
-        .PULSE_MIN_SERVICE_NODES = 50,
-        .BATCHING_INTERVAL = 2520,
-        .MIN_BATCH_PAYMENT_AMOUNT = 1'000'000'000,  // 1 OXEN (in atomic units)
+        .PULSE_ROUND_TIMEOUT = 30s,
+        .PULSE_MAX_START_ADJUSTMENT = 15s,
+        .PULSE_MIN_SERVICE_NODES = 25,
+        .BATCHING_INTERVAL = 1440,
+        .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,  // 1 OXEN (in atomic units)
         .LIMIT_BATCH_OUTPUTS = 15,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 720,
         .DEREGISTRATION_LOCK_DURATION = 30 * 24h,
