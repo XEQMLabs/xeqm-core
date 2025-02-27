@@ -67,7 +67,6 @@ target_link_libraries(common
     cncrypto
     oxenmq::oxenmq
     oxen::logging
-    fmt::fmt
     nlohmann_json::nlohmann_json
     Boost::program_options
   PRIVATE
