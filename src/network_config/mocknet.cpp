@@ -16,6 +16,7 @@
 #include "cryptonote_core/service_node_rules.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "logging/oxen_logger.h"
+#include "sent_transition/sent_transition.h"
 
 static auto logcat = oxen::log::Cat("mocknet");
 
@@ -43,6 +44,9 @@ struct mocknet_global_data {
     bool fork_enabled;
     uint64_t fork_at_height;  // The height to fork at from the current chain
     bool protocol_is_disabled;
+    oxen::sent::addrmap_t transition_addr_map;
+    oxen::sent::bonus_map_t transition_bonus_map;
+    oxen::sent::bls_keys_t transition_bls_keys;
 };
 static mocknet_global_data globals;
 
@@ -325,8 +329,9 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     const crypto::public_key& block_leader =
             core.blockchain.service_node_list.get_next_block_leader().key;
 
+    cryptonote::network_type net = core.get_nettype();
     service_nodes::quorum quorum = service_nodes::generate_pulse_quorum(
-            core.blockchain.nettype(),
+            net,
             block_leader,
             core.blockchain.get_network_version(),
             core.blockchain.service_node_list.active_service_nodes_infos(),
@@ -422,5 +427,40 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     cryptonote::block_verification_context bvc = {};
     bool core_handled_block = core.handle_block_found(block, bvc);
     assert(core_handled_block);
+
+    // NOTE: Generate SESH transition data if needed
+    auto hf20_begins =
+            cryptonote::hard_fork_begins(net, cryptonote::hf::hf20_eth_transition).value_or(0);
+    if (block.get_height() == hf20_begins) {
+        std::vector<service_nodes::service_node_pubkey_info> snl_list = core.service_node_list.get_service_node_list_state();
+
+        oxen::log::info(
+                globallogcat,
+                fg(fmt::terminal_color::yellow) | fmt::emphasis::bold,
+                "mocknet generating mock transition data to the sesh network");
+
+        // NOTE: Assume all the SN's have submitted their BLS key by mocking it in
+        uint64_t next_bls_key = 0;
+        for (auto it : snl_list) {
+            std::shared_ptr<const service_nodes::service_node_info> sn_info = it.info;
+            crypto::ed25519_public_key ed_key = {};
+            std::memcpy(ed_key.data(), &it.pubkey, sizeof(it.pubkey));
+
+            eth::bls_public_key bls_key = {};
+            std::memcpy(bls_key.data(), &next_bls_key, sizeof(next_bls_key));
+            next_bls_key++;
+            globals.transition_bls_keys[ed_key] = bls_key;
+        }
+
+        // NOTE: Construct the addresses and the shares of the bonus tokens here!
+    }
+}
+
+void mocknet_get_transition_context(oxen::sent::transition_context& context)
+{
+    context.conv_ratio = {120, 1}; // X OXEN per Y SESH
+    context.addresses = &globals.transition_addr_map;
+    context.bls_keys = &globals.transition_bls_keys;
+    context.transition_bonus = &globals.transition_bonus_map;
 }
 #endif

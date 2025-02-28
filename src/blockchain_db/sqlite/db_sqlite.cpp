@@ -639,7 +639,8 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
     std::vector<cryptonote::batch_sn_payment> payments;
 
-    const auto& sent_addr_map = oxen::sent::addresses(m_nettype);
+    const auto& sent_addr_map =
+            *oxen::sent::get_transition_context(m_nettype, block_height).addresses;
     for (const auto& pair : accrued_pairs) {
         const auto& address = pair.first;
         const auto& amount = pair.second;
