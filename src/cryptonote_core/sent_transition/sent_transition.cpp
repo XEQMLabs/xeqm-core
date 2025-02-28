@@ -15,21 +15,7 @@ namespace oxen::sent {
 
 inline auto logcat = oxen::log::Cat("sent_transition");
 
-constexpr uint64_t BONUS_TOKENS = 30'000'000ULL * 1e9;
-
-struct transition_context {
-    addrmap_t addresses;
-    proper_ed_keys_t proper_ed_keys;
-    bls_keys_t bls_keys;
-    conv_ratio_t conv_ratio;
-    bonus_map_t transition_bonus;
-    uint64_t staking_requirement;
-    std::pair<uint32_t, uint32_t> staking_ratio;
-    uint64_t oxen_staking_requirement;
-};
-
-static transition_context get_transition_context(network_type net, service_nodes::service_node_list::state_t& snl_state)
-{
+transition_context get_transition_context(network_type net, uint64_t top_block_height) {
     transition_context result = {};
     if (net == cryptonote::network_type::MAINNET) {
         result.staking_requirement = SENT_STAKING_REQUIREMENT;
@@ -43,19 +29,19 @@ static transition_context get_transition_context(network_type net, service_nodes
 
     switch (net) {
         case network_type::TESTNET:
-            result.addresses = testnet::addresses;
-            result.proper_ed_keys = testnet::proper_ed_keys;
-            result.bls_keys = testnet::bls_keys;
+            result.addresses = &testnet::addresses;
+            result.proper_ed_keys = &testnet::proper_ed_keys;
+            result.bls_keys = &testnet::bls_keys;
             result.conv_ratio = testnet::conv_ratio;
-            result.transition_bonus = testnet::transition_bonus;
+            result.transition_bonus = &testnet::transition_bonus;
             break;
 
         case network_type::DEVNET:
-            result.addresses = devnet::addresses;
-            result.proper_ed_keys = devnet::proper_ed_keys;
-            result.bls_keys = devnet::bls_keys;
+            result.addresses = &devnet::addresses;
+            result.proper_ed_keys = &devnet::proper_ed_keys;
+            result.bls_keys = &devnet::bls_keys;
             result.conv_ratio = devnet::conv_ratio;
-            result.transition_bonus = devnet::transition_bonus;
+            result.transition_bonus = &devnet::transition_bonus;
             break;
 
         case network_type::STAGENET:  /*FALLTHRU*/
@@ -63,42 +49,16 @@ static transition_context get_transition_context(network_type net, service_nodes
         case network_type::FAKECHAIN: /*FALLTHRU*/
         case network_type::UNDEFINED: /*FALLTHRU*/
         case network_type::MAINNET:
-            result.addresses = mainnet::addresses;
-            result.proper_ed_keys = mainnet::proper_ed_keys;
-            result.bls_keys = mainnet::bls_keys;
+            result.addresses = &mainnet::addresses;
+            result.proper_ed_keys = &mainnet::proper_ed_keys;
+            result.bls_keys = &mainnet::bls_keys;
             result.conv_ratio = mainnet::conv_ratio;
-            result.transition_bonus = mainnet::transition_bonus;
+            result.transition_bonus = &mainnet::transition_bonus;
             break;
     }
 
-    if (mocknet_is_forking(snl_state.height) || mocknet_has_forked(snl_state.height)) {
-        oxen::log::info(
-                globallogcat,
-                fg(fmt::terminal_color::yellow) | fmt::emphasis::bold,
-                "Mocknet generating mock transition data to the SESH network");
-
-        result.addresses.clear();
-        result.proper_ed_keys.clear();
-        result.bls_keys.clear();
-
-        uint64_t next_eth_addr = 0;
-        uint64_t next_bls_key = 0;
-        result.conv_ratio = {120, 1};  // X Oxen per Y SESH
-
-        for (auto it : snl_state.service_nodes_infos) {
-            // NOTE: Mock the Ed -> BLS key mapping
-            std::shared_ptr<const service_nodes::service_node_info> sn_info = it.second;
-            crypto::ed25519_public_key ed_key = {};
-            std::memcpy(ed_key.data(), &it.first, sizeof(it.first));
-
-            eth::bls_public_key bls_key = {};
-            std::memcpy(bls_key.data(), &next_bls_key, sizeof(next_bls_key));
-            next_bls_key++;
-
-            result.bls_keys[ed_key] = bls_key;
-        }
-    }
-
+    if (mocknet_is_forking(top_block_height) || mocknet_has_forked(top_block_height))
+        mocknet_get_transition_context(result);
     return result;
 }
 
@@ -118,6 +78,7 @@ struct node_transition {
 };
 
 static void dump_transition_outcome_csv(
+        uint64_t height,
         const transition_context& context,
         std::span<node_transition> node_list,
         const std::unordered_map<eth::address, uint64_t>& final_allocation_before_distrib,
@@ -125,23 +86,57 @@ static void dump_transition_outcome_csv(
 {
     uint64_t now = time(nullptr);
     oxen::log::debug(logcat, "Writing SESH->ETH allocation to disk");
+    uint64_t total_bonus_tokens = 0;
     {
         auto file = fmt::output_file("{:%Y%m%d_%H%M%S}_sesh_eth_addr_allocation.csv"_format(fmt::localtime(now)));
+        file.print("height,{}\n", height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
-        file.print("eth_addr,bonus_tokens,locked_tokens,unlocked_tokens,total_tokens\n");
-        size_t index = 0;
+        // NOTE: Find the amount of bonus tokens allocated to the address
+        {
+            for (auto it : *context.transition_bonus)
+                total_bonus_tokens += it.second;
+            file.print("total_bonus_tokens,{}\n", cryptonote::print_money(total_bonus_tokens));
+        }
+
+        // NOTE: Enumerate the amount of locked tokens
+        {
+            uint64_t total_locked_tokens = 0;
+            for (auto node_it : node_list) {
+                for (auto contrib_it : node_it.sn_info->contributors)
+                    total_locked_tokens += contrib_it.amount;
+            }
+            file.print("total_locked_tokens,{}\n", cryptonote::print_money(total_locked_tokens));
+        }
+
+        // NOTE: Enumerate the amount of locked tokens
+        {
+            uint64_t total_unlocked_tokens = 0;
+            for (auto it : final_unlocked_tokens) {
+                total_unlocked_tokens += it.second;
+            }
+            file.print(
+                    "total_unlocked_tokens,{}\n", cryptonote::print_money(total_unlocked_tokens));
+        }
+
+        // NOTE: Calculate the amount of tokens generated
+        {
+            uint64_t total_tokens_generated = 0;
+            for (auto it : final_allocation_before_distrib)
+                total_tokens_generated += it.second;
+            file.print(
+                    "total_tokens_generated,{}\n", cryptonote::print_money(total_tokens_generated));
+        }
 
         // NOTE: Sort the final token allocations, highest to lowest
         struct sesh_alloc_pair {
             eth::address addr;
             uint64_t amount;
         };
-
         std::vector<sesh_alloc_pair> sorted;
         sorted.reserve(final_allocation_before_distrib.size());
-        for (auto it : final_allocation_before_distrib)
+        for (auto it : final_allocation_before_distrib) {
             sorted.emplace_back(it.first, it.second);
-
+        }
         std::sort(
                 sorted.begin(),
                 sorted.end(),
@@ -150,15 +145,22 @@ static void dump_transition_outcome_csv(
                     return result;
                 });
 
+        file.print(
+                "conversion_ratio,{} OXEN/{} SESH\n",
+                cryptonote::print_money(context.conv_ratio.first),
+                cryptonote::print_money(context.conv_ratio.second));
+
         // NOTE: Print out the allocation for each address
+        file.print("eth_addr,bonus_tokens,locked_tokens,unlocked_tokens,total_tokens\n");
+        size_t index = 0;
         for (auto sorted_it : sorted) {
 
             // NOTE: Find the amount of bonus tokens allocated to the address
             uint64_t bonus_tokens = 0;
-            auto bonus_it = context.transition_bonus.find(sorted_it.addr);
-            if (bonus_it != context.transition_bonus.end())
+            auto bonus_it = context.transition_bonus->find(sorted_it.addr);
+            if (bonus_it != context.transition_bonus->end()) {
                 bonus_tokens = bonus_it->second;
-
+            }
 
             // NOTE: Enumerate the amount of tokens locked in a session node
             uint64_t locked_tokens = 0;
@@ -189,19 +191,33 @@ static void dump_transition_outcome_csv(
 
     oxen::log::debug(logcat, "Writing SN SESH transition outcome to disk");
     {
-        // NOTE: Count how many nodes successfully transitioned
+        // NOTE: Count some stats
         size_t transitioned_node_count = 0;
+        size_t missing_ed25519_key = 0;
+        size_t missing_bls_key = 0;
+        size_t partially_funded = 0;
+        size_t contributor_not_registered_for_swap = 0;
+        size_t insufficient_sesh = 0;
         for (auto it : node_list) {
             bool transitioned = it.tokens_allocated >= context.staking_requirement;
             if (transitioned)
                 transitioned_node_count++;
+            if (it.missing_ed25519_key)
+                missing_ed25519_key++;
+            if (it.missing_bls_key)
+                missing_bls_key++;
+            if (it.partially_funded)
+                partially_funded++;
+            if (it.contributor_not_registered_for_swap)
+                contributor_not_registered_for_swap++;
+            if (it.insufficient_sesh)
+                insufficient_sesh++;
         }
 
         const float transition_pct =
                 transitioned_node_count / static_cast<float>(node_list.size()) * 100.f;
 
         // NOTE: Generate file
-
         const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
         auto file = fmt::output_file(
                 "{:%Y%m%d_%H%M%S}_sesh_transition_outcome_staking_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
@@ -212,21 +228,25 @@ static void dump_transition_outcome_csv(
                         int(transition_pct)));
 
         // NOTE: CSV metadata
+        file.print("height,{}\n", height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
-        file.print("bonus_sesh,{}\n", cryptonote::print_money(BONUS_TOKENS));
+        file.print("total_bonus_tokens,{}\n", cryptonote::print_money(total_bonus_tokens));
         file.print(
                 "staking_requirement,{}\n", cryptonote::print_money(context.staking_requirement));
         file.print(
                 "conversion_ratio,{} OXEN/{} SESH\n",
                 cryptonote::print_money(context.conv_ratio.first),
                 cryptonote::print_money(context.conv_ratio.second));
-
-        // NOTE: Print number of nodes that transitioned
         file.print(
                 "transition,{}/{} ({:.2f}%)\n",
                 transitioned_node_count,
                 node_list.size(),
                 transition_pct);
+        file.print("missing_ed25519_key_count,{}\n", missing_ed25519_key);
+        file.print("missing_bls_key_count,{}\n", missing_bls_key);
+        file.print("partially_funded,{}\n", partially_funded);
+        file.print("contributor_not_registered_for_swap,{}\n", contributor_not_registered_for_swap);
+        file.print("insufficient_sesh,{}\n", insufficient_sesh);
 
         // NOTE: Sort the node list
         std::vector<node_transition*> sorted_node_list;
@@ -276,7 +296,7 @@ void transition(
         cryptonote::BlockchainSQLite& sql,
         network_type net) {
 
-    transition_context context = get_transition_context(net, snl_state);
+    transition_context context = get_transition_context(net, snl_state.height);
 
     auto address_info_from_str = [](network_type network, const std::string& addr) {
         cryptonote::address_parse_info api;
@@ -290,7 +310,7 @@ void transition(
     };
     const auto& conv_ratio = context.conv_ratio;
 
-    const auto& unparsed_sent_addrs = context.addresses;
+    const auto& unparsed_sent_addrs = *context.addresses;
     log::debug(logcat, "oxen -> sent addr map size: {}", unparsed_sent_addrs.size());
     std::unordered_map<cryptonote::account_public_address, eth::address> sent_addrs;
     for (const auto& [o, s] : unparsed_sent_addrs) {
@@ -298,8 +318,8 @@ void transition(
         sent_addrs[parsed_addr_info.address] = s;
     }
 
-    const auto& remap_ed_keys = context.proper_ed_keys;
-    const auto& node_bls_keys = context.bls_keys;
+    const auto& remap_ed_keys = *context.proper_ed_keys;
+    const auto& node_bls_keys = *context.bls_keys;
 
     auto oxen_to_sent = [&conv_ratio](uint64_t oxen) {
         return oxen * conv_ratio.first / conv_ratio.second;
@@ -309,7 +329,7 @@ void transition(
     // SN bonus, then we'll add converted amounts for any batched rewards, then convert existing
     // stakes.  Then, once we know each address's total, we'll go back and try to re-fill as many
     // SNs as we can from the unallocated amounts.
-    std::unordered_map<eth::address, uint64_t> unallocated = context.transition_bonus;
+    std::unordered_map<eth::address, uint64_t> unallocated = *context.transition_bonus;
     for (const auto& [eth, amount] : unallocated) {
         log::debug(logcat, "transition bonuses:");
         log::debug(logcat, "\tSENT {} has {}", eth, amount);
@@ -659,7 +679,12 @@ void transition(
         throw std::runtime_error{"post-transition should have same number of service_node_infos!"};
 
     if (mocknet_is_forking(snl_state.height) || mocknet_has_forked(snl_state.height))
-        dump_transition_outcome_csv(context, post_transition_sns, final_allocation_before_distrib, unallocated);
+        dump_transition_outcome_csv(
+                snl_state.height,
+                context,
+                post_transition_sns,
+                final_allocation_before_distrib,
+                unallocated);
 
     snl_state.service_nodes_infos.clear();
     for (auto& it : post_transition_sns)
