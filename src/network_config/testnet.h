@@ -6,8 +6,8 @@ namespace cryptonote::config::testnet {
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::TESTNET,
         .DEFAULT_CONFIG_SUBDIR = "testnet"sv,
-        .HEIGHT_ESTIMATE_HEIGHT = 339767,
-        .HEIGHT_ESTIMATE_TIMESTAMP = 1595360006,
+        .HEIGHT_ESTIMATE_HEIGHT = 0,  // Reset for new chain
+        .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
         .PUBLIC_ADDRESS_BASE58_PREFIX = 156,
         .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 157,
         .PUBLIC_SUBADDRESS_BASE58_PREFIX = 158,
@@ -15,22 +15,10 @@ inline constexpr network_config config{
         .RPC_DEFAULT_PORT = 38157,
         .QNET_DEFAULT_PORT = 38159,
         .NETWORK_ID = {{
-                0x22,
-                0x3a,
-                0x78,
-                0x65,
-                0xe1,
-                0x6f,
-                0xca,
-                0xb8,
-                0x02,
-                0xa1,
-                0xdc,
-                0x17,
-                0x61,
-                0x64,
-                0x15,
-                0xbe,
+                0x54, 0x45, 0x53, 0x54, // "TEST"
+                0x45, 0x51, 0x55, 0x49, // "EQUI"
+                0x4c, 0x49, 0x42, 0x52, // "LIBR"
+                0x49, 0x41, 0x4e, 0x54, // "IANT"
         }},
         .GENESIS_TX =
                 "04011e1e01ff00018080c9db97f4fb2702fa27e905f604faa4eb084ee675faca77b0cfea9adec152"
@@ -81,5 +69,11 @@ inline constexpr network_config config{
         .L2_NODE_LIST_PURGE_BLOCKS = mainnet::config.L2_NODE_LIST_PURGE_BLOCKS / 2,
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = mainnet::config.L2_NODE_LIST_PURGE_MIN_OXEN_AGE,
         .DEFAULT_STAKING_URL = ""sv,
+};
+
+inline constexpr std::array<const char*, 3> SEED_NODES = {
+    "testnet-seed1.equilibria.network:38156",
+    "testnet-seed2.equilibria.network:38156",
+    "testnet-seed3.equilibria.network:38156"
 };
 }  // namespace cryptonote::config::testnet

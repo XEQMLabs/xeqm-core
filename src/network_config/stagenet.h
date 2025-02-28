@@ -6,9 +6,9 @@
 namespace cryptonote::config::stagenet {
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::STAGENET,
-        .DEFAULT_CONFIG_SUBDIR = "stagenet4"sv,
+        .DEFAULT_CONFIG_SUBDIR = "stagenet"sv,
         .HEIGHT_ESTIMATE_HEIGHT = 0,
-        .HEIGHT_ESTIMATE_TIMESTAMP = 1720140000,
+        .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
         .PUBLIC_ADDRESS_BASE58_PREFIX = 4888,             // ~ ST2 .. ST4
         .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 5272,  // ~ ST9 .. STB
         .PUBLIC_SUBADDRESS_BASE58_PREFIX = 5656,          // ~ STF .. STJ
@@ -16,22 +16,11 @@ inline constexpr network_config config{
         .RPC_DEFAULT_PORT = 11023,
         .QNET_DEFAULT_PORT = 11025,
         .NETWORK_ID =
-                {{0x43,
-                  0x6c,
-                  0x6c,
-                  0x79,
-                  0x6f,
-                  0x75,
-                  0x72,
-                  0x53,
-                  0x45,
-                  0x4e,
-                  0x54,
-                  0x61,
-                  0x72,
-                  0x65,
-                  0x62,
-                  0x65}},
+                {{0x53, 0x54, 0x41, 0x47, // "STAG"
+                0x45, 0x51, 0x55, 0x49, // "EQUI"
+                0x4c, 0x49, 0x42, 0x52, // "LIBR"
+                0x49, 0x41, 0x4e, 0x54, // "IANT"
+								}},
         .GENESIS_TX =
                 "04011e1e01ff00018080c9db97f4fb2702fa27e905f604faa4eb084ee675faca77b0cfea9adec1526d"
                 "a33cae5e286f31624201dae05bf3fa1662b7fd373c92426763d921cf3745e10ee43edb510f690c656f"
@@ -79,5 +68,10 @@ inline constexpr network_config config{
         // FIXME: once mainnet is close to launching this will move to an alternative
         // stagenet-specific URL and stake.getsession.org will be used for mainnet staking:
         .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
+};
+
+inline constexpr std::array<const char*, 2> SEED_NODES = {
+    "stagenet-seed1.equilibria.network:11022",
+    "stagenet-seed2.equilibria.network:11022"
 };
 }  // namespace cryptonote::config::stagenet
