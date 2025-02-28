@@ -838,6 +838,7 @@ std::unordered_set<eth::bls_public_key> L2Tracker::all_contract_pubkeys() const 
 }
 
 bool L2Tracker::get_vote_for(const event::NewServiceNodeV2& reg) const {
+    std::shared_lock lock{mutex};
     return recent_regs_v2.contains(reg);
 }
 bool L2Tracker::get_vote_for(const event::ServiceNodeExit& exit) const {
