@@ -69,7 +69,7 @@ breakdown of the minimum set of required boost packages.
 Install all dependencies at once on Debian/Ubuntu:
 
 ```
-sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-openssl-dev
+sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-openssl-dev libgmp-dev libsystemd-dev
 ```
 
 Install all dependencies at once on macOS with the provided Brewfile:
