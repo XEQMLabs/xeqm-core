@@ -87,8 +87,15 @@ static void dump_transition_outcome_csv(
     uint64_t now = time(nullptr);
     oxen::log::debug(logcat, "Writing SESH->ETH allocation to disk");
     uint64_t total_bonus_tokens = 0;
+
+    const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
     {
-        auto file = fmt::output_file("{:%Y%m%d_%H%M%S}_sesh_eth_addr_allocation.csv"_format(fmt::localtime(now)));
+        auto file = fmt::output_file("{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
+                    fmt::localtime(now),
+                    cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                    cryptonote::print_money(context.conv_ratio.first),
+                    cryptonote::print_money(context.conv_ratio.second))
+                );
         file.print("height,{}\n", height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
         // NOTE: Find the amount of bonus tokens allocated to the address
@@ -218,9 +225,8 @@ static void dump_transition_outcome_csv(
                 transitioned_node_count / static_cast<float>(node_list.size()) * 100.f;
 
         // NOTE: Generate file
-        const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
         auto file = fmt::output_file(
-                "{:%Y%m%d_%H%M%S}_sesh_transition_outcome_staking_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
+                "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
                         fmt::localtime(now),
                         cryptonote::print_money(context.staking_requirement, decimal_places, true),
                         cryptonote::print_money(context.conv_ratio.first),
@@ -292,11 +298,10 @@ static void dump_transition_outcome_csv(
 }
 
 void transition(
+        const transition_context& context,
         service_nodes::service_node_list::state_t& snl_state,
         cryptonote::BlockchainSQLite& sql,
         network_type net) {
-
-    transition_context context = get_transition_context(net, snl_state.height);
 
     auto address_info_from_str = [](network_type network, const std::string& addr) {
         cryptonote::address_parse_info api;
@@ -689,7 +694,6 @@ void transition(
     snl_state.service_nodes_infos.clear();
     for (auto& it : post_transition_sns)
         snl_state.service_nodes_infos[it.pkey] = std::move(it.sn_info);
-
 }
 
 }  // namespace oxen::sent

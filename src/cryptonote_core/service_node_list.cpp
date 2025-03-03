@@ -3792,7 +3792,8 @@ block_add_result service_node_list::state_t::update_from_block(
                 (uint8_t)nettype);
         print_sns();
         auto& sqlite_db = *sqlite_db_ptr;
-        oxen::sent::transition(*this, sqlite_db, nettype);
+        oxen::sent::transition_context context = oxen::sent::get_transition_context(nettype, height);
+        oxen::sent::transition(context, *this, sqlite_db, nettype);
         print_sns();
     }
 
@@ -6831,7 +6832,8 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
         insert_payment->reset();
     }
 
-    oxen::sent::transition(state_copy, db_copy, nettype);
+    oxen::sent::transition_context context = oxen::sent::get_transition_context(nettype, state_copy.height);
+    oxen::sent::transition(context, state_copy, db_copy, nettype);
 
     return {state_copy.service_nodes_infos, db_copy.get_all_accrued_rewards()};
 }
