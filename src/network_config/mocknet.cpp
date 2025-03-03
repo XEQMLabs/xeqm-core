@@ -437,19 +437,16 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
         oxen::log::info(
                 globallogcat,
                 fg(fmt::terminal_color::yellow) | fmt::emphasis::bold,
-                "mocknet generating mock transition data to the sesh network");
+                "Mocknet generating mock transition data to the sesh network");
 
         // NOTE: Assume all the SN's have submitted their BLS key by mocking it in
         uint64_t next_bls_key = 0;
         for (auto it : snl_list) {
             std::shared_ptr<const service_nodes::service_node_info> sn_info = it.info;
-            crypto::ed25519_public_key ed_key = {};
-            std::memcpy(ed_key.data(), &it.pubkey, sizeof(it.pubkey));
-
             eth::bls_public_key bls_key = {};
             std::memcpy(bls_key.data(), &next_bls_key, sizeof(next_bls_key));
             next_bls_key++;
-            globals.transition_bls_keys[ed_key] = bls_key;
+            globals.transition_bls_keys[crypto::ed25519_public_key{it.pubkey}] = bls_key;
         }
 
         // NOTE: Construct the addresses and the shares of the bonus tokens here!
