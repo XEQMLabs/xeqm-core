@@ -166,7 +166,7 @@ print(
     f"""
 }};  // {len(oxen_sent)} registered addresses
 
-const std::pair<std::uint8_t, std::uint8_t> conv_ratio{{{args.ratio[0]}, {args.ratio[1]}}};
+const std::pair<std::uint64_t, std::uint64_t> conv_ratio{{{args.ratio[0]}, {args.ratio[1]}}};
 
 const std::unordered_map<std::string, std::uint64_t> transition_bonus{{
 """,

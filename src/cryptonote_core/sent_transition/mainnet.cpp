@@ -11,7 +11,7 @@ const std::unordered_map<std::string, std::string> addresses{
 
 };
 
-const std::pair<std::uint8_t, std::uint8_t> conv_ratio{1, 100};
+const std::pair<std::uint64_t, std::uint64_t> conv_ratio{1, 100};
 
 const std::unordered_map<std::string, std::uint64_t> transition_bonus{
 
