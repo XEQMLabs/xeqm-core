@@ -95,6 +95,7 @@ transition_context get_transition_context(network_type net, uint64_t top_block_h
 /// "ed25519_pubkey" values (generally: SNs set up before Oxen 8) with the ed25519 pubkey; as of the
 /// SENT HF these are unifed, and SNs will start ignoring a non-ed25519 service node pubkey.
 void transition(
+        const transition_context& context,
         service_nodes::service_node_list::state_t& sns,
         cryptonote::BlockchainSQLite& sql,
         network_type net);
