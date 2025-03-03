@@ -1,15 +1,18 @@
 #include "sent_transition.h"
 
-#include <ranges>
-#include <fmt/os.h>
 #include <fmt/chrono.h>
+#include <fmt/os.h>
 
+#include <ranges>
+
+#include "common/exception.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
 #include "detail.h"
-#include "network_config/mocknet.h"
+#include "epee/int-util.h"
 #include "logging/oxen_logger.h"
+#include "network_config/mocknet.h"
 
 namespace oxen::sent {
 
@@ -19,11 +22,9 @@ transition_context get_transition_context(network_type net, uint64_t top_block_h
     transition_context result = {};
     if (net == cryptonote::network_type::MAINNET) {
         result.staking_requirement = SENT_STAKING_REQUIREMENT;
-        result.staking_ratio = OXEN_SENT_STAKING_RATIO;
         result.oxen_staking_requirement = OXEN_STAKING_REQUIREMENT;
     } else {
         result.staking_requirement = SENT_STAKING_REQUIREMENT_TESTNET;
-        result.staking_ratio = OXEN_SENT_TESTNET_STAKING_RATIO;
         result.oxen_staking_requirement = OXEN_STAKING_REQUIREMENT_TESTNET;
     }
 
@@ -327,7 +328,8 @@ void transition(
     const auto& node_bls_keys = *context.bls_keys;
 
     auto oxen_to_sent = [&conv_ratio](uint64_t oxen) {
-        return oxen * conv_ratio.first / conv_ratio.second;
+        uint64_t result = mul128_div64(oxen, conv_ratio.first, conv_ratio.second);
+        return result;
     };
 
     // We start out by finding the total amount of SENT owed to each ETH address: starting from the
@@ -454,8 +456,27 @@ void transition(
     std::unordered_set<crypto::public_key> zombies;
 
     const auto& staking_requirement = context.staking_requirement;
-    const auto& staking_ratio = context.staking_ratio;
+
+    // This is the ratio of the SENT staking requirement to OXEN staking requirement at the time of
+    // the transition, as a reduced form fraction.
+    const std::pair<uint32_t, uint32_t> staking_ratio = {
+            context.staking_requirement /
+                    std::gcd(context.staking_requirement, context.oxen_staking_requirement),
+            context.oxen_staking_requirement /
+                    std::gcd(context.staking_requirement, context.oxen_staking_requirement)};
+
     const auto& oxen_staking_requirement = context.oxen_staking_requirement;
+
+    // This ensure that the ratios above are sufficiently reduced that we won't overflow when
+    // calculating 'atomic_oxen_stake * numerator'.  Most maximum stakes are 15k, but there are a
+    // few very old registered nodes with higher staking requirements (up to just under 21825 OXEN),
+    // registered before the staking requirement dropped to 15k, with a maximum single contribution
+    // of 17493.
+    if (staking_ratio.first >= std::numeric_limits<uint64_t>::max() / 17'500'000'000'000) {
+        throw std::runtime_error{
+                "64 bit overflow detected for atomic OXEN conversion to stake, ratio was {}/{}"_format(
+                        staking_ratio.first, staking_ratio.second)};
+    }
 
     for (const auto& [pk, sni] : sorted_sns) {
         node_transition& item = post_transition_sns.emplace_back();

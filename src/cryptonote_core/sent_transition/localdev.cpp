@@ -100,7 +100,7 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
 
 };
 
-const std::pair<std::uint8_t, std::uint8_t> conv_ratio{
+const std::pair<std::uint64_t, std::uint64_t> conv_ratio{
         180, 1};  // worse than 200:1, so bonus required to transition
 
 const std::unordered_map<eth::address, std::uint64_t> transition_bonus{

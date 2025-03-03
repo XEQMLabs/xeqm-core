@@ -14,32 +14,8 @@ namespace oxen::sent {
 
 using cryptonote::network_type;
 
-// This is the ratio of the SENT staking requirement to OXEN staking requirement at the time of the
-// transition, as a reduced form fraction.
-inline constexpr std::pair<uint32_t, uint32_t> OXEN_SENT_STAKING_RATIO = {
-        SENT_STAKING_REQUIREMENT / std::gcd(SENT_STAKING_REQUIREMENT, OXEN_STAKING_REQUIREMENT),
-        OXEN_STAKING_REQUIREMENT / std::gcd(SENT_STAKING_REQUIREMENT, OXEN_STAKING_REQUIREMENT)};
-
-// Same as above, but for testnet/devnet:
-inline constexpr std::pair<uint32_t, uint32_t> OXEN_SENT_TESTNET_STAKING_RATIO = {
-        SENT_STAKING_REQUIREMENT_TESTNET /
-                std::gcd(SENT_STAKING_REQUIREMENT_TESTNET, OXEN_STAKING_REQUIREMENT_TESTNET),
-        OXEN_STAKING_REQUIREMENT_TESTNET /
-                std::gcd(SENT_STAKING_REQUIREMENT_TESTNET, OXEN_STAKING_REQUIREMENT_TESTNET)};
-
-// This ensure that the ratios above are sufficiently reduced that we won't overflow when
-// calculating 'atomic_oxen_stake * numerator'.  Most maximum stakes are 15k, but there are a few
-// very old registered nodes with higher staking requirements (up to just under 21825 OXEN),
-// registered before the staking requirement dropped to 15k, with a maximum single contribution of
-// 17493.
-static_assert(
-        OXEN_SENT_STAKING_RATIO.first < std::numeric_limits<uint64_t>::max() / 17500'000000000);
-static_assert(
-        OXEN_SENT_TESTNET_STAKING_RATIO.first <
-        std::numeric_limits<uint64_t>::max() / 100'000000000);
-
 using addrmap_t = std::unordered_map<std::string, eth::address>;
-using conv_ratio_t = std::pair<std::uint8_t, std::uint8_t>;
+using conv_ratio_t = std::pair<std::uint64_t, std::uint64_t>;
 using bonus_map_t = std::unordered_map<eth::address, std::uint64_t>;
 using proper_ed_keys_t = std::unordered_map<crypto::public_key, crypto::ed25519_public_key>;
 using bls_keys_t = std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key>;
@@ -63,7 +39,6 @@ struct transition_context {
     /// address -> atomic (1e-9) value.
     const bonus_map_t* transition_bonus;
     uint64_t staking_requirement;
-    std::pair<uint32_t, uint32_t> staking_ratio;
     uint64_t oxen_staking_requirement;
 };
 

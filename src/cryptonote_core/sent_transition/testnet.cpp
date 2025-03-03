@@ -129,7 +129,7 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
                  "0e7c88e61ce585592f73750e3942dcdb480ad48c03ae56ba39f3d6ca4fa0594a17c593dd8f28cbd0da7ff3e6e2c0fe357a35b1e3d6bfce38d88bb2e2ba91fa30"s)},
 };
 
-const std::pair<std::uint8_t, std::uint8_t> conv_ratio{180, 1};
+const std::pair<std::uint64_t, std::uint64_t> conv_ratio{180, 1};
 
 const std::unordered_map<eth::address, std::uint64_t> transition_bonus{
         {tools::make_from_hex_guts<eth::address>("0xB0CefD61ddB88176Fb972955341adC6c1d05230e"s),
