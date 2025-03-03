@@ -14,9 +14,6 @@ namespace oxen::sent {
 
 using cryptonote::network_type;
 
-cryptonote::account_public_address parse_oxen_addr(std::string_view addr);
-eth::address parse_eth_addr(std::string_view addr);
-
 // This is the ratio of the SENT staking requirement to OXEN staking requirement at the time of the
 // transition, as a reduced form fraction.
 inline constexpr std::pair<uint32_t, uint32_t> OXEN_SENT_STAKING_RATIO = {
