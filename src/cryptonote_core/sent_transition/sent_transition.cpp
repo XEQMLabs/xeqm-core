@@ -79,71 +79,137 @@ struct node_transition {
 };
 
 static void dump_transition_outcome_csv(
-        uint64_t height,
         const transition_context& context,
+        const service_nodes::service_node_list::state_t& snl_state,
+        network_type net,
         std::span<node_transition> node_list,
         const std::unordered_map<eth::address, uint64_t>& final_allocation_before_distrib,
         const std::unordered_map<eth::address, uint64_t>& final_unlocked_tokens)
 {
     uint64_t now = time(nullptr);
     oxen::log::debug(logcat, "Writing SESH->ETH allocation to disk");
-    uint64_t total_bonus_tokens = 0;
+    uint64_t total_bonus_sesh = 0;
+
+    // NOTE: Calculate total OXEN staked prior to the transition
+    uint64_t total_staked_oxen = 0;
+    for (auto it : snl_state.service_nodes_infos) {
+        for (auto contrib_it : it.second->contributors) {
+            total_staked_oxen += contrib_it.amount;
+        }
+    }
 
     const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
     {
         auto file = fmt::output_file("{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
                     fmt::localtime(now),
                     cryptonote::print_money(context.staking_requirement, decimal_places, true),
-                    cryptonote::print_money(context.conv_ratio.first),
-                    cryptonote::print_money(context.conv_ratio.second))
+                    cryptonote::print_money(context.conv_ratio.second),
+                    cryptonote::print_money(context.conv_ratio.first))
                 );
-        file.print("height,{}\n", height);
+        file.print("height,{}\n", snl_state.height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
+        file.print(
+                "staking_requirement,{}\n", cryptonote::print_money(context.staking_requirement));
+
+        // NOTE: Amount of OXEN staked prior to the transition
+        file.print("total_staked_oxen,{}\n", cryptonote::print_money(total_staked_oxen));
+
         // NOTE: Find the amount of bonus tokens allocated to the address
         {
             for (auto it : *context.transition_bonus)
-                total_bonus_tokens += it.second;
-            file.print("total_bonus_tokens,{}\n", cryptonote::print_money(total_bonus_tokens));
+                total_bonus_sesh += it.second;
+            file.print("total_bonus_sesh,{}\n", cryptonote::print_money(total_bonus_sesh));
         }
 
         // NOTE: Enumerate the amount of locked tokens
         {
-            uint64_t total_locked_tokens = 0;
+            uint64_t total_staked_sesh = 0;
             for (auto node_it : node_list) {
                 for (auto contrib_it : node_it.sn_info->contributors)
-                    total_locked_tokens += contrib_it.amount;
+                    total_staked_sesh += contrib_it.amount;
             }
-            file.print("total_locked_tokens,{}\n", cryptonote::print_money(total_locked_tokens));
+            file.print("total_staked_sesh,{}\n", cryptonote::print_money(total_staked_sesh));
         }
 
-        // NOTE: Enumerate the amount of locked tokens
+        // NOTE: Enumerate the amount of unlocked tokens
         {
-            uint64_t total_unlocked_tokens = 0;
+            uint64_t total_unlocked_sesh = 0;
             for (auto it : final_unlocked_tokens) {
-                total_unlocked_tokens += it.second;
+                total_unlocked_sesh += it.second;
             }
             file.print(
-                    "total_unlocked_tokens,{}\n", cryptonote::print_money(total_unlocked_tokens));
+                    "total_unlocked_sesh,{}\n", cryptonote::print_money(total_unlocked_sesh));
         }
 
         // NOTE: Calculate the amount of tokens generated
         {
-            uint64_t total_tokens_generated = 0;
+            uint64_t total_generated_sesh = 0;
             for (auto it : final_allocation_before_distrib)
-                total_tokens_generated += it.second;
+                total_generated_sesh += it.second;
             file.print(
-                    "total_tokens_generated,{}\n", cryptonote::print_money(total_tokens_generated));
+                    "total_generated_sesh,{}\n", cryptonote::print_money(total_generated_sesh));
         }
 
         // NOTE: Sort the final token allocations, highest to lowest
         struct sesh_alloc_pair {
             eth::address addr;
             uint64_t amount;
+            size_t oxen_sn_count;
+            size_t sesh_sn_count;
         };
         std::vector<sesh_alloc_pair> sorted;
         sorted.reserve(final_allocation_before_distrib.size());
         for (auto it : final_allocation_before_distrib) {
-            sorted.emplace_back(it.first, it.second);
+            sesh_alloc_pair& pair = sorted.emplace_back();
+            pair.addr = it.first;
+            pair.amount = it.second;
+
+            std::vector<cryptonote::account_public_address> oxen_addrs_for_eth_addr;
+            for (auto addr_it : *context.addresses) {
+                if (addr_it.second == it.first) {
+
+                    cryptonote::address_parse_info parse = {};
+                    [[maybe_unused]] bool ok =
+                            cryptonote::get_account_address_from_str(parse, net, addr_it.first);
+                    assert(ok);
+
+                    oxen_addrs_for_eth_addr.push_back(parse.address);
+                }
+            }
+
+            // NOTE: Enumerate the number of SNs this ETH address was staked in before the
+            // transition
+            for (auto sn_info_it : snl_state.service_nodes_infos) {
+                bool matched = false;
+
+                // NOTE: Check if any of the contributors match the OXEN address that belonged to
+                // this ETH address
+                for (auto contrib_it : sn_info_it.second->contributors) {
+                    for (auto oxen_addr : oxen_addrs_for_eth_addr) {
+                        if (oxen_addr == contrib_it.address) {
+                            pair.oxen_sn_count++;
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if (matched)
+                        continue;
+                }
+            }
+
+            // NOTE: Enumerate the number of SNs this ETH address is still, staked in after the
+            // transition
+            for (auto node_it : node_list) {
+                // NOTE: Check if any of the contributors match the ETH address
+                for (auto contrib_it : node_it.sn_info->contributors) {
+                    if (pair.addr == contrib_it.ethereum_address) {
+                        pair.sesh_sn_count++;
+                        break;
+                    }
+                }
+            }
+
         }
         std::sort(
                 sorted.begin(),
@@ -155,11 +221,11 @@ static void dump_transition_outcome_csv(
 
         file.print(
                 "conversion_ratio,{} OXEN/{} SESH\n",
-                cryptonote::print_money(context.conv_ratio.first),
-                cryptonote::print_money(context.conv_ratio.second));
+                cryptonote::print_money(context.conv_ratio.second),
+                cryptonote::print_money(context.conv_ratio.first));
 
         // NOTE: Print out the allocation for each address
-        file.print("eth_addr,bonus_tokens,locked_tokens,unlocked_tokens,total_tokens\n");
+        file.print("eth_addr,pre_transition_sn_count,post_transition_sn_count,bonus_sesh,staked_sesh,unlocked_sesh,total_sesh (staked+unlocked)\n");
         size_t index = 0;
         for (auto sorted_it : sorted) {
 
@@ -188,8 +254,10 @@ static void dump_transition_outcome_csv(
 
             // NOTE: Write the CSV line
             file.print(
-                    "redacted_{},{},{},{},{}\n",
+                    "redacted_{:04d},{},{},{},{},{},{}\n",
                     index++,
+                    sorted_it.oxen_sn_count,
+                    sorted_it.sesh_sn_count,
                     cryptonote::print_money(bonus_tokens),
                     cryptonote::print_money(locked_tokens),
                     cryptonote::print_money(unlocked_tokens),
@@ -230,20 +298,21 @@ static void dump_transition_outcome_csv(
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
                         fmt::localtime(now),
                         cryptonote::print_money(context.staking_requirement, decimal_places, true),
-                        cryptonote::print_money(context.conv_ratio.first),
                         cryptonote::print_money(context.conv_ratio.second),
+                        cryptonote::print_money(context.conv_ratio.first),
                         int(transition_pct)));
 
         // NOTE: CSV metadata
-        file.print("height,{}\n", height);
+        file.print("height,{}\n", snl_state.height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
-        file.print("total_bonus_tokens,{}\n", cryptonote::print_money(total_bonus_tokens));
+        file.print("total_staked_oxen,{}\n", cryptonote::print_money(total_staked_oxen));
+        file.print("total_bonus_sesh,{}\n", cryptonote::print_money(total_bonus_sesh));
         file.print(
                 "staking_requirement,{}\n", cryptonote::print_money(context.staking_requirement));
         file.print(
                 "conversion_ratio,{} OXEN/{} SESH\n",
-                cryptonote::print_money(context.conv_ratio.first),
-                cryptonote::print_money(context.conv_ratio.second));
+                cryptonote::print_money(context.conv_ratio.second),
+                cryptonote::print_money(context.conv_ratio.first));
         file.print(
                 "transition,{}/{} ({:.2f}%)\n",
                 transitioned_node_count,
@@ -255,37 +324,25 @@ static void dump_transition_outcome_csv(
         file.print("contributor_not_registered_for_swap,{}\n", contributor_not_registered_for_swap);
         file.print("insufficient_sesh,{}\n", insufficient_sesh);
 
-        // NOTE: Sort the node list
-        std::vector<node_transition*> sorted_node_list;
-        sorted_node_list.reserve(node_list.size());
-        for (auto it : node_list) {
-            sorted_node_list.push_back(&it);
-        }
-
-        std::sort(
-                sorted_node_list.begin(),
-                sorted_node_list.end(),
-                [](const node_transition* lhs, const node_transition* rhs) {
-                    bool result = lhs->tokens_allocated > rhs->tokens_allocated;
-                    return result;
-                });
-
         file.print(
-                "node_pkey,tokens_allocated,transitioned,missing_ed25519_key,missing_bls_key,"
-                "partially_funded,contributor_not_registered_for_swap,insufficient_sesh\n");
+                "registration_height,node_pkey,sesh_allocated,transitioned,missing_ed25519_key,"
+                "missing_bls_key,partially_funded,contributor_not_registered_for_swap,insufficient_"
+                "sesh\n");
         size_t count = 0;
         for (const node_transition& it : node_list) {
             bool transitioned = it.tokens_allocated >= context.staking_requirement;
             file.print(
-                    "redacted_{},"  // pkey
-                    "{},"  // tokens_allocated
-                    "{},"  // transitioned
-                    "{},"  // missing_ed25519_key
-                    "{},"  // missing_bls_key
-                    "{},"  // partially_funded
-                    "{},"  // contributor_not_registered_for_swap
-                    "{},"  // insufficient_sesh
+                    "{:06d},"           // registration_height
+                    "redacted_{:04d},"  // pkey
+                    "{},"               // tokens_allocated
+                    "{},"               // transitioned
+                    "{},"               // missing_ed25519_key
+                    "{},"               // missing_bls_key
+                    "{},"               // partially_funded
+                    "{},"               // contributor_not_registered_for_swap
+                    "{},"               // insufficient_sesh
                     "\n",
+                    it.sn_info->registration_height,
                     count++,
                     cryptonote::print_money(it.tokens_allocated),
                     transitioned,
@@ -546,11 +603,12 @@ void transition(
         for (auto& contributor : sni->contributors) {
             auto addr = cryptonote::get_account_address_as_str(net, false, contributor.address);
             auto it = sent_addrs.find(contributor.address);
+
             if (it == sent_addrs.end()) {
                 log::debug(logcat, "no sent addr for oxen wallet {}", addr);
                 item.zombie = true;
                 item.contributor_not_registered_for_swap = true;
-                continue;
+                break;
             }
 
             uint64_t sent_required =
@@ -559,12 +617,7 @@ void transition(
                 sent_required = sent_required * extra_ratio->first / extra_ratio->second;
 
             sent_stake[it->second] += sent_required;
-            log::debug(
-                    logcat, "have {} from SENT {} for node {}", sent_required, it->second, pk);
-
-            // Sum up the total amount of that were allocated to this node (accounting only those
-            // that were eligible).
-            item.tokens_allocated += sent_required;
+            log::debug(logcat, "have {} from SENT {} for node {}", sent_required, it->second, pk);
         }
 
         eth::address sn_op = crypto::null<eth::address>;
@@ -582,10 +635,8 @@ void transition(
                 assert(reqd <= staking_requirement);
                 deficit -= reqd;
             }
-            if (deficit) {
+            if (deficit)
                 sent_stake[sn_op] += deficit;
-                item.tokens_allocated += deficit;
-            }
 
             std::unordered_map<eth::address, uint64_t> allocated;
             for (const auto& [eth, reqd] : sent_stake) {
@@ -614,6 +665,7 @@ void transition(
                             eth,
                             pk,
                             unallocated[eth]);
+                    item.tokens_allocated += amt;
                 }
             }
         }
@@ -706,8 +758,9 @@ void transition(
 
     if (mocknet_is_forking(snl_state.height) || mocknet_has_forked(snl_state.height))
         dump_transition_outcome_csv(
-                snl_state.height,
                 context,
+                snl_state,
+                net,
                 post_transition_sns,
                 final_allocation_before_distrib,
                 unallocated);
