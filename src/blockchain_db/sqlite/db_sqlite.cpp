@@ -1159,7 +1159,7 @@ void BlockchainSQLite::set_rewards_hf21(const std::unordered_map<eth::address, u
 
     for (auto& [addr, amt] : rewards) {
         auto address_str = "0x{:x}"_format(addr);
-        auto amount = static_cast<int64_t>(amt);
+        auto amount = static_cast<int64_t>(amt * BATCH_REWARD_FACTOR);
         log::trace(
                 logcat,
                 "Adding converted OXEN as SENT for contributor {} to database with amount {}",
