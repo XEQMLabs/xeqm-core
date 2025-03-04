@@ -352,6 +352,23 @@ static void dump_transition_outcome_csv(
                     it.contributor_not_registered_for_swap,
                     it.insufficient_sesh);
         }
+
+        // NOTE: Sanity check some of the stats
+        for (const node_transition& it : node_list) {
+            bool transitioned = it.tokens_allocated >= context.staking_requirement;
+
+            // NOTE: If you transitioned, you can't be a zombie and vice versa.
+            assert(transitioned == !it.zombie);
+
+            // NOTE: If you transitioned, then you will have some contributors
+            if (transitioned) {
+                assert(it.sn_info->contributors.size());
+            }
+
+            if (!transitioned) {
+                assert(it.sn_info->contributors.empty());
+            }
+        }
     }
 }
 
