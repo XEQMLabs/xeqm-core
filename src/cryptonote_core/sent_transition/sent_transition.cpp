@@ -773,7 +773,7 @@ void transition(
     if (snl_state.service_nodes_infos.size() != post_transition_sns.size())
         throw std::runtime_error{"post-transition should have same number of service_node_infos!"};
 
-    if (mocknet_is_forking(snl_state.height) || mocknet_has_forked(snl_state.height))
+    if (context.dump_csv)
         dump_transition_outcome_csv(
                 context,
                 snl_state,

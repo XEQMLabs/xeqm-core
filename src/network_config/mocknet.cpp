@@ -455,7 +455,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
 
 void mocknet_get_transition_context(oxen::sent::transition_context& context)
 {
-    context.conv_ratio = {120, 1}; // X OXEN per Y SESH
+    context.conv_ratio = {1, 120}; // X SESH per Y OXEN
     context.addresses = &globals.transition_addr_map;
     context.bls_keys = &globals.transition_bls_keys;
     context.transition_bonus = &globals.transition_bonus_map;

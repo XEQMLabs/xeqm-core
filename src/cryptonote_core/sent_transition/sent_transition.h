@@ -40,6 +40,10 @@ struct transition_context {
     const bonus_map_t* transition_bonus;
     uint64_t staking_requirement;
     uint64_t oxen_staking_requirement;
+
+    /// Produce CSV's of the transition outcome to the current work directory if this is flag is
+    // set.
+    bool dump_csv;
 };
 
 /// Get the parameters for the token transition
