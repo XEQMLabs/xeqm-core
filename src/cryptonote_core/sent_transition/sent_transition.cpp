@@ -58,8 +58,9 @@ transition_context get_transition_context(network_type net, uint64_t top_block_h
             break;
     }
 
-    if (mocknet_is_forking(top_block_height) || mocknet_has_forked(top_block_height))
+    if (mocknet_is_forking(top_block_height) || mocknet_has_forked(top_block_height)) {
         mocknet_get_transition_context(result);
+    }
     return result;
 }
 
