@@ -430,8 +430,8 @@ void transition(
     const auto& remap_ed_keys = *context.proper_ed_keys;
     const auto& node_bls_keys = *context.bls_keys;
 
-    auto oxen_to_sent = [&conv_ratio](uint64_t oxen) {
-        uint64_t result = mul128_div64(oxen, conv_ratio.first, conv_ratio.second);
+    auto oxen_to_sent = [&conv_ratio](const cryptonote::reward_money& oxen) {
+        uint64_t result = mul128_div64(oxen.to_coin(), conv_ratio.first, conv_ratio.second);
         return result;
     };
 
@@ -490,10 +490,10 @@ void transition(
                 // .amount, it's possible for a small over-contribution to have been accepted which
                 // would show up in the locked amounts but not the aggregate amount (for example: if
                 // a SN has 123.456 available and someone contributes 123.5)
-                uint64_t total = 0;
+                cryptonote::reward_money total = {};
                 for (const auto& lc : contributor.locked_contributions) {
                     permanent_stakes.push_back(lc.key_image);
-                    total += lc.amount;
+                    total += cryptonote::reward_money::coin_amount(lc.amount);
                 }
                 unallocated[it->second] += oxen_to_sent(total);
                 log::debug(
