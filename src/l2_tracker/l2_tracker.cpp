@@ -149,19 +149,23 @@ void L2Tracker::update_state() {
                 new_prio.push_back(hi.index);
                 if (!hi.success || hi.height < threshold) {
                     auto& name = client_info()[hi.index].name;
-                    auto& url = client_info()[hi.index].url;
+                    std::string trimmed_url = tools::trim_url(client_info()[hi.index].url);
                     auto level = hi.index == 0 ? log::Level::err : log::Level::warn;
 
                     if (!hi.success)
                         log::log(
-                                logcat, level, "Failed to retrieve height from {} [{}]", name, url);
+                                logcat,
+                                level,
+                                "Failed to retrieve height from {} [{}]",
+                                name,
+                                trimmed_url);
                     else
                         log::log(
                                 logcat,
                                 level,
                                 "{} [{}] is lagging (height {} < {})",
                                 name,
-                                tools::trim_url(url),
+                                trimmed_url,
                                 hi.height,
                                 best_height);
                 }
