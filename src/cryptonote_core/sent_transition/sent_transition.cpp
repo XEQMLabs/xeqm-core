@@ -85,8 +85,7 @@ static void dump_transition_outcome_csv(
         network_type net,
         std::span<node_transition> node_list,
         const std::unordered_map<eth::address, uint64_t>& final_allocation_before_distrib,
-        const std::unordered_map<eth::address, uint64_t>& final_unlocked_tokens)
-{
+        const std::unordered_map<eth::address, uint64_t>& final_unlocked_tokens) {
     uint64_t now = time(nullptr);
     oxen::log::debug(logcat, "Writing SESH->ETH allocation to disk");
     uint64_t total_bonus_sesh = 0;
@@ -101,12 +100,12 @@ static void dump_transition_outcome_csv(
 
     const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
     {
-        auto file = fmt::output_file("{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
-                    fmt::localtime(now),
-                    cryptonote::print_money(context.staking_requirement, decimal_places, true),
-                    cryptonote::print_money(context.conv_ratio.second),
-                    cryptonote::print_money(context.conv_ratio.first))
-                );
+        auto file = fmt::output_file(
+                "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
+                        fmt::localtime(now),
+                        cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                        cryptonote::print_money(context.conv_ratio.second),
+                        cryptonote::print_money(context.conv_ratio.first)));
         file.print("height,{}\n", snl_state.height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
         file.print(
@@ -138,8 +137,7 @@ static void dump_transition_outcome_csv(
             for (auto it : final_unlocked_tokens) {
                 total_unlocked_sesh += it.second;
             }
-            file.print(
-                    "total_unlocked_sesh,{}\n", cryptonote::print_money(total_unlocked_sesh));
+            file.print("total_unlocked_sesh,{}\n", cryptonote::print_money(total_unlocked_sesh));
         }
 
         // NOTE: Calculate the amount of tokens generated
@@ -147,8 +145,7 @@ static void dump_transition_outcome_csv(
             uint64_t total_generated_sesh = 0;
             for (auto it : final_allocation_before_distrib)
                 total_generated_sesh += it.second;
-            file.print(
-                    "total_generated_sesh,{}\n", cryptonote::print_money(total_generated_sesh));
+            file.print("total_generated_sesh,{}\n", cryptonote::print_money(total_generated_sesh));
         }
 
         // NOTE: Sort the final token allocations, highest to lowest
@@ -210,7 +207,6 @@ static void dump_transition_outcome_csv(
                     }
                 }
             }
-
         }
         std::sort(
                 sorted.begin(),
@@ -226,7 +222,9 @@ static void dump_transition_outcome_csv(
                 cryptonote::print_money(context.conv_ratio.first));
 
         // NOTE: Print out the allocation for each address
-        file.print("eth_addr,pre_transition_sn_count,post_transition_sn_count,bonus_sesh,staked_sesh,unlocked_sesh,total_sesh (staked+unlocked)\n");
+        file.print(
+                "eth_addr,pre_transition_sn_count,post_transition_sn_count,bonus_sesh,staked_sesh,"
+                "unlocked_sesh,total_sesh (staked+unlocked)\n");
         size_t index = 0;
         for (auto sorted_it : sorted) {
 

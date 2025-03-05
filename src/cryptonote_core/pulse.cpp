@@ -8,11 +8,10 @@
 #include "epee/memwipe.h"
 #include "epee/wipeable_string.h"
 #include "ethereum_transactions.h"
+#include "network_config/mocknet.h"
 #include "service_node_list.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
-
-#include "network_config/mocknet.h"
 
 extern "C" {
 #include <sodium/crypto_generichash.h>
@@ -239,7 +238,7 @@ namespace {
     }
 
     std::bitset<sizeof(uint16_t) * 8> bitset_view16(uint16_t val) {
-        std::bitset<sizeof(uint16_t)* 8> result = val;
+        std::bitset<sizeof(uint16_t) * 8> result = val;
         return result;
     }
 

@@ -639,8 +639,10 @@ void L2Tracker::update_purge_list(bool curr_height_fallback) {
                         // validator) even if we don't have it in our mempool as long as the
                         // purgeable conditions are met when we vote on it.
                         std::vector<std::pair<crypto::public_key, bls_public_key>> to_purge;
-                        if (mocknet_has_forked(core.blockchain.get_current_blockchain_height() - 1) ||
-                            mocknet_is_forking(core.blockchain.get_current_blockchain_height() - 1)) {
+                        if (mocknet_has_forked(
+                                    core.blockchain.get_current_blockchain_height() - 1) ||
+                            mocknet_is_forking(
+                                    core.blockchain.get_current_blockchain_height() - 1)) {
                         } else {
                             core.service_node_list.for_each_service_node(
                                     [this, &to_purge](

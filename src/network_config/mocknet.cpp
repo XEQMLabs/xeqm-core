@@ -256,7 +256,8 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
 
     // NOTE: Log that we hit the mocknet pre-conditions
     cryptonote::account_public_address zero_cn_address = {};
-    std::string zero_cn_address_str = cryptonote::get_account_address_as_str(nettype, false, zero_cn_address);
+    std::string zero_cn_address_str =
+            cryptonote::get_account_address_as_str(nettype, false, zero_cn_address);
 
     fmt::memory_buffer debug_log;
     fmt::format_to(
@@ -343,7 +344,8 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     std::memcpy(mock_producer.data(), MOCKNET_KEYS[0].ed25519_pubkey.data(), sizeof(mock_producer));
 
     [[maybe_unused]] crypto::public_key mock_validator0;
-    std::memcpy(mock_validator0.data(), MOCKNET_KEYS[1].ed25519_pubkey.data(), sizeof(mock_validator0));
+    std::memcpy(
+            mock_validator0.data(), MOCKNET_KEYS[1].ed25519_pubkey.data(), sizeof(mock_validator0));
 
     assert(quorum.workers.size());
     assert(mock_producer == quorum.workers[0]);
@@ -369,7 +371,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
                 /*pulse round*/ 0,
                 /*validator handshake bitset*/ 0b0111'1111'1111,  // Full participation
                 generated_height);
-    } catch(const std::exception& e) {
+    } catch (const std::exception& e) {
         oxen::log::error(logcat, "Failed to generate block: {}", e.what());
     }
 
@@ -432,7 +434,8 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     auto hf20_begins =
             cryptonote::hard_fork_begins(net, cryptonote::hf::hf20_eth_transition).value_or(0);
     if (block.get_height() == hf20_begins) {
-        std::vector<service_nodes::service_node_pubkey_info> snl_list = core.service_node_list.get_service_node_list_state();
+        std::vector<service_nodes::service_node_pubkey_info> snl_list =
+                core.service_node_list.get_service_node_list_state();
 
         oxen::log::info(
                 globallogcat,
@@ -453,9 +456,8 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     }
 }
 
-void mocknet_get_transition_context(oxen::sent::transition_context& context)
-{
-    context.conv_ratio = {1, 120}; // X SESH per Y OXEN
+void mocknet_get_transition_context(oxen::sent::transition_context& context) {
+    context.conv_ratio = {1, 120};  // X SESH per Y OXEN
     context.addresses = &globals.transition_addr_map;
     context.bls_keys = &globals.transition_bls_keys;
     context.transition_bonus = &globals.transition_bonus_map;

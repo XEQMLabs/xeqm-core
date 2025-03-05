@@ -2,6 +2,7 @@
 #include "exception.h"
 
 #include <fmt/core.h>
+
 #include <cstdio>
 #include <sstream>
 

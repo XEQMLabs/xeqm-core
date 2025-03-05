@@ -755,8 +755,7 @@ bool check_key_image_signature(
     return sc_isnonzero(h.data()) == 0;
 }
 
-secret_key ed25519_to_monero_secret_key(const ed25519_secret_key& skey)
-{
+secret_key ed25519_to_monero_secret_key(const ed25519_secret_key& skey) {
     epee::wipeable_string privkey_signhash;
     privkey_signhash.resize(crypto_hash_sha512_BYTES);
     unsigned char* pk_sh_data = reinterpret_cast<unsigned char*>(privkey_signhash.data());

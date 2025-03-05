@@ -187,12 +187,7 @@ class Blockchain {
             const cryptonote::test_options& test_options,
             cryptonote::BlockchainSQLite* sqlite_db = nullptr) {
         return init(
-                std::move(db),
-                network_type::FAKECHAIN,
-                nullptr,
-                sqlite_db,
-                nullptr,
-                &test_options);
+                std::move(db), network_type::FAKECHAIN, nullptr, sqlite_db, nullptr, &test_options);
     }
 
     /**
