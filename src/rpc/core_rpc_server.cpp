@@ -3223,12 +3223,12 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
     for (size_t i = 0; i < rewards_before_pair.first.size(); i++) {
         const auto& addr = rewards_before_pair.first[i];
         const auto& amt = rewards_before_pair.second[i];
-        rewards_before[addr] = amt;
+        rewards_before[addr] = amt.to_coin();
     }
     for (size_t i = 0; i < transition_result.rewards_after.first.size(); i++) {
         const auto& addr = transition_result.rewards_after.first[i];
         const auto& amt = transition_result.rewards_after.second[i];
-        rewards_after[addr] = amt;
+        rewards_after[addr] = amt.to_coin();
     }
 
     std::unordered_set<std::string> reqed;
@@ -3891,7 +3891,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
 
     if (req.addresses.size() > 0) {
         for (const auto& address : req.addresses) {
-            uint64_t amount = 0;
+            cryptonote::reward_money amount = {};
             if (eth::address eth_address{};
                 tools::try_load_from_hex_guts<eth::address>(address, eth_address)) {
                 std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(eth_address);
@@ -3899,12 +3899,12 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
                        get_account_address_from_str(parse_info, net, address)) {
                 std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(parse_info.address);
             }
-            balances[address] = amount;
+            balances[address] = amount.to_coin();
         }
     } else {
         auto [addresses, amounts] = sql_db.get_all_accrued_rewards();
         for (size_t i = 0; i < addresses.size(); i++) {
-            balances[addresses[i]] = amounts[i];
+            balances[addresses[i]] = amounts[i].to_coin();
         }
     }
 
