@@ -67,6 +67,7 @@
 #include "epee/net/local_ip.h"
 #include "ethereum_transactions.h"
 #include "l2_tracker/events.h"
+#include "network_config/mocknet.h"
 #include "oxen/log.hpp"
 #include "oxen_economy.h"
 #include "pulse.h"
@@ -79,7 +80,6 @@
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
 #include "uptime_proof.h"
-#include "network_config/mocknet.h"
 
 using cryptonote::hf;
 namespace feature = cryptonote::feature;
@@ -2564,8 +2564,7 @@ static std::string dump_pulse_block_data(
     return s;
 }
 
-static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t height)
-{
+static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t height) {
     // TODO(doyle): Core tests don't generate proper timestamps for detecting
     // timeout yet. So we don't do a timeout check and assume all blocks
     // incoming from Pulse are valid if they have the correct signatures
@@ -3792,7 +3791,8 @@ block_add_result service_node_list::state_t::update_from_block(
                 (uint8_t)nettype);
         print_sns();
         auto& sqlite_db = *sqlite_db_ptr;
-        oxen::sent::transition_context context = oxen::sent::get_transition_context(nettype, height);
+        oxen::sent::transition_context context =
+                oxen::sent::get_transition_context(nettype, height);
         oxen::sent::transition(context, *this, sqlite_db, nettype);
         print_sns();
     }
@@ -6832,7 +6832,8 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
         insert_payment->reset();
     }
 
-    oxen::sent::transition_context context = oxen::sent::get_transition_context(nettype, state_copy.height);
+    oxen::sent::transition_context context =
+            oxen::sent::get_transition_context(nettype, state_copy.height);
     oxen::sent::transition(context, state_copy, db_copy, nettype);
 
     return {state_copy.service_nodes_infos, db_copy.get_all_accrued_rewards()};

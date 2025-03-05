@@ -645,11 +645,11 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
         const auto& address = pair.first;
         const auto& amount = pair.second;
         const uint64_t truncated_db_amount =
-                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR; // truncate to atomic OXEN
+                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR;  // truncate to atomic OXEN
 
         if (pre_hf21_final_payout) {
             log::debug(logcat, "address {} has amount {}", address, amount);
-            if (sent_addr_map.contains(std::string{address})) // Registered for transition
+            if (sent_addr_map.contains(std::string{address}))  // Registered for transition
                 continue;
 
             if (truncated_db_amount > 0) {
