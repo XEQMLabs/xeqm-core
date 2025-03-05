@@ -42,7 +42,7 @@ struct mocknet_global_data {
     // If specified on the command line, forking to mocknet at `fork_at_height`
     // will occur.
     bool fork_enabled;
-    uint64_t fork_at_height;  // The height to fork at from the current chain
+    uint64_t fork_at_height;  // The chain height to fork at from the current chain
     bool protocol_is_disabled;
     oxen::sent::addrmap_t transition_addr_map;
     oxen::sent::bonus_map_t transition_bonus_map;
@@ -179,12 +179,12 @@ bool mocknet_read_cli_for_mocknet_arg(
 }
 
 bool mocknet_is_forking(uint64_t top_block_height) {
-    bool result = globals.fork_enabled && top_block_height == globals.fork_at_height;
+    bool result = globals.fork_enabled && (top_block_height + 1) == globals.fork_at_height;
     return result;
 }
 
 bool mocknet_has_forked(uint64_t top_block_height) {
-    bool result = globals.fork_enabled && top_block_height > globals.fork_at_height;
+    bool result = globals.fork_enabled && (top_block_height + 1) > globals.fork_at_height;
     return result;
 }
 
@@ -291,7 +291,7 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
 void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     cryptonote::block top_block = core.blockchain.db().get_top_block();
     crypto::hash top_hash = cryptonote::get_block_hash(top_block);
-    if (!globals.fork_enabled || top_block.get_height() < globals.fork_at_height)
+    if (!globals.fork_enabled || (top_block.get_height() + 1) < globals.fork_at_height)
         return;
 
     auto* protocol = reinterpret_cast<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>*>(
