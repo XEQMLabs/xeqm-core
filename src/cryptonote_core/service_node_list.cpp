@@ -80,7 +80,6 @@
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
 #include "uptime_proof.h"
-#include "network_config/mocknet.h"
 
 using cryptonote::hf;
 namespace feature = cryptonote::feature;
