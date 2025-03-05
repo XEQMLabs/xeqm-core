@@ -7,6 +7,7 @@
 #include "bls/bls_crypto.h"
 #include "common/command_line.h"
 #include "common/guts.h"
+#include "common/oxen.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
 #include "cryptonote_basic/verification_context.h"
@@ -61,7 +62,7 @@ const eth::address MOCK_ETH_ADDRESS = tools::make_from_hex_guts<eth::address>(
         "485973e8dfFA8Abd3AB91292bFCE25896C687bA5"sv, false);
 
 // NOTE: Ed25519 public key is stuffed in the last 32 bytes of the secret key
-// but it's to have the pubkey separated to visually grok instantly for
+// but it's useful to have the pubkey separated to visually grok instantly for
 // debugging quorums and Pulse.
 //
 // clang-format off
@@ -199,8 +200,7 @@ crypto::public_key mocknet_get_deterministic_block_leader() {
 void mocknet_replace_quorum_with_mock_nodes(
         service_nodes::quorum& quorum, uint64_t top_block_height) {
     // NOTE: Replace each node in the quorum with the mock keys sequentially
-    assert(quorum.workers.size() + quorum.validators.size() <
-           sizeof(MOCKNET_KEYS) / sizeof(MOCKNET_KEYS[0]));
+    assert(quorum.workers.size() + quorum.validators.size() < oxen::array_count(MOCKNET_KEYS));
 
     size_t key_index = 0;
     for (size_t index = 0; index < quorum.workers.size(); index++) {
