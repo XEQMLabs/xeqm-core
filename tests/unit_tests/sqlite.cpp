@@ -88,9 +88,8 @@ TEST(SQLITE, AddSNRewards)
 TEST(SQLITE, CalculateRewards)
 {
   test::BlockchainSQLiteTest sqliteDB(cryptonote::network_type::TESTNET, ":memory:");
-
-  cryptonote::block block;
-  block.reward = 200;
+  auto reward = cryptonote::reward_money::coin_amount(200);
+  auto hf_version = cryptonote::hf::hf19_reward_batching;
 
   // Check that a single contributor receives 100% of the block reward
   cryptonote::block_payments rewards;
@@ -103,15 +102,11 @@ TEST(SQLITE, CalculateRewards)
     single_contributor.portions_for_operator = 0;
     contributor.address = first_address.address;
     contributor.reserved = 0;
-    contributor.amount = block.reward;
-    sqliteDB.add_rewards(
-            block.major_version,
-            cryptonote::reward_money::coin_amount(block.reward),
-            single_contributor,
-            rewards);
-    EXPECT_EQ(rewards[first_address.address].to_coin(), 200);
+    contributor.amount = reward.to_coin();
+
+    sqliteDB.add_rewards(hf_version, reward, single_contributor, rewards);
+    EXPECT_EQ(rewards[first_address.address].to_coin(), reward.to_coin());
   }
-  auto hf_version = block.major_version;
 
   // Check that 3 contributor receives their portion of the block reward
   service_nodes::service_node_info multiple_contributors{};
@@ -134,31 +129,23 @@ TEST(SQLITE, CalculateRewards)
   contributor3.amount = 34;
 
   rewards.clear();
-  sqliteDB.add_rewards(
-          block.major_version,
-          cryptonote::reward_money::coin_amount(block.reward),
-          multiple_contributors,
-          rewards);
+  sqliteDB.add_rewards(hf_version, reward, multiple_contributors, rewards);
 
   auto& a1 = first_address.address;
   auto& a2 = second_address.address;
   auto& a3 = third_address.address;
-  EXPECT_EQ(rewards[a1], cryptonote::reward_money::coin_amount(66));
-  EXPECT_EQ(rewards[a2], cryptonote::reward_money::coin_amount(66));
-  EXPECT_EQ(rewards[a3], cryptonote::reward_money::coin_amount(68));
+  EXPECT_EQ(rewards[a1].to_coin(), cryptonote::reward_money::coin_amount(66).to_coin());
+  EXPECT_EQ(rewards[a2].to_coin(), cryptonote::reward_money::coin_amount(66).to_coin());
+  EXPECT_EQ(rewards[a3].to_coin(), cryptonote::reward_money::coin_amount(68).to_coin());
 
   // Check that 3 contributors receives their portion of the block reward when the operator takes a 10% fee
   multiple_contributors.portions_for_operator = cryptonote::old::STAKING_PORTIONS/10;
   multiple_contributors.operator_address = first_address.address;
-  block.reward = 1000;
+  reward = cryptonote::reward_money::coin_amount(1000);
   rewards.clear();
-  sqliteDB.add_rewards(
-          block.major_version,
-          cryptonote::reward_money::coin_amount(block.reward),
-          multiple_contributors,
-          rewards);
+  sqliteDB.add_rewards(hf_version, reward, multiple_contributors, rewards);
   // Operator gets 10%, remainder split among operator and contributors:
-  EXPECT_EQ(rewards[a1], cryptonote::reward_money::coin_amount(99 + 297)); // fee + share
-  EXPECT_EQ(rewards[a2], cryptonote::reward_money::coin_amount(297));
-  EXPECT_EQ(rewards[a3], cryptonote::reward_money::coin_amount(306));
+  EXPECT_EQ(rewards[a1].to_coin(), cryptonote::reward_money::coin_amount(99 + 297).to_coin()); // fee + share
+  EXPECT_EQ(rewards[a2].to_coin(), cryptonote::reward_money::coin_amount(297).to_coin());
+  EXPECT_EQ(rewards[a3].to_coin(), cryptonote::reward_money::coin_amount(306).to_coin());
 }
