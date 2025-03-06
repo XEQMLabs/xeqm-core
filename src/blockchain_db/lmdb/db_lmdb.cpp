@@ -658,7 +658,8 @@ void BlockchainLMDB::do_resize() {
 
     // NOTE: New map size is to add 1GiB and round it to the nearest page size
     uint64_t new_size = static_cast<uint64_t>(info.me_mapsize) + ADD_SIZE;
-    new_size += new_size % stat.ms_psize;
+    if (new_size % stat.ms_psize != 0)
+        new_size += (stat.ms_psize - (new_size % stat.ms_psize));
 
     // NOTE: Resize the DB
     mdb_txn_safe::prevent_new_txns();
