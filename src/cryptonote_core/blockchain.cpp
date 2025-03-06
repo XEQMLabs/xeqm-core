@@ -6349,7 +6349,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
         total_txs += entry.txs.size();
     }
     m_bytes_to_sync += bytes;
-    while (!m_db->batch_start(blocks_entry.size(), bytes)) {
+    while (!m_db->batch_start()) {
         unlock();
         tx_pool.unlock();
         std::this_thread::sleep_for(100ms);

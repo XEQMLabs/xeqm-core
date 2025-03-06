@@ -354,7 +354,7 @@ class BlockchainLMDB : public BlockchainDB {
             size_t num_desired_checkpoints = GET_ALL_CHECKPOINTS) const override;
 
     void set_batch_transactions(bool batch_transactions) override;
-    bool batch_start(uint64_t batch_num_blocks = 0, uint64_t batch_bytes = 0) override;
+    bool batch_start() override;
     void batch_commit();
     void batch_stop() override;
     void batch_abort() override;
@@ -403,11 +403,9 @@ class BlockchainLMDB : public BlockchainDB {
     static int compare_string(const MDB_val* a, const MDB_val* b);
 
   private:
-    void do_resize(uint64_t size_increase = 0);
+    void grow_if_needed();
 
-    bool need_resize(uint64_t threshold_size = 0) const;
-    void check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes);
-    uint64_t get_estimated_batch_size(uint64_t batch_num_blocks, uint64_t batch_bytes) const;
+    void do_resize();
 
     void add_block(
             const block& blk,
@@ -549,8 +547,6 @@ class BlockchainLMDB : public BlockchainDB {
 
     // Guards LMDB resize
     std::mutex m_synchronization_lock;
-
-    constexpr static float RESIZE_PERCENT = 0.9f;
 };
 
 }  // namespace cryptonote

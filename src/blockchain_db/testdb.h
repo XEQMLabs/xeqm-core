@@ -57,7 +57,7 @@ class BaseTestDB : public cryptonote::BlockchainDB {
     virtual void lock() override {}
     virtual bool try_lock() override { return true; }
     virtual void unlock() override {}
-    virtual bool batch_start(uint64_t batch_num_blocks = 0, uint64_t batch_bytes = 0) override {
+    virtual bool batch_start() override {
         return true;
     }
     virtual void batch_stop() override {}
