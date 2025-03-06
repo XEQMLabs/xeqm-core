@@ -980,7 +980,7 @@ void BlockchainLMDB::remove_transaction_data(const crypto::hash& tx_hash, const 
         throw1(DB_ERROR("Failed to add removal of tx index to db transaction"));
 }
 
-static bool need_resize(MDB_env *env) {
+static bool need_resize(MDB_env* env) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     MDB_envinfo mei;
 
@@ -1017,9 +1017,7 @@ static bool need_resize(MDB_env *env) {
     return false;
 }
 
-
-void BlockchainLMDB::grow_if_needed()
-{
+void BlockchainLMDB::grow_if_needed() {
     if (need_resize(m_env)) {
         do_resize();
     }
@@ -3932,7 +3930,6 @@ uint64_t BlockchainLMDB::add_block(
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
     uint64_t m_height = height();
-
 
     try {
         BlockchainDB::add_block(
