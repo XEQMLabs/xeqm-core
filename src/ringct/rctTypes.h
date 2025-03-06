@@ -58,15 +58,10 @@ extern "C" {
 // atomic units of moneros
 #define ATOMS 64
 
-// for printing large ints
-
 // Namespace specifically for ring ct code
 namespace rct {
 
 using namespace std::literals;
-
-// basic ops containers
-typedef unsigned char* Bytes;
 
 // Can contain a secret or public key
 //  similar to secret_key / public_key of crypto-ops,
