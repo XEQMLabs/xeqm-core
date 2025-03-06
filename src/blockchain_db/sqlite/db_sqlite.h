@@ -126,7 +126,8 @@ class BlockchainSQLite : public db::Database {
 
     // Retrieves the amount that has been accrued but not yet paid out to the Oxen wallet `address`.
     // Returns the current height and the atomic unpaid amount that the address is owed.
-    std::pair<uint64_t, cryptonote::reward_money> get_accrued_rewards(const account_public_address& address);
+    std::pair<uint64_t, cryptonote::reward_money> get_accrued_rewards(
+            const account_public_address& address);
 
     // Returns the amount that has been accrued to the Ethereum `address` as of the given recent
     // block height `at_height`. Returns nullopt if `at_height` is higher than the current block
@@ -145,7 +146,8 @@ class BlockchainSQLite : public db::Database {
     // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
     // service nodes will return 2 vectors corresponding to the addresses and the atomic value in
     // oxen that the service nodes are owed.
-    std::pair<std::vector<std::string>, std::vector<cryptonote::reward_money>> get_all_accrued_rewards();
+    std::pair<std::vector<std::string>, std::vector<cryptonote::reward_money>>
+    get_all_accrued_rewards();
 
     // get_payments -> passing a block height will return an array of payments that should be
     // created in a coinbase transaction on that block given the current batching DB state.
