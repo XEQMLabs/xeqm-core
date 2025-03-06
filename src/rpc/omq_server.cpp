@@ -55,7 +55,7 @@ namespace {
     const command_line::arg_descriptor<std::vector<std::string>> arg_omq_user{
             "lmq-user",
             "Specifies an x25519 pubkey of a client permitted to connect to the --lmq-curve or "
-            "quorumnet address(es) with restricted capabilities"};
+            "quorumnet address(es) with restricted (non-admin) capabilities"};
     const command_line::arg_descriptor<std::vector<std::string>> arg_omq_local_control{
             "lmq-local-control",
             "Adds an unencrypted OxenMQ RPC listener with full, unrestricted capabilities and "
@@ -146,7 +146,7 @@ omq_rpc::omq_rpc(
         check_omq_listen_addr(addr);
         log::info(globallogcat, "OMQ listening on {} (curve restricted)", addr);
         omq.listen_curve(addr, [&core](std::string_view ip, std::string_view pk, bool /*sn*/) {
-            return core.omq_allow(ip, pk, AuthLevel::denied);
+            return core.omq_allow(ip, pk, AuthLevel::none);
         });
     }
 
