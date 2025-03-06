@@ -1213,22 +1213,21 @@ bool core::init_service_keys() {
     }
 
     auto style = fg(fmt::terminal_color::yellow) | fmt::emphasis::bold;
-    if (m_service_node) {
-        log::info(
-                globallogcat,
-                fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
-                "Service node public keys:");
-        log::info(globallogcat, style, "- primary: {:x}", keys.pub);
+    log::info(
+            globallogcat,
+            fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
+            "{} public keys:",
+            m_service_node ? "Service node" : "Node");
+    bool unified_pk = std::memcmp(keys.pub.data(), keys.pub_ed25519.data(), 32) == 0;
+    if (m_service_node)
+        log::info(globallogcat, style, "- primary{}: {:x}", unified_pk ? "/ed25519" : "", keys.pub);
+    if (!m_service_node || !unified_pk)
         log::info(globallogcat, style, "- ed25519: {:x}", keys.pub_ed25519);
-        // .snode address is the ed25519 pubkey, encoded with base32z and with .snode appended:
-        log::info(globallogcat, style, "- lokinet: {:a}.snode", keys.pub_ed25519);
-        log::info(globallogcat, style, "- x25519: {:x}", keys.pub_x25519);
+    log::info(globallogcat, style, "- x25519: {:x}", keys.pub_x25519);
+    // .snode address is the ed25519 pubkey, encoded with base32z and with .snode appended:
+    if (m_service_node) {
         log::info(globallogcat, style, "- bls: {:x}", keys.pub_bls);
-
-    } else {
-        // Only print the x25519 version because it's the only thing useful for a non-SN (for
-        // encrypted OMQ RPC connections).
-        log::info(globallogcat, style, "x25519 public key: {:x}", keys.pub_x25519);
+        log::info(globallogcat, style, "- lokinet: {:a}.snode", keys.pub_ed25519);
     }
 
     return true;
@@ -1309,7 +1308,7 @@ void core::init_oxenmq(const boost::program_options::variables_map& vm) {
         std::string listen_ip = vm["p2p-bind-ip"].as<std::string>();
         if (listen_ip.empty())
             listen_ip = "0.0.0.0";
-        std::string qnet_listen = "tcp://" + listen_ip + ":" + std::to_string(m_quorumnet_port);
+        std::string qnet_listen = "tcp://{}:{}"_format(listen_ip, m_quorumnet_port);
         log::info(globallogcat, "OxenMQ/quorumnet listening on {} (quorumnet)", qnet_listen);
         m_omq->listen_curve(
                 qnet_listen,
