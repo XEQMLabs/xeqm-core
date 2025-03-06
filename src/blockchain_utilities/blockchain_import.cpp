@@ -281,14 +281,14 @@ int import_from_file(
     }
 
     if (use_batch) {
-        uint64_t bytes, h2;
+        uint64_t h2;
         bool q2;
         pos = import_file.tellg();
-        bytes = bootstrap.count_bytes(import_file, db_batch_size, h2, q2);
+        bootstrap.count_bytes(import_file, db_batch_size, h2, q2);
         if (import_file.eof())
             import_file.clear();
         import_file.seekg(pos);
-        core.blockchain.db().batch_start(db_batch_size, bytes);
+        core.blockchain.db().batch_start();
     }
     while (!quit) {
         uint32_t chunk_size;
@@ -443,16 +443,16 @@ int import_from_file(
 
                     if (use_batch) {
                         if ((h - 1) % db_batch_size == 0) {
-                            uint64_t bytes, h2;
+                            uint64_t h2;
                             bool q2;
                             std::cout << refresh_string;
                             // zero-based height
                             std::cout << "\n[- batch commit at height " << h - 1 << " -]\n";
                             core.blockchain.db().batch_stop();
                             pos = import_file.tellg();
-                            bytes = bootstrap.count_bytes(import_file, db_batch_size, h2, q2);
+                            bootstrap.count_bytes(import_file, db_batch_size, h2, q2);
                             import_file.seekg(pos);
-                            core.blockchain.db().batch_start(db_batch_size, bytes);
+                            core.blockchain.db().batch_start();
                             std::cout << "\n";
                             core.blockchain.db().show_stats();
                         }
