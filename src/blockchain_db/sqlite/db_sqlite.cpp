@@ -669,7 +669,8 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
     return payments;
 }
 
-static cryptonote::reward_money get_accrued_rewards_impl(BlockchainSQLite& db, const std::string& address) {
+static cryptonote::reward_money get_accrued_rewards_impl(
+        BlockchainSQLite& db, const std::string& address) {
     log::trace(logcat, "BlockchainDB_SQLITE {} for {}", __func__, address);
     auto rewards = db.prepared_maybe_get<int64_t>(
             R"(
@@ -713,7 +714,8 @@ static std::optional<cryptonote::reward_money> get_accrued_rewards_at_impl(
     return cryptonote::reward_money::db_amount(rewards.value_or(0));
 }
 
-std::pair<uint64_t, cryptonote::reward_money> BlockchainSQLite::get_accrued_rewards(const eth::address& address) {
+std::pair<uint64_t, cryptonote::reward_money> BlockchainSQLite::get_accrued_rewards(
+        const eth::address& address) {
     std::string address_string = fmt::format("0x{:x}", address);
     return {height, get_accrued_rewards_impl(*this, address_string)};
 }
@@ -842,7 +844,8 @@ void BlockchainSQLite::reward_handler(
         auto base_sn_reward = cryptonote::reward_money::coin_amount(oxen::SN_REWARD_HF15);
         if (block_reward.to_db() < base_sn_reward.to_db())
             throw oxen::traced<std::logic_error>{"Invalid payment: block reward is too small"};
-        if (auto tx_fees = block_reward - base_sn_reward; tx_fees.to_db() > 0 && block.has_pulse()) {
+        if (auto tx_fees = block_reward - base_sn_reward;
+            tx_fees.to_db() > 0 && block.has_pulse()) {
             auto pulse_leader = sn_state.get_block_producer();
             if (!pulse_leader && !sn_state.sn_list)
                 // No sn_list means we're in the test suite, so to make this work, we'll use the
@@ -872,7 +875,7 @@ void BlockchainSQLite::reward_handler(
                 parsed_governance_addr.first = block.major_version;
             }
 
-            auto foundation_reward = cryptonote::reward_money(
+            auto foundation_reward = cryptonote::reward_money::coin_amount(
                     cryptonote::governance_reward_formula(block.major_version));
             payments[parsed_governance_addr.second.address] += foundation_reward;
         }
