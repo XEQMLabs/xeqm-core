@@ -884,7 +884,8 @@ void BlockchainSQLite::reward_handler(
     // Step 3: Iterate over the payable (active for >=24h) N service nodes and pay each node 1/N
     // fraction of the total block reward.
     const uint64_t N = block_add.payable_nodes_hf19_onwards.size();
-    const auto per_sn_reward = cryptonote::reward_money::db_amount(block_reward.to_db() / N);
+    const auto per_sn_reward =
+            cryptonote::reward_money::db_amount(N ? block_reward.to_db() / N : 0);
 
     for (const crypto::public_key& node_pubkey : block_add.payable_nodes_hf19_onwards) {
         std::shared_ptr<const service_nodes::service_node_info> node_info =
