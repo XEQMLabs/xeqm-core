@@ -43,8 +43,6 @@
 
 extern "C" {
 #include "crypto/crypto-ops.h"
-#include "crypto/keccak.h"
-#include "crypto/random.h"
 }
 #include "common/util.h"
 #include "crypto/crypto.h"
