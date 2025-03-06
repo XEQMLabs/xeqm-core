@@ -36,8 +36,6 @@
 #include "common/fs.h"
 #include "ringct/rctTypes.h"
 
-#define ENABLE_AUTO_RESIZE
-
 namespace cryptonote {
 
 struct mdb_block_info;
@@ -553,11 +551,7 @@ class BlockchainLMDB : public BlockchainDB {
     // force a value so it can compile with 32-bit ARM
     constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 31;
 #else
-#if defined(ENABLE_AUTO_RESIZE)
     constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 30;
-#else
-    constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 33;
-#endif
 #endif
 
     // Guards LMDB resize

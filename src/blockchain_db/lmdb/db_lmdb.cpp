@@ -695,7 +695,6 @@ void BlockchainLMDB::do_resize(uint64_t increase_size) {
 // threshold_size is used for batch transactions
 bool BlockchainLMDB::need_resize(uint64_t threshold_size) const {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
-#if defined(ENABLE_AUTO_RESIZE)
     MDB_envinfo mei;
 
     mdb_env_info(m_env, &mei);
@@ -737,9 +736,6 @@ bool BlockchainLMDB::need_resize(uint64_t threshold_size) const {
         return true;
     }
     return false;
-#else
-    return false;
-#endif
 }
 
 void BlockchainLMDB::check_and_resize_for_batch(uint64_t batch_num_blocks, uint64_t batch_bytes) {
