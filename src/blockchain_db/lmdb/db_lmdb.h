@@ -547,13 +547,6 @@ class BlockchainLMDB : public BlockchainDB {
     mdb_txn_cursors m_wcursors;
     mutable boost::thread_specific_ptr<mdb_threadinfo> m_tinfo;
 
-#if defined(__arm__)
-    // force a value so it can compile with 32-bit ARM
-    constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 31;
-#else
-    constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 30;
-#endif
-
     // Guards LMDB resize
     std::mutex m_synchronization_lock;
 

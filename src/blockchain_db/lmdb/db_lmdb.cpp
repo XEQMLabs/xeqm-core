@@ -1471,8 +1471,6 @@ void BlockchainLMDB::open(
         (result = mdb_env_set_maxreaders(m_env, threads + 16)))
         throw0(DB_ERROR("Failed to set max number of readers: {}"_format(mdb_strerror(result))));
 
-    size_t mapsize = DEFAULT_MAPSIZE;
-
     if (db_flags & DBF_FAST)
         mdb_flags |= MDB_NOSYNC;
     if (db_flags & DBF_FASTEST)
@@ -1492,8 +1490,9 @@ void BlockchainLMDB::open(
     mdb_env_info(m_env, &mei);
     uint64_t cur_mapsize = (uint64_t)mei.me_mapsize;
 
-    if (cur_mapsize < mapsize) {
-        if (auto result = mdb_env_set_mapsize(m_env, mapsize))
+    constexpr static uint64_t DEFAULT_MAPSIZE = 1LL << 30;
+    if (cur_mapsize < DEFAULT_MAPSIZE) {
+        if (auto result = mdb_env_set_mapsize(m_env, DEFAULT_MAPSIZE))
             throw0(DB_ERROR("Failed to set max memory map size: {}"_format(mdb_strerror(result))));
         mdb_env_info(m_env, &mei);
         cur_mapsize = (uint64_t)mei.me_mapsize;
