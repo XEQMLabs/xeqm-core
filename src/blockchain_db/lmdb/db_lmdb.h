@@ -532,8 +532,6 @@ class BlockchainLMDB : public BlockchainDB {
 
     MDB_dbi m_properties;
 
-    mutable uint64_t m_cum_size;  // used in batch size estimation
-    mutable unsigned int m_cum_count;
     fs::path m_folder;
     mdb_txn_safe* m_write_txn;        // may point to either a short-lived txn or a batch txn
     mdb_txn_safe* m_write_batch_txn;  // persist batch txn outside of BlockchainLMDB

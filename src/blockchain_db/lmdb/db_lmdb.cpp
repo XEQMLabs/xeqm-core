@@ -759,11 +759,6 @@ void BlockchainLMDB::add_block(
     if (result)
         throw0(DB_ERROR("Failed to add block height by hash to db transaction: {}"_format(
                 mdb_strerror(result))));
-
-    // we use weight as a proxy for size, since we don't have size but weight is >= size
-    // and often actually equal
-    m_cum_size += block_weight;
-    m_cum_count++;
 }
 
 void BlockchainLMDB::remove_block() {
@@ -1294,9 +1289,6 @@ BlockchainLMDB::BlockchainLMDB(bool batch_transactions) : BlockchainDB() {
     m_write_txn = nullptr;
     m_write_batch_txn = nullptr;
     m_batch_active = false;
-    m_cum_size = 0;
-    m_cum_count = 0;
-
     // reset may also need changing when initialize things here
 }
 
@@ -1730,8 +1722,6 @@ void BlockchainLMDB::reset() {
         throw0(DB_ERROR("Failed to write version to database: {}"_format(mdb_strerror(result))));
 
     txn.commit();
-    m_cum_size = 0;
-    m_cum_count = 0;
 }
 
 std::vector<fs::path> BlockchainLMDB::get_filenames() const {
