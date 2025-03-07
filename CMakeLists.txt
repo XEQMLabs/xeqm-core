@@ -286,7 +286,7 @@ if(NOT MANUAL_SUBMODULES)
         endif()
       endforeach()
     endfunction ()
-    
+
     message(STATUS "Checking submodules")
     check_submodule(external/rapidjson)
     check_submodule(external/trezor-common)
