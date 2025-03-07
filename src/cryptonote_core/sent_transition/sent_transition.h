@@ -41,27 +41,6 @@ static_assert(
         OXEN_SENT_TESTNET_STAKING_RATIO.first <
         std::numeric_limits<uint64_t>::max() / 100'000000000);
 
-/// Returns the mapping of OXEN -> SENT addresses for the given network type.
-const std::unordered_map<std::string, eth::address>& addresses(network_type net);
-
-/// Returns the OXEN -> SENT conversion ratio to apply to conversion-registered wallets at the
-/// SENT hardfork.  The first value is the numerator, second is the denominator (e.g. a return
-/// of [2, 3] means 1 OXEN becomes 0.666666666 SENT.  (This is a ratio because the conversion is
-/// performed precisely, avoiding floating point math).
-const std::pair<uint8_t, uint8_t>& conversion_ratio(network_type net);
-
-/// Returns SENT SN contributor transition bonus amounts (from the SN bonus program) as a map of eth
-/// address -> atomic (1e-9) value.
-const std::unordered_map<eth::address, uint64_t>& transition_bonus(network_type net);
-
-/// Returns old not-quite-ed-key to proper ed key mapping, for nodes which were registered before
-/// we switched to proper ed25519.
-const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys(
-        network_type net);
-
-const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys(
-        network_type net);
-
 /// Performs the SENT service node transition, updating the service node list to replace OXEN
 /// addresses with ETH addresses, updating stakes to reflect the SENT staking requirement, and
 /// converting any pending batched rewards to SENT.  After this is called, all services nodes will
