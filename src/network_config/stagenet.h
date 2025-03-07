@@ -76,9 +76,4 @@ inline constexpr network_config config{
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = testnet::config.L2_NODE_LIST_PURGE_MIN_OXEN_AGE,
         .DEFAULT_STAKING_URL = "https://testnet.stake.getsession.org"sv,
 };
-
-inline constexpr std::array<const char*, 2> SEED_NODES = {
-    "stagenet-seed1.equilibria.network:11022",
-    "stagenet-seed2.equilibria.network:11022"
-};
 }  // namespace cryptonote::config::stagenet
