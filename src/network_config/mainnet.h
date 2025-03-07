@@ -71,19 +71,4 @@ inline constexpr network_config config{
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = 24h / TARGET_BLOCK_TIME,
         .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
 };
-
-// Add seed nodes configuration
-inline constexpr std::array<const char*, 5> SEED_NODES = {
-    "seed1.equilibria.network:22022",
-    "seed2.equilibria.network:22022", 
-    "seed3.equilibria.network:22022",
-    "seed4.equilibria.network:22022",
-    "seed5.equilibria.network:22022"
-};
-
-inline constexpr std::array<const char*, 3> CHECKPOINT_NODES = {
-    "checkpoint1.equilibria.network:22022",
-    "checkpoint2.equilibria.network:22022",
-    "checkpoint3.equilibria.network:22022"
-};
 }  // namespace cryptonote::config::mainnet

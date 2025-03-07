@@ -69,9 +69,4 @@ inline constexpr network_config config{
         // stagenet-specific URL and stake.getsession.org will be used for mainnet staking:
         .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
 };
-
-inline constexpr std::array<const char*, 2> SEED_NODES = {
-    "stagenet-seed1.equilibria.network:11022",
-    "stagenet-seed2.equilibria.network:11022"
-};
 }  // namespace cryptonote::config::stagenet
