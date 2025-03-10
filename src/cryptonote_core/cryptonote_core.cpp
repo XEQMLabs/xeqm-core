@@ -100,7 +100,7 @@ const command_line::arg_descriptor<std::string> arg_data_dir{
             fs::path base = tools::get_default_data_dir();
             if (auto subdir = cryptonote::network_config_subdir(nettype); !subdir.empty())
                 base /= subdir;
-            return tools::convert_str<char>(base.u8string());
+            return tools::path_to_str(base);
         }};
 const command_line::arg_flag arg_offline = {
         "offline", "Do not listen for peers, nor connect to any"};
