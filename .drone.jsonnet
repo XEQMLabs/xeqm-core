@@ -396,10 +396,7 @@ local gui_wallet_step_darwin = {
               arch='amd64',
               extra_cmds=static_check_and_upload,/*extra_steps=[gui_wallet_step_darwin]*/),
 
-  // Android builds; we do them all in one image because the android NDK is huge
-
-  // TODO FIXME: both android and iOS wallet builds need fixes for recent Oxen 11 changes!
-] + if true then [] else [
+  // Android builds; we do all architecture builds within in one single step because the android NDK is huge
   {
     name: 'Android wallet_api',
     kind: 'pipeline',
