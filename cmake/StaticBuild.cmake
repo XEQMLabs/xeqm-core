@@ -28,7 +28,7 @@ set(READLINE_HASH SHA512=27790d0461da3093a7fee6e89a51dcab5dc61928ec42e9228ab3649
     CACHE STRING "readline source hash")
 
 set(SQLITE3_VERSION 3490100 CACHE STRING "sqlite3 version")
-set(SQLITE3_MIRROR ${LOCAL_MIRROR} https://www.sqlite.org/2024
+set(SQLITE3_MIRROR ${LOCAL_MIRROR} https://www.sqlite.org/2025
     CACHE STRING "sqlite3 download mirror(s)")
 set(SQLITE3_SOURCE sqlite-autoconf-${SQLITE3_VERSION}.tar.gz)
 set(SQLITE3_HASH SHA512=ace92f20fb13a28a8be0eb3560ebf79e71e882611108179b45abba6e77ec0964d75a96c1e187c0e5f883b83896fd44074ef244e1f589288b6354bc9db85223ca
