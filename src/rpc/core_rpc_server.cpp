@@ -2791,11 +2791,11 @@ void core_rpc_server::invoke(GET_SERVICE_PRIVKEYS& get_service_privkeys, rpc_con
     const auto& keys = m_core.get_service_keys();
     if (keys.key)
         get_service_privkeys.response_hex["service_node_privkey"] =
-                tools::view_guts<std::byte>(keys.key);
+                tools::span_guts<const std::byte>(keys.key);
     get_service_privkeys.response_hex["service_node_ed25519_privkey"] =
-            tools::view_guts<std::byte>(keys.key_ed25519);
+            tools::span_guts<const std::byte>(keys.key_ed25519);
     get_service_privkeys.response_hex["service_node_x25519_privkey"] =
-            tools::view_guts<std::byte>(keys.key_x25519);
+            tools::span_guts<const std::byte>(keys.key_x25519);
     get_service_privkeys.response["status"] = STATUS_OK;
 }
 

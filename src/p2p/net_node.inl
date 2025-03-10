@@ -627,8 +627,7 @@ bool node_server<t_payload_net_handler>::init(const boost::program_options::vari
 
     static_cast<std::array<unsigned char, 16>&>(m_network_id) = get_config(m_nettype).NETWORK_ID;
 
-    m_config_folder = fs::path{
-            tools::convert_sv<char8_t>(command_line::get_arg(vm, cryptonote::arg_data_dir))};
+    m_config_folder = tools::utf8_path(command_line::get_arg(vm, cryptonote::arg_data_dir));
     network_zone& public_zone = m_network_zones.at(epee::net_utils::zone::public_);
 
     if (public_zone.m_port != std::to_string(cryptonote::get_config(m_nettype).P2P_DEFAULT_PORT))

@@ -161,14 +161,12 @@ omq_rpc::omq_rpc(
         // Push default .oxen/oxend.sock
         locals.push_back(
                 "ipc://" +
-                tools::convert_str<char>(
-                        (core.get_config_directory() / cryptonote::SOCKET_FILENAME).u8string()));
+                tools::path_to_str(core.get_config_directory() / cryptonote::SOCKET_FILENAME));
         // Pushing old default lokid.sock onto the list. A symlink from .loki -> .oxen so the
         // user should be able to communicate via the old .loki/lokid.sock
         locals.push_back(
-                "ipc://" + tools::convert_str<char>(
-                                   (core.get_config_directory() / cryptonote::old::SOCKET_FILENAME)
-                                           .u8string()));
+                "ipc://" +
+                tools::path_to_str(core.get_config_directory() / cryptonote::old::SOCKET_FILENAME));
 #endif
     } else if (locals.size() == 1 && locals[0] == "none") {
         locals.clear();
