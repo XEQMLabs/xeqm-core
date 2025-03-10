@@ -14,6 +14,7 @@ local default_deps_nocxx = [
   'libunbound-dev',
   'libunwind8-dev',
   'libusb-1.0-0-dev',
+  'libzstd-dev',
   'nettle-dev',
   'pkg-config',
   'python3',

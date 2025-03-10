@@ -2,8 +2,8 @@
 
 **NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS**
 
-Copyright (c) 2018-2022 The Equilibria Project.   
-Portions Copyright (c) 2014-2019 The Monero Project.   
+Copyright (c) 2018-2022 The Equilibria Project.
+Portions Copyright (c) 2014-2019 The Monero Project.
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
@@ -40,8 +40,8 @@ library archives (`.a`).
 
 | Dep          | Min. version  | Vendored | Debian/Ubuntu pkg      | Arch pkg     | Fedora              | Optional | Purpose            |
 | ------------ | ------------- | -------- | ---------------------- | ------------ | ------------------- | -------- | ----------------   |
-| GCC          | 8.1.0         | NO       | `g++`[1]               | `base-devel` | `gcc`               | NO       |                    |
-| CMake        | 3.13          | NO       | `cmake`                | `cmake`      | `cmake`             | NO       |                    |
+| GCC          | 10.1.0        | NO       | `g++`[1]               | `base-devel` | `gcc`               | NO       |                    |
+| CMake        | 3.16          | NO       | `cmake`                | `cmake`      | `cmake`             | NO       |                    |
 | pkg-config   | any           | NO       | `pkg-config`           | `base-devel` | `pkgconf`           | NO       |                    |
 | Boost        | 1.65          | NO       | `libboost-all-dev`[2]  | `boost`      | `boost-devel`       | NO       | C++ libraries      |
 | libzmq       | 4.3.0         | YES      | `libzmq3-dev`          | `zeromq`     | `zeromq-devel`      | NO       | ZeroMQ library     |
@@ -49,7 +49,8 @@ library archives (`.a`).
 | libsodium    | 1.0.9         | YES      | `libsodium-dev`        | `libsodium`  | `libsodium-devel`   | NO       | cryptography       |
 | libcurl      | 4.0           | NO       | `libcurl4-dev`         | `curl`       | `curl-devel`        | NO       | HTTP RPC           |
 | libuv (Win)  | any           | NO       | (Windows only)         | --           | --                  | NO       | RPC event loop     |
-| libgmp       | any           | NO       | `libgmp-dev`           | --           | --                  | NO       | BLS precision math |
+| libgmp       | any           | NO       | `libgmp-dev`           | `gmp`        | `gmp-devel`         | NO       | BLS precision math |
+| libzstd      | any           | NO       | `libzstd-dev`          | `zstd`       | `libzstd-devel`     | NO       | SN state compress  |
 | libunwind    | any           | NO       | `libunwind8-dev`       | `libunwind`  | `libunwind-devel`   | YES      | Stack traces       |
 | liblzma      | any           | NO       | `liblzma-dev`          | `xz`         | `xz-devel`          | YES      | For libunwind      |
 | libreadline  | 6.3.0         | NO       | `libreadline-dev`      | `readline`   | `readline-devel`    | YES      | Input editing      |
@@ -62,8 +63,8 @@ library archives (`.a`).
 | protoc       | ?             | NO       | `protobuf-compiler`    | `protobuf`   | `protobuf-compiler` | YES      | Hardware wallet    |
 
 
-[1] On Ubuntu Bionic you will need the g++-8 package instead of g++ (which is version 7) and will
-need to run `export CC=gcc-8 CXX=g++-8` before running `make` or `cmake`.
+[1] On Ubuntu Focal (20.04) you will need the g++-10 package instead of g++ (which is version 9) and will
+need to run `export CC=gcc-10 CXX=g++-10` before running `make` or `cmake`.
 
 [2] libboost-all-dev includes a lot of unnecessary packages; see the apt command below for a
 breakdown of the minimum set of required boost packages.
@@ -218,7 +219,7 @@ application.
 
 ### On FreeBSD:
 
-The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`). 
+The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`).
 If you are running Equilibria in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
 
 ### On OpenBSD:
@@ -319,15 +320,15 @@ You can also build a docker package using:
     ```bash
     # Build using all available cores
     docker build -t oxen-daemon-image .
-    
+
     # or build using a specific number of cores (reduce RAM requirement)
     docker build --build-arg NPROC=1 -t oxen .
-    
+
     # either run in foreground
-    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
-    
+    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
+
     # or in background
-    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
+    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
     ```
 
 **END - WORK IN PROGRESS**
