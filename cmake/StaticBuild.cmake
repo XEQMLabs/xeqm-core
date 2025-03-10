@@ -731,6 +731,13 @@ add_static_target(gmp::gmp gmp_external libgmp.a libidn2::libidn2 libtasn1::libt
 
 
 expand_urls(zstd_urls ${ZSTD_SOURCE} ${ZSTD_MIRROR})
+set(zstd_cmake_extra)
+if(CMAKE_C_COMPILER_LAUNCHER)
+    list(APPEND zstd_cmake_extra "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}")
+endif()
+if(CMAKE_TOOLCHAIN_FILE)
+    list(APPEND zstd_cmake_extra "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+endif()
 ExternalProject_Add(zstd_external
     SOURCE_SUBDIR build/cmake
     URL ${zstd_urls}
@@ -738,7 +745,8 @@ ExternalProject_Add(zstd_external
     DOWNLOAD_NO_PROGRESS ON
     CMAKE_ARGS -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_TESTS=OFF -DZSTD_BUILD_CONTRIB=OFF
       -DZSTD_BUILD_SHARED=OFF -DZSTD_BUILD_STATIC=ON
-      "-DCMAKE_INSTALL_PREFIX=${DEPS_DESTDIR}"
+      ${zstd_cmake_extra}
+      -DCMAKE_INSTALL_PREFIX=${DEPS_DESTDIR}
     BUILD_BYPRODUCTS ${DEPS_DESTDIR}/lib/libzstd.a ${DEPS_DESTDIR}/include/zstd.h)
 add_static_target(zstd::zstd zstd_external libzstd.a)
 

@@ -28,6 +28,7 @@ Build-Depends:
     liboxenc-dev (>= 1.1.0-3~),
     liboxen-logging-dev (>= 1.1.0),
     libcurl4-dev,
+    libzstd-dev,
     libssl-dev @IF_FMT , libfmt-dev (>= 9)@@IF_SPD , libspdlog-dev (>= 1.9.1)@@IF_SECP , libsecp256k1-dev (>= 0.2)@ @OXEN_APPEND_DEPS@
 Standards-Version: 4.1.3
 Homepage: https://oxen.io
