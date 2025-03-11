@@ -440,22 +440,41 @@ local gui_wallet_step_darwin = {
       {
         name: 'build',
         environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
-        commands: submodules_commands + [
-          'mkdir -p build/{arm64,sim64}',
-          'cd build/arm64',
-          'cmake ../.. -G Ninja ' +
-          '-DCMAKE_TOOLCHAIN_FILE=../../cmake/ios.toolchain.cmake -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+        commands: [
+          'mkdir -p build',
+          'cd build',
+          'cmake .. -G Ninja ' +
+          '-DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
           '-DSTATIC=ON -DBUILD_STATIC_DEPS=ON -DUSE_LTO=OFF -DCMAKE_BUILD_TYPE=Release ' +
-          '-DRANDOMX_ENABLE_JIT=OFF -DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
+          '-DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
           'ninja -j6 -v wallet_merged',
-          'cd ../sim64',
-          'cmake ../.. -G Ninja ' +
-          '-DCMAKE_TOOLCHAIN_FILE=../../cmake/ios.toolchain.cmake -DPLATFORM=SIMULATOR64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+          'cd ..',
+          './utils/build_scripts/drone-ios-static-upload.sh ios',
+        ],
+      },
+    ],
+  },
+  // iOS simulator build
+  {
+    name: 'iOS (sim) wallet_api',
+    kind: 'pipeline',
+    type: 'exec',
+    platform: { os: 'darwin', arch: 'arm64' },
+    steps: [
+      { name: 'submodules', commands: submodules_commands },
+      {
+        name: 'build',
+        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
+        commands: [
+          'mkdir -p build',
+          'cd build',
+          'cmake .. -G Ninja ' +
+          '-DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake -DPLATFORM=SIMULATORARM64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
           '-DSTATIC=ON -DBUILD_STATIC_DEPS=ON -DUSE_LTO=OFF -DCMAKE_BUILD_TYPE=Release ' +
-          '-DRANDOMX_ENABLE_JIT=OFF -DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
+          '-DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
           'ninja -j6 -v wallet_merged',
-          'cd ../..',
-          './utils/build_scripts/drone-ios-static-upload.sh',
+          'cd ..',
+          './utils/build_scripts/drone-ios-static-upload.sh ios-sim',
         ],
       },
     ],
