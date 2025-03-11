@@ -730,9 +730,12 @@ class BlockchainDB {
      * If any of this cannot be done, the subclass should throw the corresponding
      * subclass of DB_EXCEPTION
      *
+     * @params bytes_required Amount of bytes that the DB must guarantee be
+     * available for storing (can be set to 0).
+     *
      * @return true if we started the batch, false if already started
      */
-    virtual bool batch_start() = 0;
+    virtual bool batch_start(uint64_t bytes_required = 0) = 0;
 
     /**
      * @brief ends a batch transaction

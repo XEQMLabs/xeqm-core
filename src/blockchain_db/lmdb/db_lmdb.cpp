@@ -624,7 +624,7 @@ void BlockchainLMDB::check_open() const {
         throw0(DB_ERROR("DB operation attempted on a not-open DB instance"));
 }
 
-void BlockchainLMDB::do_resize() {
+void BlockchainLMDB::do_resize(uint64_t bytes_required) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     std::lock_guard lock{*this};
 
@@ -633,15 +633,15 @@ void BlockchainLMDB::do_resize() {
         batch_stop();
 
     // NOTE: Check disk capacity
-    constexpr uint64_t ADD_SIZE = 1 * 1024 /*KiB*/ * 1024 /*MiB*/ * 1024 /*GiB*/;
+    uint64_t const add_size = std::max(MIN_GROW_SIZE, bytes_required);
     try {
         auto free_space = fs::space(m_folder);
-        if (free_space.available < ADD_SIZE) {
+        if (free_space.available < add_size) {
             log::error(
                     logcat,
                     "Insufficient free disk space to grow DB: {} available, {} needed",
                     tools::get_human_readable_bytes(free_space.available),
-                    tools::get_human_readable_bytes(ADD_SIZE));
+                    tools::get_human_readable_bytes(add_size));
             return;
         }
     } catch (const std::exception& e) {
@@ -657,7 +657,7 @@ void BlockchainLMDB::do_resize() {
     mdb_env_stat(m_env, &stat);
 
     // NOTE: New map size is to add 1GiB and round it to the nearest page size
-    uint64_t new_size = static_cast<uint64_t>(info.me_mapsize) + ADD_SIZE;
+    uint64_t new_size = static_cast<uint64_t>(info.me_mapsize) + add_size;
     if (new_size % stat.ms_psize != 0)
         new_size += (stat.ms_psize - (new_size % stat.ms_psize));
 
@@ -690,7 +690,6 @@ void BlockchainLMDB::add_block(
         const crypto::hash& blk_hash) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
     uint64_t m_height = height();
 
@@ -810,7 +809,6 @@ uint64_t BlockchainLMDB::add_transaction_data(
         const crypto::hash& tx_prunable_hash) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
     uint64_t m_height = height();
 
@@ -980,47 +978,38 @@ void BlockchainLMDB::remove_transaction_data(const crypto::hash& tx_hash, const 
         throw1(DB_ERROR("Failed to add removal of tx index to db transaction"));
 }
 
-static bool need_resize(MDB_env* env) {
+static bool need_resize(MDB_env* env, uint64_t bytes_req) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
-    MDB_envinfo mei;
+    MDB_envinfo env_info;
+    mdb_env_info(env, &env_info);
 
-    mdb_env_info(env, &mei);
-
-    MDB_stat mst;
-
-    mdb_env_stat(env, &mst);
+    MDB_stat stat;
+    mdb_env_stat(env, &stat);
 
     // size_used doesn't include data yet to be committed, which can be
     // significant size during batch transactions. For that, we estimate the size
     // needed at the beginning of the batch transaction and pass in the
     // additional size needed.
-    uint64_t size_used = mst.ms_psize * mei.me_last_pgno;
+    uint64_t size_used = stat.ms_psize * env_info.me_last_pgno;
 
-    log::debug(logcat, "DB map size:     {}", tools::get_human_readable_bytes(mei.me_mapsize));
+    log::debug(logcat, "DB map size:     {}", tools::get_human_readable_bytes(env_info.me_mapsize));
     log::debug(logcat, "Space used:      {}", tools::get_human_readable_bytes(size_used));
     log::debug(
             logcat,
             "Space remaining: {}",
-            tools::get_human_readable_bytes(mei.me_mapsize - size_used));
+            tools::get_human_readable_bytes(env_info.me_mapsize - size_used));
 
     constexpr static float RESIZE_PERCENT = 0.9f;
     log::debug(
             logcat,
             "Percent used: {}  Percent threshold: {}",
-            100 * size_used / mei.me_mapsize,
+            100 * size_used / env_info.me_mapsize,
             100 * RESIZE_PERCENT);
 
-    if ((double)size_used / mei.me_mapsize > RESIZE_PERCENT) {
-        log::info(logcat, "Threshold met (percent-based)");
-        return true;
-    }
-    return false;
-}
-
-void BlockchainLMDB::grow_if_needed() {
-    if (need_resize(m_env)) {
-        do_resize();
-    }
+    uint64_t size_required = size_used + bytes_req;
+    float occupancy01      = size_required / static_cast<double>(env_info.me_mapsize);
+    bool result            = occupancy01 > RESIZE_PERCENT;
+    return result;
 }
 
 uint64_t BlockchainLMDB::add_output(
@@ -1031,7 +1020,6 @@ uint64_t BlockchainLMDB::add_output(
         const rct::key* commitment) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
     uint64_t m_height = height();
     uint64_t m_num_outputs = num_outputs();
@@ -1093,7 +1081,6 @@ void BlockchainLMDB::add_tx_amount_output_indices(
         const uint64_t tx_id, const std::vector<uint64_t>& amount_output_indices) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
     CURSOR(tx_outputs)
 
@@ -1229,7 +1216,6 @@ void BlockchainLMDB::prune_outputs(uint64_t amount) {
 void BlockchainLMDB::add_spent_key(const crypto::key_image& k_image) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
 
     CURSOR(spent_keys)
@@ -1369,7 +1355,6 @@ void BlockchainLMDB::open(
         log::info(logcat, "LMDB memory map size: {}", tools::get_human_readable_bytes(cur_mapsize));
     }
 
-    grow_if_needed();
 
     int txn_flags = 0;
     if (mdb_flags & MDB_RDONLY)
@@ -1820,7 +1805,6 @@ void BlockchainLMDB::add_txpool_tx(
         throw1(DB_ERROR("Attempting to add txpool tx with empty blob"));
 
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
 
     CURSOR(txpool_meta)
@@ -2816,7 +2800,6 @@ uint64_t BlockchainLMDB::get_max_block_size() {
 void BlockchainLMDB::add_max_block_size(uint64_t sz) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
 
     CURSOR(properties)
@@ -3669,7 +3652,7 @@ bool BlockchainLMDB::for_all_outputs(
     return fret;
 }
 
-bool BlockchainLMDB::batch_start() {
+bool BlockchainLMDB::batch_start(uint64_t bytes_required) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     if (!m_batch_transactions)
         throw0(DB_ERROR("batch transactions not enabled"));
@@ -3680,6 +3663,12 @@ bool BlockchainLMDB::batch_start() {
     if (m_write_txn)
         throw0(DB_ERROR("batch transaction attempted, but m_write_txn already in use"));
     check_open();
+
+    // Evaluate if the DB needs to resize to accommodate the storage of `bytes_required` bytes to
+    // write to the DB. This can be set to 0 if the resize of the DB should be dictated by if the DB
+    // exceeds the threshold from its usage against its current capacity.
+    if (need_resize(m_env, bytes_required))
+        do_resize(bytes_required);
 
     m_writer = boost::this_thread::get_id();
     m_write_batch_txn = new mdb_txn_safe();
@@ -4476,7 +4465,6 @@ void BlockchainLMDB::add_output_blacklist(std::vector<uint64_t> const& blacklist
         return;
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
 
     mdb_txn_cursors* m_cursors = &m_wcursors;
     CURSOR(output_blacklist);
@@ -4499,7 +4487,6 @@ void BlockchainLMDB::add_alt_block(
         std::string const* checkpoint) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     check_open();
-    grow_if_needed();
     mdb_txn_cursors* m_cursors = &m_wcursors;
 
     CURSOR(alt_blocks)
