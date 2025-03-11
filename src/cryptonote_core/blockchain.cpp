@@ -6316,8 +6316,6 @@ bool Blockchain::prepare_handle_incoming_blocks(
     ZoneScoped;
     log::trace(logcat, "Blockchain::{}", __func__);
     auto prepare = std::chrono::steady_clock::now();
-    uint64_t bytes = 0;
-    size_t total_txs = 0;
     blocks.clear();
 
     // Order of locking must be:
@@ -6339,16 +6337,17 @@ bool Blockchain::prepare_handle_incoming_blocks(
     if (blocks_entry.size() == 0)
         return false;
 
+    size_t total_txs = 0;
+    uint64_t bytes = 0;
     for (const auto& entry : blocks_entry) {
         bytes += entry.block.size();
         bytes += entry.checkpoint.size();
-        for (const auto& tx_blob : entry.txs) {
+        for (const auto& tx_blob : entry.txs)
             bytes += tx_blob.size();
-        }
         total_txs += entry.txs.size();
     }
     m_bytes_to_sync += bytes;
-    while (!m_db->batch_start()) {
+    while (!m_db->batch_start(bytes)) {
         unlock();
         tx_pool.unlock();
         std::this_thread::sleep_for(100ms);

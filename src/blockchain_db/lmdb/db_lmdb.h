@@ -354,7 +354,7 @@ class BlockchainLMDB : public BlockchainDB {
             size_t num_desired_checkpoints = GET_ALL_CHECKPOINTS) const override;
 
     void set_batch_transactions(bool batch_transactions) override;
-    bool batch_start() override;
+    bool batch_start(uint64_t bytes_required = 0) override;
     void batch_commit();
     void batch_stop() override;
     void batch_abort() override;
@@ -403,9 +403,11 @@ class BlockchainLMDB : public BlockchainDB {
     static int compare_string(const MDB_val* a, const MDB_val* b);
 
   private:
-    void grow_if_needed();
+    // The minimum amount the DB should grow by
+    constexpr static uint64_t MIN_GROW_SIZE = 1 * 1024 * 1024 * 1024; // 1 GiB
 
-    void do_resize();
+    // Resize the DB by `max(MIN_GROW_SIZE, bytes_required)`
+    void do_resize(uint64_t bytes_required);
 
     void add_block(
             const block& blk,
