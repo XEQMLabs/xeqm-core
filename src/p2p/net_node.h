@@ -65,7 +65,7 @@ PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
 
 namespace boost::asio {
-typedef io_context io_service;
+using io_service = io_context;
 }
 
 namespace nodetool {

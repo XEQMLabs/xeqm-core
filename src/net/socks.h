@@ -42,7 +42,7 @@
 #include "net/fwd.h"
 
 namespace boost::asio {
-typedef io_context io_service;
+using io_service = io_context;
 }
 
 namespace epee::net_utils {
