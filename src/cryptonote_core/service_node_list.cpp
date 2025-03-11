@@ -4986,7 +4986,13 @@ namespace {
         std::array<char, 4096> out_buf;
         ZSTD_outBuffer output{.dst = out_buf.data(), .size = out_buf.size(), .pos = 0};
 
+        uint64_t decompressed_size = ZSTD_getFrameContentSize(data.data(), data.size());
+        if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+            decompressed_size == ZSTD_CONTENTSIZE_ERROR)
+            return std::nullopt;
+
         std::string decompressed;
+        decompressed.reserve(decompressed_size);
 
         size_t ret;
         do {
@@ -5110,9 +5116,10 @@ bool service_node_list::store(uint64_t state_height) {
             TracyCZoneN(serialize_step, "Serialize and compress archive array of blobs", true);
             serialization::binary_string_archiver ar;
 
-            std::string db_blob = serialize_db_blob(ar, archive_blob_list, nullptr);
-            db_blob = zstd_compress(
-                    std::move(db_blob), ARCHIVE_STATE_COMPRESS_LEVEL, MAGIC_COMPRESSED_BLOB_PREFIX);
+            auto db_blob = zstd_compress(
+                    serialize_db_blob(ar, archive_blob_list, nullptr),
+                    ARCHIVE_STATE_COMPRESS_LEVEL,
+                    MAGIC_COMPRESSED_BLOB_PREFIX);
 
             TracyCZoneEnd(serialize_step);
             db.set_service_node_data(db_blob, /*long_term = */ true);
@@ -5123,10 +5130,8 @@ bool service_node_list::store(uint64_t state_height) {
         {
             TracyCZoneN(serialize_step, "Serialize and compress history array of blobs", true);
             serialization::binary_string_archiver ar;
-            std::string db_blob =
-                    serialize_db_blob(ar, history_blob_list, &m_transient->old_quorum_states);
-            db_blob = zstd_compress(
-                    std::move(db_blob),
+            auto db_blob = zstd_compress(
+                    serialize_db_blob(ar, history_blob_list, &m_transient->old_quorum_states),
                     SHORT_TERM_STATE_COMPRESS_LEVEL,
                     MAGIC_COMPRESSED_BLOB_PREFIX);
 
