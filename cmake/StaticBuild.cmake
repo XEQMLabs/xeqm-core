@@ -5,12 +5,12 @@
 
 set(LOCAL_MIRROR "" CACHE STRING "local mirror path/URL for lib downloads")
 
-set(BOOST_VERSION 1.86.0 CACHE STRING "boost version")
+set(BOOST_VERSION 1.87.0 CACHE STRING "boost version")
 set(BOOST_MIRROR ${LOCAL_MIRROR} https://archives.boost.io/release/${BOOST_VERSION}/source
     CACHE STRING "boost download mirror(s)")
 string(REPLACE "." "_" BOOST_VERSION_ ${BOOST_VERSION})
 set(BOOST_SOURCE boost_${BOOST_VERSION_}.tar.bz2)
-set(BOOST_HASH SHA256=1bed88e40401b2cb7a1f76d4bab499e352fa4d0c5f31c0dbae64e24d34d7513b
+set(BOOST_HASH SHA256=af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89
     CACHE STRING "boost source hash")
 
 set(NCURSES_VERSION 6.3 CACHE STRING "ncurses version")
