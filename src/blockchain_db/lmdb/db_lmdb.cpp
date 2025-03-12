@@ -1007,8 +1007,8 @@ static bool need_resize(MDB_env* env, uint64_t bytes_req) {
             100 * RESIZE_PERCENT);
 
     uint64_t size_required = size_used + bytes_req;
-    float occupancy01      = size_required / static_cast<double>(env_info.me_mapsize);
-    bool result            = occupancy01 > RESIZE_PERCENT;
+    float occupancy01 = size_required / static_cast<double>(env_info.me_mapsize);
+    bool result = occupancy01 > RESIZE_PERCENT;
     return result;
 }
 
@@ -1354,7 +1354,6 @@ void BlockchainLMDB::open(
         cur_mapsize = (uint64_t)mei.me_mapsize;
         log::info(logcat, "LMDB memory map size: {}", tools::get_human_readable_bytes(cur_mapsize));
     }
-
 
     int txn_flags = 0;
     if (mdb_flags & MDB_RDONLY)

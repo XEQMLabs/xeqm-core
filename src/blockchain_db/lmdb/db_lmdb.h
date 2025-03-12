@@ -404,7 +404,7 @@ class BlockchainLMDB : public BlockchainDB {
 
   private:
     // The minimum amount the DB should grow by
-    constexpr static uint64_t MIN_GROW_SIZE = 1 * 1024 * 1024 * 1024; // 1 GiB
+    constexpr static uint64_t MIN_GROW_SIZE = 1 * 1024 * 1024 * 1024;  // 1 GiB
 
     // Resize the DB by `max(MIN_GROW_SIZE, bytes_required)`
     void do_resize(uint64_t bytes_required);
