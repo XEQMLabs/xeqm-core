@@ -107,7 +107,7 @@ if(BUILD_BLOCKCHAIN_UTILS)
 endif()
 
 if (TARGET sodium_vendor OR NOT SODIUM_VERSION VERSION_LESS 1.0.17)
-    oxen_add_executable(sn_key_tool "equilibria-sn-keys" sn_key_tool.cpp)
+    oxen_add_executable(sn_key_tool "xeq-sn-keys" sn_key_tool.cpp)
     target_link_libraries(sn_key_tool PRIVATE
         common
         sodium
@@ -116,5 +116,5 @@ if (TARGET sodium_vendor OR NOT SODIUM_VERSION VERSION_LESS 1.0.17)
         oxenc::oxenc
         bls_crypto)
 else()
-    message(STATUS "Not building equilibria-sn-keys tool (requires libsodium >= 1.0.17)")
+    message(STATUS "Not building xeq-sn-keys tool (requires libsodium >= 1.0.17)")
 endif()

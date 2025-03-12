@@ -10,21 +10,35 @@ inline constexpr auto TARGET_BLOCK_TIME = 1min;
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::MAINNET,
         .DEFAULT_CONFIG_SUBDIR = ""sv,
-        .HEIGHT_ESTIMATE_HEIGHT = 0,
+        .HEIGHT_ESTIMATE_HEIGHT = 32322,
         .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
-        .PUBLIC_ADDRESS_BASE58_PREFIX = 289,
-        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x629f,
-        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x59a0,
+        .PUBLIC_ADDRESS_BASE58_PREFIX = 114,
+        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 115,
+        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 116,
         .P2P_DEFAULT_PORT = 9230,
         .RPC_DEFAULT_PORT = 9231,
         .QNET_DEFAULT_PORT = 9232,
         .NETWORK_ID =
-                {{0x45, 0x51, 0x55, 0x49, 0x4c, 0x49, 0x42, 0x52,  // "EQUILIBR"
-                       0x49, 0x41, 0x4e, 0x45, 0x54, 0x57, 0x4f, 0x52}},
+                {{0x43,
+                  0x6c,
+                  0x6c,
+                  0x79,
+                  0x6f,
+                  0x75,
+                  0x72,
+                  0x53,
+                  0x45,
+                  0x4e,
+                  0x54,
+                  0x61,
+                  0x72,
+                  0x65,
+                  0x62,
+                  0x65}},
         .GENESIS_TX =
-                "020102ff000180808081b1d4808081b1d4808081b1d4c0c7c2869a37e1c1c3c6c2869a37e1c1c3c6c2869a37e1"
-                "c1c3b8e4a1cec6b7a2b9486d361c5c8f25f4c3c6b7a2b9486d361c5c8f25f4c3c6b7a2b9486d361c5c8f25f4"sv,
-        .GENESIS_NONCE = 10000,
+                "011e01ff00018080c9db97f4fb27022f5400bc9f976c15e9b045a2dd99aa4d988dfb4e15d6589e75b2ce37aafa3e5a2101c5f3513f4085c3786d2a1d5b7f449f288abb5f200987d2d35995e00fb21670a7"sv
+        ,
+        .GENESIS_NONCE = 12345,
         .GOVERNANCE_REWARD_INTERVAL = 24h,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
@@ -70,5 +84,18 @@ inline constexpr network_config config{
         .L2_NODE_LIST_PURGE_BLOCKS = 1h / L2_BLOCK_TIME,
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = 24h / TARGET_BLOCK_TIME,
         .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
+};
+inline constexpr std::array<const char*, 5> SEED_NODES = {
+    "seed1.equilibria.network:9230",
+    "seed2.equilibria.network:9230", 
+    "seed3.equilibria.network:9230",
+    "seed4.equilibria.network:9230",
+    "seed5.equilibria.network:9230"
+};
+
+inline constexpr std::array<const char*, 3> CHECKPOINT_NODES = {
+    "checkpoint1.equilibria.network:9230",
+    "checkpoint2.equilibria.network:9230",
+    "checkpoint3.equilibria.network:9230"
 };
 }  // namespace cryptonote::config::mainnet
