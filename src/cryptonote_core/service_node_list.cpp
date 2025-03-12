@@ -41,6 +41,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <type_traits>
 
 #include "blockchain.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -733,32 +734,35 @@ void validate_registration(
                 "Registration expired ({} < {})"_format(reg.hf, block_timestamp)};
 }
 
+static void append(std::vector<unsigned char>& buf, std::span<const unsigned char> val) {
+    std::copy(val.begin(), val.end(), std::back_inserter(buf));
+}
+
 // For ETH_BLS+:
-std::basic_string<unsigned char> get_eth_registration_message_for_signing(
+std::vector<unsigned char> get_eth_registration_message_for_signing(
         const registration_details& registration) {
-    std::basic_string<unsigned char> buffer;
+    std::vector<unsigned char> buffer;
     size_t size = sizeof(crypto::ed25519_public_key) + sizeof(eth::bls_public_key);
-    buffer.reserve(size);
-    buffer += tools::view_guts<unsigned char>(registration.service_node_pubkey);
-    buffer += tools::view_guts<unsigned char>(registration.bls_pubkey);
+    append(buffer, registration.service_node_pubkey);
+    append(buffer, registration.bls_pubkey);
     assert(buffer.size() == size);
     return buffer;
 }
 
 // For pre-ETH_BLS:
 crypto::hash get_registration_hash(const registration_details& registration) {
-    std::basic_string<unsigned char> buffer;
+    std::vector<unsigned char> buffer;
     size_t size = sizeof(uint64_t) +  // fee
                   registration.reserved.size() * (sizeof(cryptonote::account_public_address) +
                                                   sizeof(uint64_t)) +  // addr+amount for each
                   sizeof(uint64_t);                                    // expiration timestamp
     buffer.reserve(size);
-    buffer += tools::view_guts<unsigned char>(oxenc::host_to_little(registration.fee));
+    append(buffer, tools::span_guts<unsigned char>(oxenc::host_to_little(registration.fee)));
     for (const auto& [addr, amount] : registration.reserved) {
-        buffer += tools::view_guts<unsigned char>(addr);
-        buffer += tools::view_guts<unsigned char>(oxenc::host_to_little(amount));
+        append(buffer, tools::span_guts<unsigned char>(addr));
+        append(buffer, tools::span_guts<unsigned char>(oxenc::host_to_little(amount)));
     }
-    buffer += tools::view_guts<unsigned char>(oxenc::host_to_little(registration.hf));
+    append(buffer, tools::span_guts<unsigned char>(oxenc::host_to_little(registration.hf)));
     assert(buffer.size() == size);
     return crypto::cn_fast_hash(buffer.data(), buffer.size());
 }
