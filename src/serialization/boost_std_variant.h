@@ -5,6 +5,8 @@
 // interchangeable).
 //
 
+#include <boost/version.hpp>
+
 #if BOOST_VERSION >= 108400
 
 #include <boost/serialization/variant.hpp>

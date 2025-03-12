@@ -65,6 +65,7 @@ target_link_libraries(common
   PUBLIC
     $<$<CONFIG:Debug>:cpptrace::cpptrace>
     cncrypto
+    oxenc::oxenc
     oxenmq::oxenmq
     oxen::logging
     nlohmann_json::nlohmann_json
