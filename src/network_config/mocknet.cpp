@@ -17,7 +17,7 @@
 #include "cryptonote_core/service_node_rules.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "logging/oxen_logger.h"
-#include "sent_transition/sent_transition.h"
+#include "cryptonote_core/sent_transition/sent_transition.h"
 
 static auto logcat = oxen::log::Cat("mocknet");
 
