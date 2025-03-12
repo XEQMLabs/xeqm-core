@@ -46,7 +46,7 @@ namespace cryptonote {
 inline constexpr uint64_t MAX_BLOCK_NUMBER = 500000000;
 inline constexpr size_t MAX_TX_SIZE = 1000000;
 inline constexpr uint64_t MAX_TX_PER_BLOCK = 0x10000000;
-inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 20;
+inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 30;
 inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 6;
 inline constexpr uint64_t TX_OUTPUT_DECOYS = 11;
 inline constexpr size_t TX_BULLETPROOF_MAX_OUTPUTS = 16;
@@ -366,4 +366,24 @@ namespace old {
     inline const std::filesystem::path SOCKET_FILENAME{u8"lokid.sock"};
 
 }  // namespace old
+
+inline constexpr uint64_t MONEY_SUPPLY = 21000000000000000;    // 21 million coins
+inline constexpr uint64_t EMISSION_SPEED_FACTOR = 19;          // Controls emission curve
+inline constexpr uint64_t DIFFICULTY_TARGET_V2 = 60;           // 1 minute to match TARGET_BLOCK_TIME
+inline constexpr uint64_t DIFFICULTY_WINDOW = 60;              // 1 hour window
+inline constexpr uint64_t DIFFICULTY_LAG = 15;                 // ~15 minute lag
+inline constexpr uint64_t DIFFICULTY_CUT = 30;                 // Cut 30 blocks
+
+// Block size limits
+inline constexpr uint64_t MAX_BLOCK_SIZE = 2 * 1024 * 1024;    // 2 MB
+
+// Consensus parameters
+inline constexpr uint64_t CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT = 60 * 60;     // 1 hour
+inline constexpr uint64_t CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V2 = 60 * 10;  // 10 minutes
+inline constexpr uint64_t CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE = 20;  // 20 blocks (~20 minutes)
+
+// Mining parameters
+inline constexpr uint64_t CRYPTONOTE_MINIMUM_HASH_RATE = 100;  // Minimum hashrate requirement
+inline constexpr size_t CRYPTONOTE_MINIMUM_MEMORY = 2 * 1024 * 1024; // 2MB minimum memory requirement
+
 }  // namespace cryptonote

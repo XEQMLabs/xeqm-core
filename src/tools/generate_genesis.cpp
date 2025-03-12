@@ -1,6 +1,9 @@
-#include <cryptonote_core/cryptonote_core.h>
-#include <cryptonote_basic/cryptonote_format_utils.h>
-#include <cryptonote_basic/cryptonote_basic.h>
+#include "../cryptonote_core/cryptonote_core.h"
+#include "../cryptonote_basic/cryptonote_format_utils.h"
+#include "../cryptonote_basic/cryptonote_basic.h"
+#include "../common/string_util.h"
+#include "../serialization/binary_utils.h"
+#include <oxenc/hex.h>
 #include <iostream>
 #include <string>
 
@@ -9,63 +12,95 @@ using namespace cryptonote;
 // Create a genesis transaction with no premine
 std::string create_genesis_tx() {
     transaction tx;
-    tx.version = 1;
-    tx.unlock_time = 0;
+    tx.version = txversion::v1;
+    tx.unlock_time = MINED_MONEY_UNLOCK_WINDOW;
     
-    // No inputs (coinbase)
-    tx.vin.clear();
+    // Coinbase input
+    txin_gen in;
+    in.height = 0;
+    tx.vin.push_back(in);
     
-    // No outputs (no premine)
-    tx.vout.clear();
+    // Required tx extra fields
+    keypair txkey{hw::get_device("default")};
+    add_tx_extra<tx_extra_pub_key>(tx, txkey.pub);
     
-    // Empty extra field
-    tx.extra.clear();
+    // Create a new wallet address with the correct prefix
+    account_base genesis_account;
+    genesis_account.generate();
     
-    // Serialize transaction to hex
+    // Add an output to the genesis account
+    txout_to_key out;
+    out.key = genesis_account.get_keys().m_account_address.m_spend_public_key;
+    
+    tx_out output;
+    output.amount = 22500000000000000; // 22.5 million atomic units (within max block reward)
+    output.target = out;
+    
+    tx.vout.push_back(output);
+    tx.output_unlock_times.push_back(0);
+    
+    // Print the genesis wallet address and keys
+    std::cout << "Genesis wallet address: " 
+              << get_account_address_as_str(network_type::MAINNET, 
+                                          false, 
+                                          genesis_account.get_keys().m_account_address) 
+              << std::endl;
+              
+    std::cout << "Genesis spend private key: " 
+              << tools::hex_guts(genesis_account.get_keys().m_spend_secret_key)
+              << std::endl;
+              
+    std::cout << "Genesis view private key: " 
+              << tools::hex_guts(genesis_account.get_keys().m_view_secret_key)
+              << std::endl;
+    
     std::string tx_blob;
-    bool success = get_transaction_blob(tx, tx_blob);
-    if (!success) {
+    if (!t_serializable_object_to_blob(tx, tx_blob)) {
         throw std::runtime_error("Failed to serialize genesis transaction");
     }
     
-    return string_tools::buff_to_hex_nodelimer(tx_blob);
+    return oxenc::to_hex(tx_blob);
 }
 
 int main() {
     try {
+        hw::get_device("default"); // Initialize crypto via hardware device
+        
         // Generate genesis transaction
         std::string genesis_tx = create_genesis_tx();
         
         // Create genesis block
         block genesis;
-        genesis.major_version = 1;
-        genesis.minor_version = 0;
-        genesis.timestamp = GENESIS_TIMESTAMP;  // From cryptonote_config.h
-        genesis.prev_id = crypto::null_hash;
+        genesis.major_version = hf::hf7;
+        genesis.minor_version = static_cast<uint8_t>(hf::hf7);
+        genesis.timestamp = 1710140000;  // March 11, 2024 @ 8:00am UTC
+        genesis.prev_id = crypto::hash{};
         
         // Parse genesis transaction
         std::string tx_blob;
-        string_tools::parse_hexstr_to_binbuff(genesis_tx, tx_blob);
-        parse_and_validate_tx_from_blob(tx_blob, genesis.miner_tx);
+        if (!oxenc::is_hex(genesis_tx))
+            throw std::runtime_error("Failed to parse genesis tx hex");
+            
+        tx_blob = oxenc::from_hex(genesis_tx);
+            
+        transaction parsed_tx;
+        crypto::hash tx_hash;
+        if (!parse_and_validate_tx_from_blob(tx_blob, parsed_tx, tx_hash))
+            throw std::runtime_error("Failed to validate genesis tx");
+            
+        genesis.miner_tx = parsed_tx;
         
-        // Set nonce
-        genesis.nonce = GENESIS_BLOCK_NONCE;
+        // Calculate block hash
+        crypto::hash block_hash = get_block_hash(genesis);
         
-        // Calculate genesis block hash
-        crypto::hash genesis_hash = get_block_hash(genesis);
+        // Output results
+        std::cout << "Genesis TX: " << genesis_tx << std::endl;
+        std::cout << "Genesis Block Hash: " << oxenc::to_hex(std::string_view{reinterpret_cast<const char*>(block_hash.data()), sizeof(block_hash)}) << std::endl;
         
-        // Print results
-        std::cout << "Genesis Transaction: " << genesis_tx << std::endl;
-        std::cout << "Genesis Block Hash: " << genesis_hash << std::endl;
-        std::cout << "\nConfig Format:" << std::endl;
-        std::cout << ".GENESIS_TX = \"" << genesis_tx << "\"sv," << std::endl;
-        std::cout << ".GENESIS_NONCE = " << GENESIS_BLOCK_NONCE << "," << std::endl;
-        std::cout << ".HEIGHT_ESTIMATE_TIMESTAMP = " << GENESIS_TIMESTAMP << "," << std::endl;
-        
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;we 
+        return 0;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-    
-    return 0;
 }

@@ -61,6 +61,7 @@ add_subdirectory(network_config)
 
 add_subdirectory(gen_multisig)
 add_subdirectory(blockchain_utilities)
+add_subdirectory(tools)
 
 option(BUILD_EVERYTHING "Enable building of all optional components" OFF)
 
