@@ -5,7 +5,6 @@
 
 #include <ranges>
 
-#include "common/exception.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -17,6 +16,14 @@
 namespace oxen::sent {
 
 inline auto logcat = oxen::log::Cat("sent_transition");
+
+namespace mainnet {
+    const addrmap_t addresses;
+    const proper_ed_keys_t proper_ed_keys;
+    const bls_keys_t bls_keys;
+    const conv_ratio_t conv_ratio;
+    const bonus_map_t transition_bonus;
+}  // namespace mainnet
 
 transition_context get_transition_context(network_type net, uint64_t top_block_height) {
     transition_context result = {};

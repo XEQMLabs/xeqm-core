@@ -33,7 +33,7 @@
 #include <cryptonote_config.h>
 #include <cryptonote_core/blockchain.h>
 #include <cryptonote_core/cryptonote_tx_utils.h>
-#include <cryptonote_core/sent_transition/detail.h>
+#include <cryptonote_core/sent_transition/sent_transition.h>
 #include <fmt/core.h>
 #include <sodium.h>
 #include <sqlite3.h>
