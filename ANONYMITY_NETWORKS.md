@@ -19,8 +19,8 @@ network. The transaction will not be broadcast unless an anonymity connection
 is made or until `equilibriad` is shutdown and restarted with only public
 connections enabled.
 
-Anonymity networks can also be used with `oxen-wallet-cli` and
-`oxen-wallet-rpc` - the wallets will connect to a daemon through a proxy. The
+Anonymity networks can also be used with `xeq-wallet-cli` and
+`xeq-wallet-rpc` - the wallets will connect to a daemon through a proxy. The
 daemon must provide a hidden service for the RPC itself, which is separate from
 the hidden service for P2P connections.
 

@@ -12,9 +12,9 @@ inline constexpr network_config config{
         .DEFAULT_CONFIG_SUBDIR = ""sv,
         .HEIGHT_ESTIMATE_HEIGHT = 32322,
         .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
-        .PUBLIC_ADDRESS_BASE58_PREFIX = 114,
-        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 115,
-        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 116,
+        .PUBLIC_ADDRESS_BASE58_PREFIX = 0x002137,
+        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x002137,
+        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x002137,
         .P2P_DEFAULT_PORT = 9230,
         .RPC_DEFAULT_PORT = 9231,
         .QNET_DEFAULT_PORT = 9232,
@@ -43,9 +43,7 @@ inline constexpr network_config config{
         .GOVERNANCE_WALLET_ADDRESS =
                 {
                         "LCFxT37LAogDn1jLQKf4y7aAqfi21DjovX9qyijaLYQSdrxY1U5VGcnMJMjWrD9RhjeK5Lym67"
-                        "wZ73uh9AujXLQ1RKmXEyL",  // HF7-10
                         "LDBEN6Ut4NkMwyaXWZ7kBEAx8X64o6YtDhLXUP26uLHyYT4nFmcaPU2Z2fauqrhTLh4Qfr61pU"
-                        "UZVLaTHqAdycETKM1STrz",  // HF11
                 },
         .UPTIME_PROOF_TOLERANCE = 5min,
         .UPTIME_PROOF_STARTUP_DELAY = 30s,

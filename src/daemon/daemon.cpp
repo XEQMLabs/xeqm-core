@@ -361,7 +361,7 @@ bool daemon::run(bool interactive) {
         log::info(
                 logcat,
                 fg(fmt::terminal_color::blue) | fmt::emphasis::bold,
-                "Starting up oxend services...");
+                "Starting up xeq-d services...");
         cryptonote::GetCheckpointsCallback get_checkpoints;
 #if defined(PER_BLOCK_CHECKPOINT)
         get_checkpoints = blocks::GetCheckpointsData;
@@ -370,7 +370,7 @@ bool daemon::run(bool interactive) {
         if (!core->init(vm, nullptr, get_checkpoints, &shutdown))
             throw oxen::traced<std::runtime_error>("Failed to start core");
 
-        log::info(logcat, "Starting OxenMQ");
+        log::info(logcat, "Starting XEQMQ");
         omq_rpc = std::make_unique<cryptonote::rpc::omq_rpc>(*core, *rpc, vm);
         core->start_oxenmq();
 

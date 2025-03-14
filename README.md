@@ -345,7 +345,7 @@ and its home is the data directory specified in the [example
 config](utils/conf/equilibriad.conf).
 
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
-oxen-wallet-cli, and possibly equilibriad, if you get crashes refreshing.
+xeq-wallet-cli, and possibly equilibriad, if you get crashes refreshing.
 
 ## Internationalization
 
