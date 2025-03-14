@@ -18,7 +18,7 @@ void test_prefix_range(uint64_t start, uint64_t end) {
         std::string addr = base58::encode_addr(prefix, dump_binary(dummy_address));
         
         // Check if it starts with "Xeq"
-        if (addr.substr(0, 3) == "Xeq") {
+        if (addr.substr(0, 3) == "XEQ") {
             std::cout << "Found matching prefix: " << prefix << " (0x" 
                      << std::hex << std::setfill('0') << std::setw(6) << prefix << ")\n";
             std::cout << "Sample address: " << addr << "\n";
