@@ -1,6 +1,6 @@
 # Equilibria
 
-** NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS **
+**NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS**
 
 Copyright (c) 2018-2022 The Equilibria Project.   
 Portions Copyright (c) 2014-2019 The Monero Project.   
@@ -86,7 +86,7 @@ Equilibria uses the CMake build system which is used by creating a build directo
 
 #### On Linux and macOS
 
-** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
 
 You do not have to build from source if you are on debian or ubuntu as we have apt repositories with pre-built oxen packages on `deb.oxen.io`.
 
@@ -97,7 +97,7 @@ You can install these using:
 	$ sudo apt update
 	$ sudo apt install xeq-d
 
-** END - WORK IN PROGRESS **
+**END - WORK IN PROGRESS**
 
 if you want to build a dev build you can do the following after installing the dependancies above:
 
@@ -246,7 +246,7 @@ Then you can run make as usual.
 
 ### On Linux for Android (using docker):
 
-** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
 
 ```bash
 # Build image (for ARM 32-bit)
@@ -259,7 +259,7 @@ docker create -it --name oxen-android oxen-android bash
 docker cp oxen-android:/src/build/release/bin .
 ```
 
-** END - WORK IN PROGRESS **
+**END - WORK IN PROGRESS**
 
 ### Building portable statically linked binaries
 
@@ -304,7 +304,7 @@ The produced binaries still link libc dynamically. If the binary is compiled on 
 Pre-built packages are available for recent Debian and Ubuntu systems (and are often usable on
 Debian or Ubuntu-derived Linux distributions).  For more details see https://deb.imaginary.stream
 
-** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
 
 You can also build a docker package using:
 
@@ -322,7 +322,7 @@ You can also build a docker package using:
     docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
     ```
 
-** END - WORK IN PROGRESS **
+**END - WORK IN PROGRESS**
 
 * The build needs 3 GB space.
 * Wait one hour or more. For docker, the collect_from_docker_container.sh script will automate downloading the binaries from the docker container.
@@ -349,7 +349,7 @@ To run in background:
 ./bin/xeq-d --log-file xeq-d.log --detach
 ```
 
-** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
 
 To run as a systemd service, copy
 [equilibriad.service](utils/systemd/equilibriad.service) to `/etc/systemd/system/` and
@@ -358,7 +358,7 @@ service](utils/systemd/equilibriad.service) assumes that the user `oxen` exists
 and its home is the data directory specified in the [example
 config](utils/conf/equilibriad.conf).
 
-** END - WORK IN PROGRESS **
+**END - WORK IN PROGRESS**
 
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
 xeq-wallet-cli, and possibly xeq-d, if you get crashes refreshing.
