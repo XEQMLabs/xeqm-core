@@ -514,7 +514,7 @@ void L2Tracker::proxy_disconnect(oxenmq::ConnectionID conn, bool clear_only) {
     }
 }
 
-std::optional<std::string> L2Tracker::find_proxy(const oxenmq::ConnectionID& conn) const {
+std::optional<std::string_view> L2Tracker::find_proxy(const oxenmq::ConnectionID& conn) const {
     std::shared_lock lock{mutex};
 
     for (auto& oxend : l2_oxend_proxies) {
@@ -561,7 +561,7 @@ void L2Tracker::l2_notify_state(oxenmq::Message& msg, bool purge) {
 }
 
 void L2Tracker::proxy_request_state(oxenmq::ConnectionID conn, bool purge_state) {
-    std::string id = find_proxy(conn).value_or("(unknown remote)"s);
+    std::string_view id = find_proxy(conn).value_or("(unknown remote)"sv);
 
     proxy_request_generic(
             conn,
