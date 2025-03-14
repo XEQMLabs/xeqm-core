@@ -80,12 +80,12 @@ These steps assume the equilibriad container was started with your walled direct
 
 To run against your local equilibriad:
 
-`$ docker exec -it equilibriad oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name>`
+`$ docker exec -it equilibriad xeq-wallet-cli --wallet /wallet/wallets/<your_wallet_name>`
 
 To run against a public daemon:
 
 ```
-$ docker exec -it equilibriad oxen-wallet-cli --wallet /wallet/wallets/<your_wallet_name> \
+$ docker exec -it equilibriad xeq-wallet-cli --wallet /wallet/wallets/<your_wallet_name> \
                                         --daemon-address public.loki.foundation:22023
 ```
 

@@ -4336,7 +4336,7 @@ std::optional<epee::wipeable_string> simple_wallet::new_wallet(
                                "command.\n"
                                "Use the \"help\" command to see the list of available commands.\n"
                                "Use \"help <command>\" to see a command's documentation.\n"
-                               "Always use the \"exit\" command when closing oxen-wallet-cli to "
+                               "Always use the \"exit\" command when closing xeq-wallet-cli to "
                                "save \n"
                                "your current session's state. Otherwise, you might need to "
                                "synchronize \n"
@@ -10087,7 +10087,7 @@ int main(int argc, char* argv[]) {
     auto [vm, should_terminate] = wallet_args::main(
             argc,
             argv,
-            "oxen-wallet-cli [--wallet-file=<filename>|--generate-new-wallet=<filename>] "
+            "xeq-wallet-cli [--wallet-file=<filename>|--generate-new-wallet=<filename>] "
             "[<COMMAND>]",
             sw::tr("This is the command line Equilibria wallet. It needs to connect to a Equilibria\ndaemon to "
                    "work correctly.\n\nWARNING: Do not reuse your Equilibria keys on a contentious fork, "
@@ -10097,7 +10097,7 @@ int main(int argc, char* argv[]) {
             hidden_params,
             positional_options,
             [](const std::string& s) { tools::scoped_message_writer() + s; },
-            "oxen-wallet-cli.log");
+            "xeq-wallet-cli.log");
 
     if (!vm) {
         return 1;
