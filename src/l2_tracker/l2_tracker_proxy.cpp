@@ -658,6 +658,8 @@ void L2Tracker::proxy_update_state(L2State&& new_state, std::string_view from) {
     state.recent_exits.for_each(add_to_pool);
     state.recent_unlocks.for_each(add_to_pool);
     state.recent_req_changes.for_each(add_to_pool);
+
+    latest_height_ts = std::chrono::steady_clock::now();
 }
 
 void L2Tracker::proxy_update_state(L2PurgeState&& new_state, std::string_view from) {
