@@ -1,7 +1,9 @@
 # Equilibria
 
-Copyright (c) 2018-2022 The Equilibria Project.
-Portions Copyright (c) 2014-2019 The Monero Project.
+** NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS **
+
+Copyright (c) 2018-2022 The Equilibria Project.   
+Portions Copyright (c) 2014-2019 The Monero Project.   
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
@@ -85,6 +87,8 @@ Equilibria uses the CMake build system which is used by creating a build directo
 
 #### On Linux and macOS
 
+** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+
 You do not have to build from source if you are on debian or ubuntu as we have apt repositories with pre-built oxen packages on `deb.oxen.io`.
 
 You can install these using:
@@ -92,7 +96,9 @@ You can install these using:
 	$ sudo curl -so /etc/apt/trusted.gpg.d/oxen.gpg https://deb.oxen.io/pub.gpg
 	$ echo "deb https://deb.oxen.io $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/oxen.list
 	$ sudo apt update
-	$ sudo apt install equilibriad
+	$ sudo apt install xeq-d
+
+** END - WORK IN PROGRESS **
 
 if you want to build a dev build you can do the following after installing the dependancies above:
 
@@ -108,7 +114,7 @@ if you want to build a dev build you can do the following after installing the d
 
 * Add `PATH="$PATH:$HOME/equilibria-core/build/bin"` to `.profile`
 
-* Run Equilibria with `equilibriad --detach`
+* Run Equilibria with `xeq-d --detach`
 
 * **Optional**: build and run the test suite to verify the binaries:
 
@@ -256,6 +262,8 @@ Then you can run make as usual.
 
 ### On Linux for Android (using docker):
 
+** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
+
 ```bash
 # Build image (for ARM 32-bit)
 docker build -f utils/build_scripts/android32.Dockerfile -t oxen-android .
@@ -266,6 +274,8 @@ docker create -it --name oxen-android oxen-android bash
 # Get binaries
 docker cp oxen-android:/src/build/release/bin .
 ```
+
+** END - WORK IN PROGRESS **
 
 ### Building portable statically linked binaries
 
@@ -310,7 +320,7 @@ The produced binaries still link libc dynamically. If the binary is compiled on 
 Pre-built packages are available for recent Debian and Ubuntu systems (and are often usable on
 Debian or Ubuntu-derived Linux distributions).  For more details see https://deb.imaginary.stream
 
-
+** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
 
 You can also build a docker package using:
 
@@ -328,20 +338,22 @@ You can also build a docker package using:
     docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
     ```
 
+** END - WORK IN PROGRESS **
+
 * The build needs 3 GB space.
 * Wait one hour or more. For docker, the collect_from_docker_container.sh script will automate downloading the binaries from the docker container.
 
-## Running equilibriad
+## Running xeq-d
 
 The build places the binary in `bin/` sub-directory within the build directory
 from which cmake was invoked (repository root by default). To run in
 foreground:
 
 ```bash
-./bin/equilibriad
+./bin/xeq-d
 ```
 
-To list all available options, run `./bin/equilibriad --help`.  Options can be
+To list all available options, run `./bin/xeq-d --help`.  Options can be
 specified either on the command line or in a configuration file passed by the
 `--config-file` argument.  To specify an option in the configuration file, add
 a line with the syntax `argumentname=value`, where `argumentname` is the name
@@ -350,8 +362,10 @@ of the argument without the leading dashes, for example `log-level=1`.
 To run in background:
 
 ```bash
-./bin/equilibriad --log-file equilibriad.log --detach
+./bin/xeq-d --log-file xeq-d.log --detach
 ```
+
+** NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS **
 
 To run as a systemd service, copy
 [equilibriad.service](utils/systemd/equilibriad.service) to `/etc/systemd/system/` and
@@ -360,8 +374,10 @@ service](utils/systemd/equilibriad.service) assumes that the user `oxen` exists
 and its home is the data directory specified in the [example
 config](utils/conf/equilibriad.conf).
 
+** END - WORK IN PROGRESS **
+
 If you're on Mac, you may need to add the `--max-concurrency 1` option to
-xeq-wallet-cli, and possibly equilibriad, if you get crashes refreshing.
+xeq-wallet-cli, and possibly xeq-d, if you get crashes refreshing.
 
 ## Internationalization
 
@@ -382,7 +398,7 @@ Run the build.
 Once it stalls, enter the following command:
 
 ```bash
-gdb /path/to/equilibriad `pidof equilibriad`
+gdb /path/to/xeq-d `pidof xeq-d`
 ```
 
 Type `thread apply all bt` within gdb in order to obtain the stack trace
@@ -395,12 +411,12 @@ Enter `echo core | sudo tee /proc/sys/kernel/core_pattern` to stop cores from be
 
 Run the build.
 
-When it terminates with an output along the lines of "Segmentation fault (core dumped)", there should be a core dump file in the same directory as equilibriad. It may be named just `core`, or `core.xxxx` with numbers appended.
+When it terminates with an output along the lines of "Segmentation fault (core dumped)", there should be a core dump file in the same directory as xeq-d. It may be named just `core`, or `core.xxxx` with numbers appended.
 
 You can now analyse this core dump with `gdb` as follows:
 
 ```bash
-gdb /path/to/equilibriad /path/to/dumpfile`
+gdb /path/to/xeq-d /path/to/dumpfile`
 ```
 
 Print the stack trace with `bt`
@@ -413,11 +429,11 @@ coredumpctl -1 gdb
 
 #### To run Equilibria within gdb:
 
-Type `gdb /path/to/equilibriad`
+Type `gdb /path/to/xeq-d`
 
 Pass command-line options with `--args` followed by the relevant arguments
 
-Type `run` to run equilibriad
+Type `run` to run xeq-d
 
 ### Analysing memory corruption
 
@@ -435,7 +451,7 @@ You can then run the oxen tools normally. Performance will typically halve.
 
 #### valgrind
 
-Install valgrind and run as `valgrind /path/to/equilibriad`. It will be very slow.
+Install valgrind and run as `valgrind /path/to/xeq-d`. It will be very slow.
 
 ### LMDB
 
@@ -444,7 +460,7 @@ Instructions for debugging suspected blockchain corruption as per @HYC
 There is an `mdb_stat` command in the LMDB source that can print statistics about the database but it's not routinely built. This can be built with the following command:
 
 ```bash
-cd ~/oxen/external/db_drivers/liblmdb && make
+cd ~/equilibria-core/external/db_drivers/liblmdb && make
 ```
 
 The output of `mdb_stat -ea <path to blockchain dir>` will indicate inconsistencies in the blocks, block_heights and block_info table.
@@ -479,8 +495,8 @@ Thereafter the script can be invoked to launch the local network.
 
 Because of the nature of the socket-based protocols that drive Equilibria, certain protocol weaknesses are somewhat unavoidable at this time. While these weaknesses can theoretically be fully mitigated, the effort required (the means) may not justify the ends. As such, please consider taking the following precautions if you are a Equilibria node operator:
 
-- Run `equilibriad` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `equilibriad` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `equilibriad` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
-- If you plan on hosting a public "remote" node, start `equilibriad` with `--restricted-rpc`. This is a must.
+- Run `xeq-d` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `xeq-d` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `xeq-d` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
+- If you plan on hosting a public "remote" node, start `xeq-d` with `--restricted-rpc`. This is a must.
 
 ### Blockchain-based
 
