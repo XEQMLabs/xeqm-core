@@ -220,14 +220,14 @@ namespace p2p {
 // filename constants:
 inline const std::filesystem::path DATA_DIRNAME{
 #ifdef _WIN32
-        u8"oxen"  // Buried in some windows filesystem maze location
+        u8"equilibria"  // Buried in some windows filesystem maze location
 #else
-        u8".oxen"      // ~/.oxen
+        u8".equilibria"      // ~/.equilibria
 #endif
 };
-inline const std::filesystem::path CONF_FILENAME{u8"oxen.conf"};
-inline const std::filesystem::path SOCKET_FILENAME{u8"oxend.sock"};
-inline const std::filesystem::path LOG_FILENAME{u8"oxen.log"};
+inline const std::filesystem::path CONF_FILENAME{u8"equilibria.conf"};
+inline const std::filesystem::path SOCKET_FILENAME{u8"equilibria.sock"};
+inline const std::filesystem::path LOG_FILENAME{u8"equilibria.log"};
 inline const std::filesystem::path POOLDATA_FILENAME{u8"poolstate.bin"};
 inline const std::filesystem::path BLOCKCHAINDATA_FILENAME{u8"data.mdb"};
 inline const std::filesystem::path BLOCKCHAINDATA_LOCK_FILENAME{u8"lock.mdb"};

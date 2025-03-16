@@ -23,7 +23,7 @@ if len(sys.argv) > 1 and any(sys.argv[1].startswith(x) for x in ("ipc://", "tcp:
     remote = sys.argv[1]
     del sys.argv[1]
 else:
-    remote = "ipc://./oxen.sock"
+    remote = "ipc://./equilibria.sock"
 
 curve_pubkey = b''
 my_privkey, my_pubkey = b'', b''
@@ -95,7 +95,7 @@ while True:
     elif len(m) == 3 and m[0] == b'notify.block':
         print("New block: Height {}, hash {}".format(int(m[1]), m[2].hex()))
     else:
-        print("Received unexpected {}-part message from oxend:".format(len(m)), file=sys.stderr)
+        print("Received unexpected {}-part message from xeq-d:".format(len(m)), file=sys.stderr)
         for x in m:
             print("- {}".format(x))
         sys.exit(1)

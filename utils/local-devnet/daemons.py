@@ -150,7 +150,7 @@ class Daemon(RPCDaemon):
     base_args = ('--dev-allow-local-ips', '--fixed-difficulty=1', '--localdev', '--non-interactive')
 
     def __init__(self, *,
-            oxend='oxend',
+            oxend='xeq-d',
             listen_ip=None, p2p_port=None, rpc_port=None, zmq_port=None, qnet_port=None, ss_port=None,
             name=None,
             datadir=None,
@@ -159,7 +159,7 @@ class Daemon(RPCDaemon):
             peers=()):
         self.rpc_port = rpc_port or next_port()
         if name is None:
-            name = 'oxend@{}'.format(self.rpc_port)
+            name = 'xeq-d@{}'.format(self.rpc_port)
         super().__init__(name)
         self.listen_ip = listen_ip or LISTEN_IP
         self.p2p_port  = p2p_port or next_port()
@@ -168,13 +168,13 @@ class Daemon(RPCDaemon):
         self.ss_port   = ss_port or next_port()
         self.peers     = []
         self.keys      = None
-        self.datadir   = '{}/oxen-{}'.format(datadir or '.', self.rpc_port)
+        self.datadir   = '{}/xeq-{}'.format(datadir or '.', self.rpc_port)
 
         self.args = [oxend] + list(self.__class__.base_args)
         self.args += (
                 '--data-dir={}'.format(self.datadir),
                 '--log-level={}'.format(log_level),
-                '--log-file=oxen.log'.format(self.listen_ip, self.p2p_port),
+                '--log-file=equilibria.log'.format(self.listen_ip, self.p2p_port),
                 '--p2p-bind-ip={}'.format(self.listen_ip),
                 '--p2p-bind-port={}'.format(self.p2p_port),
                 '--rpc-admin={}:{}'.format(self.listen_ip, self.rpc_port),
@@ -244,7 +244,7 @@ class Daemon(RPCDaemon):
         return [x['id_hash'] for x in self.rpc("/get_transaction_pool").json()['transactions']]
 
     def ping(self, *, storage=True, lokinet=True):
-        """Sends fake storage server and lokinet pings to the running oxend"""
+        """Sends fake storage server and lokinet pings to the running xeq-d"""
         if storage:
             self.json_rpc("storage_server_ping", { "version": [2, 5, 0], "https_port": 0, "omq_port": 0, "pubkey_ed25519": self.get_service_keys().ed25519_pubkey})
         if lokinet:
@@ -313,7 +313,7 @@ class Wallet(RPCDaemon):
             self,
             node,
             *,
-            rpc_wallet='oxen-wallet-rpc',
+            rpc_wallet='xeq-wallet-rpc',
             name=None,
             datadir=None,
             listen_ip=None,

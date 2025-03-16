@@ -324,7 +324,7 @@ namespace {
     struct options {
         const command_line::arg_descriptor<std::string> daemon_address = {
                 "daemon-address",
-                tools::wallet2::tr("Use oxend RPC at [http://]<host>[:<port>]"),
+                tools::wallet2::tr("Use xeq-d RPC at [http://]<host>[:<port>]"),
                 ""};
         const command_line::arg_descriptor<std::string> daemon_login{
                 "daemon-login",

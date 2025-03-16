@@ -38,7 +38,7 @@ if (m{^\s*<script>\s*$} .. m{^\s*</script>\s*$}) {
         print qq{
   <script>
     window.\$docsify = {
-      name: "Oxen Daemon RPC",
+      name: "Equilibria Daemon RPC",
       repo: "https://github.com/oxen-io/oxen-core",
       loadSidebar: "sidebar.md",
       subMaxLevel: 2,
@@ -47,8 +47,8 @@ if (m{^\s*<script>\s*$} .. m{^\s*</script>\s*$}) {
   </script>\n};
     }
 } else {
-    s{<title>.*</title>}{<title>Oxen Daemon RPC</title>};
-    s{(name="description" content=)"[^"]*"}{$1"Oxen Daemon RPC endpoint documentation"};
+    s{<title>.*</title>}{<title>Equilibria Daemon RPC</title>};
+    s{(name="description" content=)"[^"]*"}{$1"Equilibria Daemon RPC endpoint documentation"};
     if (m{^\s*</body>}) {
         print qq{
   <script src="vendor/prism-json.min.js"></script>
