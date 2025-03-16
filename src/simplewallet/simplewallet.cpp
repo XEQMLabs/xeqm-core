@@ -709,7 +709,7 @@ bool simple_wallet::spendkey(
                 "NEVER input your Equilibria private spend key (or seed phrase) into any software or "
                 "website other than the OFFICIAL "
                 "Equilibria CLI or GUI wallets, downloaded directly from the Equilibria GitHub "
-                "(https://github.com/oxen-io/) or compiled from source.");
+                "(https://github.com/equilibria-core/) or compiled from source.");
         std::string confirm =
                 input_line(tr("Are you sure you want to access your private spend key?"), true);
         if (std::cin.eof() || !command_line::is_yes(confirm))
@@ -3455,7 +3455,7 @@ void simple_wallet::print_seed(const epee::wipeable_string& seed) {
             "NEVER give your Equilibria wallet seed to ANYONE else. NEVER input your Equilibria "
             "wallet seed into any software or website other than the OFFICIAL Equilibria CLI or GUI "
             "wallets, "
-            "downloaded directly from the Equilibria GitHub (https://github.com/oxen-io/) or compiled "
+            "downloaded directly from the Equilibria GitHub (https://github.com/equilibria-core/) or compiled "
             "from source.");
     std::string confirm = input_line(tr("Are you sure you want to access your wallet seed?"), true);
     if (std::cin.eof() || !command_line::is_yes(confirm))
