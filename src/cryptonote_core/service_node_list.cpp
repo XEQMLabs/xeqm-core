@@ -3874,76 +3874,76 @@ block_add_result service_node_list::state_t::update_from_block(
             auto& txhash = unconf_it->first;
             auto& unconf = unconf_it->second;
             (vote ? unconf.confirmations : unconf.denials) += vote_weight;
+            std::optional<bool> done = unconf.confirmed(height);
+            if (!done) {
+                ++unconf_it;
+                continue;
+            }
 
-            if (auto done = unconf.confirmed(height)) {
-                log::debug(
-                        logcat,
-                        "State change tx {} finalized; received {}/{} confirm/deny votes in {} "
-                        "blocks",
-                        txhash,
-                        unconf.confirmations,
-                        unconf.denials,
-                        height - unconf.height_added);
+            log::debug(
+                    logcat,
+                    "State change tx {} finalized; received {}/{} confirm/deny votes in {} "
+                    "blocks",
+                    txhash,
+                    unconf.confirmations,
+                    unconf.denials,
+                    height - unconf.height_added);
 
-                if (*done) {
-                    log::info(logcat, "State change tx {} confirmed by votes", txhash);
+            if (*done) {
+                log::info(logcat, "State change tx {} confirmed by votes", txhash);
 
-                    std::string fail;
-                    auto event = eth::extract_event(sn_list->blockchain.db().get_tx(txhash), &fail);
-                    if (std::holds_alternative<std::monostate>(event))
-                        throw oxen::traced<std::runtime_error>{
-                                "Internal error: did not find state change tx data in blockchain database: {}"_format(
-                                        fail)};
+                std::string fail;
+                auto event = eth::extract_event(sn_list->blockchain.db().get_tx(txhash), &fail);
+                if (std::holds_alternative<std::monostate>(event))
+                    throw oxen::traced<std::runtime_error>{
+                            "Internal error: did not find state change tx data in blockchain database: {}"_format(
+                                    fail)};
 
-                    // NOTE: Grab TX index of the L2 transaction it was originally mined in
-                    uint64_t tx_index = 0;
-                    cryptonote::block block =
-                            db.get_block_from_height(unconf.height_added, nullptr);
-                    bool found = false;
-                    for (size_t index = 0; index < block.tx_hashes.size(); index++) {
-                        if (block.tx_hashes[index] == txhash) {
-                            tx_index = index;
-                            found = true;
-                            break;
-                        }
+                // NOTE: Grab TX index of the L2 transaction it was originally mined in
+                uint64_t tx_index = 0;
+                cryptonote::block block = db.get_block_from_height(unconf.height_added, nullptr);
+                bool found = false;
+                for (size_t index = 0; index < block.tx_hashes.size(); index++) {
+                    if (block.tx_hashes[index] == txhash) {
+                        tx_index = index;
+                        found = true;
+                        break;
                     }
-
-                    if (!found) {
-                        throw oxen::traced<std::runtime_error>(
-                                "TX {} was confirmed from block {} but the TX hash does not exist "
-                                "in the DB, block {} cannot be added due to missing data"_format(
-                                        txhash, unconf.height_added, height));
-                    }
-
-                    need_swarm_update += std::visit(
-                            [&](const auto& e) {
-                                confirm_metadata confirm = {
-                                        .nettype = nettype,
-                                        .hf_version = hf_version,
-                                        .height = unconf.height_added,
-                                        .confirmed_height = height,
-                                        .vote_index = i,
-                                        .tx_index = tx_index,
-                                        .my_keys = my_keys,
-                                };
-                                return process_confirmed_event(e, confirm);
-                            },
-                            event);
-
-                } else {
-                    log::warning(
-                            logcat,
-                            "State change tx {} denied by {}",
-                            txhash,
-                            unconf.is_denied() ? "votes" : "expiry");
-
-                    // Nothing to process here
                 }
 
-                unconf_it = unconfirmed_l2_txes.erase(unconf_it);
+                if (!found) {
+                    throw oxen::traced<std::runtime_error>(
+                            "TX {} was confirmed from block {} but the TX hash does not exist "
+                            "in the DB, block {} cannot be added due to missing data"_format(
+                                    txhash, unconf.height_added, height));
+                }
+
+                need_swarm_update += std::visit(
+                        [&](const auto& e) {
+                            confirm_metadata confirm = {
+                                    .nettype = nettype,
+                                    .hf_version = hf_version,
+                                    .height = unconf.height_added,
+                                    .confirmed_height = height,
+                                    .vote_index = i,
+                                    .tx_index = tx_index,
+                                    .my_keys = my_keys,
+                            };
+                            return process_confirmed_event(e, confirm);
+                        },
+                        event);
+
             } else {
-                ++unconf_it;
+                log::warning(
+                        logcat,
+                        "State change tx {} denied by {}",
+                        txhash,
+                        unconf.is_denied() ? "votes" : "expiry");
+
+                // Nothing to process here
             }
+
+            unconf_it = unconfirmed_l2_txes.erase(unconf_it);
         }
     }
 
