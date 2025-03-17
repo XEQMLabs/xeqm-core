@@ -14,9 +14,9 @@ inline constexpr network_config config{
         .DEFAULT_CONFIG_SUBDIR = "stagenet"sv,
         .HEIGHT_ESTIMATE_HEIGHT = 0,
         .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
-        .PUBLIC_ADDRESS_BASE58_PREFIX = 4888,             // ~ ST2 .. ST4
-        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 5272,  // ~ ST9 .. STB
-        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 5656,          // ~ STF .. STJ
+        .PUBLIC_ADDRESS_BASE58_PREFIX = 0x1b9eb4,             // ~ ST2 .. ST4
+        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x1b9eb4,  // ~ ST9 .. STB
+        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1b9eb4,          // ~ STF .. STJ
         .P2P_DEFAULT_PORT = 11022,
         .RPC_DEFAULT_PORT = 11023,
         .QNET_DEFAULT_PORT = 11025,
