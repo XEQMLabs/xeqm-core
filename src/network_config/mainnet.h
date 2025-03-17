@@ -42,8 +42,7 @@ inline constexpr network_config config{
         .GOVERNANCE_REWARD_INTERVAL = 24h,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
-                        "LCFxT37LAogDn1jLQKf4y7aAqfi21DjovX9qyijaLYQSdrxY1U5VGcnMJMjWrD9RhjeK5Lym67"
-                        "LDBEN6Ut4NkMwyaXWZ7kBEAx8X64o6YtDhLXUP26uLHyYT4nFmcaPU2Z2fauqrhTLh4Qfr61pU"
+                        "XEQb5MmM72EVRTVUzbR9tAD6d8Mahsf6ZcRU68dbzJpkQn69HNZUuPw524xueWNadPVtzG7zh24hED6xsYFLRwYwWSZPP4WYuKP"
                 },
         .UPTIME_PROOF_TOLERANCE = 5min,
         .UPTIME_PROOF_STARTUP_DELAY = 30s,
