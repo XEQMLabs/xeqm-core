@@ -4094,9 +4094,6 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
                               << m_wallet->get_daemon_address() << ": " << e.what() << ".\n";
         }
         std::string err = interpret_rpc_response(true, res["status"]);
-        if (err.empty() && res["untrusted"].get<bool>())
-            message_writer(fmt::terminal_color::yellow)
-                    << tr("Moreover, a daemon is also less secure when running in bootstrap mode");
     }
 
     if (m_wallet->get_ring_database().empty())
