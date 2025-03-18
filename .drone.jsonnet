@@ -416,7 +416,7 @@ local gui_wallet_step_darwin = {
                     apt_get_quiet + ' install -y eatmydata',
                     'eatmydata ' + apt_get_quiet + ' dist-upgrade -y',
                     'eatmydata ' + apt_get_quiet + ' install -y --no-install-recommends '
-                    + 'cmake g++ git ninja-build ccache tar xz-utils google-android-ndk-r26c-installer '
+                    + 'cmake g++ git ninja-build ccache tar xz-utils google-android-ndk-r28-installer '
                     + std.join(' ', static_build_deps),
                   ]
                   + android_build_steps('armeabi-v7a', cmake_extra='-DARCH=armv7-a -DARCH_ID=arm32')
