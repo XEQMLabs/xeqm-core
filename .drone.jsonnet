@@ -86,7 +86,7 @@ local debian_pipeline(name,
         'mkdir build',
         'cd build',
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fdiagnostics-color=always -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
-        '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps '
+        '-DLOCAL_MIRROR=https://oxen.rocks/deps '
         + cmake_options({ USE_LTO: lto, WARNINGS_AS_ERRORS: werror, BUILD_TESTS: build_tests || run_tests, BUILD_EVERYTHING: build_everything })
         + cmake_extra,
       ] + (
@@ -207,7 +207,7 @@ local mac_builder(name,
         'cd build',
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fcolor-diagnostics -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
         '-DOXEN_LOGGING_FORCE_SUBMODULES=ON ' +
-        '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps -DUSE_LTO=' + (if lto then 'ON ' else 'OFF ') +
+        '-DLOCAL_MIRROR=https://oxen.rocks/deps -DUSE_LTO=' + (if lto then 'ON ' else 'OFF ') +
         '-DWARNINGS_AS_ERRORS=' + (if werror then 'ON ' else 'OFF ') +
         (if build_tests || run_tests then '-DBUILD_TESTS=ON ' else '') +
         cmake_extra,
@@ -255,7 +255,7 @@ local android_build_steps(android_abi, android_platform=21, jobs=6, cmake_extra=
   '-DCMAKE_TOOLCHAIN_FILE=/usr/lib/android-ndk/build/cmake/android.toolchain.cmake ' +
   '-DANDROID_PLATFORM=' + android_platform + ' -DANDROID_ABI=' + android_abi + ' ' +
   cmake_options({ MONERO_SLOW_HASH: true, WARNINGS_AS_ERRORS: false, BUILD_TESTS: false }) +
-  '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps ' +
+  '-DLOCAL_MIRROR=https://oxen.rocks/deps ' +
   '-DBUILD_STATIC_DEPS=ON -DSTATIC=ON -G Ninja ' + cmake_extra,
   'ninja -j' + jobs + ' -v wallet_merged',
   'cd ..',
@@ -338,7 +338,7 @@ local gui_wallet_step_darwin = {
                   build_tests=false,
                   cmake_extra='-DARCH_ID=armhf'),
 
-  // Static build (on focal) which gets uploaded to builds.lokinet.dev:
+  // Static build (on focal) which gets uploaded to oxen.rocks:
   debian_pipeline(
     'Static (focal amd64)',
     docker_base + 'ubuntu-focal',
@@ -361,7 +361,7 @@ local gui_wallet_step_darwin = {
   snapshot_deb('jammy'),
   snapshot_deb('focal'),
 
-  // Static mingw build (on focal) which gets uploaded to builds.lokinet.dev:
+  // Static mingw build (on focal) which gets uploaded to oxen.rocks:
   debian_pipeline(
     'Static (win64)',
     docker_base + 'debian-win32-cross',
