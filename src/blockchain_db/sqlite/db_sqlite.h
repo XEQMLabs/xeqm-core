@@ -118,30 +118,35 @@ class BlockchainSQLite : public db::Database {
     uint64_t rescan_target{0};
 
   public:
-    // Retrieves the amount that has been accrued to the Ethereum `address`. Returns the current
-    // height and the atomic lifetime value that the address is owed. (Note that, unlike Oxen
-    // addresses, these rewards never reset to zero; but rather the rewards contract keeps track of
-    // the current paid and current total and pays out the difference).
-    std::pair<uint64_t, cryptonote::reward_money> get_accrued_rewards(const eth::address& address);
+    struct wallet_info {
+        bool found;
+        uint64_t height;
+        cryptonote::reward_money total_rewards;  // Rewards + unlocked stakes owed to wallet
+        cryptonote::reward_money locked_stakes;
+    };
 
-    // Retrieves the amount that has been accrued but not yet paid out to the Oxen wallet `address`.
-    // Returns the current height and the atomic unpaid amount that the address is owed.
-    std::pair<uint64_t, cryptonote::reward_money> get_accrued_rewards(
-            const account_public_address& address);
+    // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.
+    // Returns the current height and the atomic lifetime value that the address is owed.  (Note
+    // that, unlike Oxen addresses, these rewards never reset to zero; but rather the rewards
+    // contract keeps track of the current paid and current total and pays out the difference).
+    wallet_info get_accrued_rewards(const eth::address& address);
+
+    // Retrieves the amount (in atomic OXEN) that has been accrued but not yet paid out to the Oxen
+    // wallet `address`.  Returns the current height and the atomic unpaid amount that the address
+    // is owed.
+    wallet_info get_accrued_rewards(const account_public_address& address);
 
     // Returns the amount that has been accrued to the Ethereum `address` as of the given recent
     // block height `at_height`. Returns nullopt if `at_height` is higher than the current block
     // height, or lower than the oldest stored recent height (see network_config's
     // STORE_RECENT_REWARDS;, otherwise returns the balance.
-    std::optional<cryptonote::reward_money> get_accrued_rewards(
-            const eth::address& address, uint64_t at_height);
+    wallet_info get_accrued_rewards(const eth::address& address, uint64_t at_height);
 
-    // Returns the amount that has been accrued to the Oxen wallet `address` as of the given recent
-    // block height `at_height`. Returns nullopt if `at_height` is higher than the known height, or
-    // lower than the stored recent heights (see network_config's STORE_RECENT_REWARDS); otherwise
-    // returns the balance.
-    std::optional<cryptonote::reward_money> get_accrued_rewards(
-            const account_public_address& address, uint64_t height);
+    // Returns the amount (in atomic OXEN) that has been accrued to the Oxen wallet `address` as of
+    // the given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
+    // known height, or lower than the stored recent heights (see network_config's
+    // STORE_RECENT_REWARDS); otherwise returns the balance.
+    wallet_info get_accrued_rewards(const account_public_address& address, uint64_t at_height);
 
     // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
     // service nodes will return 2 vectors corresponding to the addresses and the atomic value in
@@ -178,19 +183,13 @@ class BlockchainSQLite : public db::Database {
             const service_nodes::block_add_result& block_add,
             const std::optional<service_nodes::rescan_context>& rescan = std::nullopt);
 
-    struct exit_stake {
-        eth::address addr;
-        cryptonote::reward_money amount;
-        uint32_t block_height;  // Block that the exit event was mined in
-        uint32_t tx_index;  // Index of transaction in the block that the exit event was mined in
-        uint32_t contributor_index;  // Index of the contributor in the event the exit stake is for
-    };
-
     // Add a payment to the delayed_payments table. 'at_height' should be greater than or equal to
     // the height of the table or otherwise the payments may be deleted without taking effect. This
     // function asserts if 'at_height' does not meet this criteria.
     bool add_delayed_payments(
-            std::span<const exit_stake> payments, uint64_t at_height, uint64_t delay_blocks);
+            std::span<const service_nodes::eth_stake> payments,
+            uint64_t at_height,
+            uint64_t delay_blocks);
 
     // validate_batch_payment -> used to make sure that list of miner_tx_vouts is correct. Compares
     // the miner_tx_vouts with a list previously extracted payments to make sure that the correct
