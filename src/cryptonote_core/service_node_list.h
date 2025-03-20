@@ -214,10 +214,21 @@ struct pulse_sort_key {
     }
 };
 
+struct eth_stake {
+    crypto::ed25519_public_key sn;
+    eth::address addr;
+    cryptonote::reward_money amount;
+    uint32_t block_height;  // Block that the exit event was mined in
+    uint32_t tx_index;  // Index of transaction in the block that the exit event was mined in
+    uint32_t contributor_index;  // Index of the contributor in the event the exit stake is for
+};
+
 struct block_add_result {
     // List of payable nodes. Populated when the block height is >= HF19, empty
     // otherwise
     std::vector<crypto::public_key> payable_nodes_hf19_onwards;
+    std::vector<eth_stake> locked_stakes;
+    std::vector<eth_stake> unlocked_stakes;
 };
 
 struct service_node_info  // registration information
@@ -1032,6 +1043,7 @@ class service_node_list {
     using block_height = uint64_t;
 
     struct state_t {
+        uint32_t version;
         crypto::hash block_hash{};
         bool only_loaded_quorums{false};
         service_nodes_infos_t service_nodes_infos;
@@ -1165,23 +1177,30 @@ class service_node_list {
             const service_node_keys* my_keys;
         };
 
+        struct confirm_result {
+            bool success;
+            bool need_swarm_update;
+            std::vector<eth_stake> exit_stakes;
+        };
+
         // Applies a pulse-quorums-confirmed L2 event to the service node list state.  Returns true
         // if processing the event affects swarms, false if it does not.
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const eth::event::NewServiceNodeV2& new_sn, const confirm_metadata& confirm);
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const eth::event::ServiceNodeExitRequest& rem_req, const confirm_metadata& confirm);
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const eth::event::ServiceNodeExit& exit, const confirm_metadata& confirm);
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const eth::event::StakingRequirementUpdated& req_change,
                 const confirm_metadata& confirm);
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const eth::event::ServiceNodePurge& purge, const confirm_metadata& confirm);
-        bool process_confirmed_event(
+        confirm_result process_confirmed_event(
                 const std::monostate&,  // do-nothing fallback for "not an event" variant
                 const confirm_metadata&) {
-            return false;
+            confirm_result result = {};
+            return result;
         }
 
         // Returns the block leader of the next block: that is, the round 0 pulse quorum leader, and
