@@ -141,39 +141,55 @@ class BlockchainSQLite : public db::Database {
 
   public:
     struct wallet_info {
+        uint64_t height;  // Height at which the wallet info was retrieved for
+
+        // True if the wallet has participated in the network or not. When false all values are
+        // zeroed (because the wallet has not earnt or spent any tokens on the network).
         bool found;
-        uint64_t height;
-        cryptonote::reward_money amount;  // Rewards + unlocked stakes owed to wallet
+
+        // For OXEN addresses, rewards that has been accrued but not paid out to the address yet.
+        //
+        // For ETH addresses, lifetime rewards _and_ unlocked stakes for the address. (Note that,
+        // unlike Oxen addresses, these rewards never reset to zero; but rather the rewards contract
+        // keeps track of the current paid and current total and pays out the difference).
+        cryptonote::reward_money amount;
+
+        // For ETH addresses _only_, the total amount of tokens that were locked by this wallet and
+        // so forth for lifetime unlocked, rewards and liquidated amounts.
         cryptonote::reward_money lifetime_locked_stakes;
         cryptonote::reward_money lifetime_unlocked_stakes;
         cryptonote::reward_money lifetime_rewards;
         cryptonote::reward_money lifetime_liquidated_stakes;
-        cryptonote::reward_money locked_stakes;      // SESH locked by the network
-        cryptonote::reward_money timelocked_stakes;  // SESH awaiting to be unlocked by the network
-        cryptonote::reward_money rewards;            // Total rewards the wallet has earnt
+
+        // For ETH addresses _only_, the amount of tokens currently locked in the network (e.g.
+        // staked in a node). This is defined as `lifetime locked - lifetimed unlocked`
+        cryptonote::reward_money locked_stakes;
+
+        // For ETH addresses _only_, the amount of tokens awaiting to be unlocked from the network
+        // (e.g. an exit has been processed and the stake is under a time lock before being
+        // claimable by the address)
+        cryptonote::reward_money timelocked_stakes;
+
+        // Total lifetime rewards the wallet has earnt from participating as a staker in a node.
+        // This is defined as `amount - (lifetime unlock - lifetime liquidated)` and precalculated
+        // for convenience
+        cryptonote::reward_money rewards;
     };
 
-    // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.
-    // Returns the current height and the atomic lifetime value that the address is owed.  (Note
-    // that, unlike Oxen addresses, these rewards never reset to zero; but rather the rewards
-    // contract keeps track of the current paid and current total and pays out the difference).
+    // See `wallet_info`
     wallet_info get_accrued_rewards(const eth::address& address);
 
-    // Retrieves the amount (in atomic OXEN) that has been accrued but not yet paid out to the Oxen
-    // wallet `address`.  Returns the current height and the atomic unpaid amount that the address
-    // is owed.
+    // See `wallet_info`
     wallet_info get_accrued_rewards(const account_public_address& address);
 
-    // Returns the amount that has been accrued to the Ethereum `address` as of the given recent
-    // block height `at_height`. Returns nullopt if `at_height` is higher than the current block
-    // height, or lower than the oldest stored recent height (see network_config's
-    // STORE_RECENT_REWARDS;, otherwise returns the balance.
+    // Returns `found` as `false` if `at_height` is higher than the current block height, or lower
+    // than the oldest stored recent height (see network_config's STORE_RECENT_REWARDS;, otherwise
+    // returns the balance.
     wallet_info get_accrued_rewards(const eth::address& address, uint64_t at_height);
 
-    // Returns the amount (in atomic OXEN) that has been accrued to the Oxen wallet `address` as of
-    // the given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
-    // known height, or lower than the stored recent heights (see network_config's
-    // STORE_RECENT_REWARDS); otherwise returns the balance.
+    // Returns `found` as `false` if `at_height` is higher than the known height, or lower than the
+    // stored recent heights (see network_config's STORE_RECENT_REWARDS); otherwise returns the
+    // wallet info.
     wallet_info get_accrued_rewards(const account_public_address& address, uint64_t at_height);
 
     // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
