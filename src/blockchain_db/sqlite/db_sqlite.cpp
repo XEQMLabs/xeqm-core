@@ -903,21 +903,24 @@ BlockchainSQLite::wallet_info BlockchainSQLite::get_accrued_rewards(
     return get_accrued_rewards_at_impl(*this, address_string, at_height, height);
 }
 
-std::pair<std::vector<std::string>, std::vector<cryptonote::reward_money>>
+std::pair<std::vector<std::string>, std::vector<BlockchainSQLite::wallet_info>>
 BlockchainSQLite::get_all_accrued_rewards() {
     ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
-    std::pair<std::vector<std::string>, std::vector<cryptonote::reward_money>> result;
-    auto& [addresses, amounts] = result;
+    std::pair<std::vector<std::string>, std::vector<wallet_info>> result;
+    auto& [addresses, wallets] = result;
 
-    for (auto [addr, amt] : prepared_results<std::string, int64_t>("SELECT address, amount FROM "
-                                                                   "batched_payments_accrued")) {
-        cryptonote::reward_money amount = cryptonote::reward_money::db_amount(amt);
-        if (amount.to_coin() > 0) {
-            addresses.push_back(std::move(addr));
-            amounts.push_back(amount);
-        }
+    // NOTE: Reserve
+    size_t row_count = batch_payments_accrued_row_count(PaymentTableType::Nil, std::nullopt);
+    addresses.reserve(row_count);
+    wallets.reserve(row_count);
+
+    // NOTE: Build
+    for (auto it : prepared_results<std::string>("SELECT address FROM batched_payments_accrued")) {
+        wallet_info info = get_accrued_rewards_impl(*this, it);
+        addresses.push_back(it);
+        wallets.push_back(std::move(info));
     }
 
     return result;

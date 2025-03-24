@@ -192,11 +192,9 @@ class BlockchainSQLite : public db::Database {
     // wallet info.
     wallet_info get_accrued_rewards(const account_public_address& address, uint64_t at_height);
 
-    // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
-    // service nodes will return 2 vectors corresponding to the addresses and the atomic value in
-    // oxen that the service nodes are owed.
-    std::pair<std::vector<std::string>, std::vector<cryptonote::reward_money>>
-    get_all_accrued_rewards();
+    // get_all_accrued_rewards -> queries the database for all the amounts that have been accrued to
+    // nodes and will return 2 vectors corresponding to the addresses's wallet info.
+    std::pair<std::vector<std::string>, std::vector<wallet_info>> get_all_accrued_rewards();
 
     // get_payments -> passing a block height will return an array of payments that should be
     // created in a coinbase transaction on that block given the current batching DB state.
