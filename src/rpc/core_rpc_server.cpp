@@ -3883,30 +3883,58 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
+static nlohmann::json wallet_info_to_json(std::string_view address, const BlockchainSQLite::wallet_info& wallet_info)
+{
+    nlohmann::json result = {
+            {"address", address},
+            {"found", wallet_info.found},
+            {"amount", wallet_info.amount.to_coin()},
+            {"lifetime_locked_stakes", wallet_info.lifetime_locked_stakes.to_coin()},
+            {"lifetime_unlocked_stakes", wallet_info.lifetime_unlocked_stakes.to_coin()},
+            {"lifetime_rewards", wallet_info.lifetime_rewards.to_coin()},
+            {"lifetime_liquidated_stakes", wallet_info.lifetime_liquidated_stakes.to_coin()},
+            {"timelocked_stakes", wallet_info.timelocked_stakes.to_coin()},
+            {"rewards", wallet_info.rewards.to_coin()},
+    };
+    return result;
+}
+
 void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
     auto& balances = rpc.response["balances"];
-    balances = json::object();
+    balances = json::array();
 
     const auto& req = rpc.request;
     auto net = nettype();
     BlockchainSQLite& sql_db = m_core.blockchain.sqlite_db();
 
+    nlohmann::json::array_t& array = balances.get_ref<nlohmann::json::array_t&>();
+    uint64_t height = 0;
     if (req.addresses.size() > 0) {
+        array.reserve(req.addresses.size());
         for (const auto& address : req.addresses) {
-            cryptonote::reward_money amount = {};
-            if (eth::address eth_address{};
-                tools::try_load_from_hex_guts<eth::address>(address, eth_address)) {
-                amount = sql_db.get_accrued_rewards(eth_address).amount.to_coin();
-            } else if (address_parse_info parse_info{};
-                       get_account_address_from_str(parse_info, net, address)) {
-                amount = sql_db.get_accrued_rewards(parse_info.address).amount.to_coin();
+            BlockchainSQLite::wallet_info wallet_info = {};
+            if (eth::address eth{}; tools::try_load_from_hex_guts<eth::address>(address, eth)) {
+                wallet_info = sql_db.get_accrued_rewards(eth);
+            } else if (address_parse_info oxen{};
+                       get_account_address_from_str(oxen, net, address)) {
+                wallet_info = sql_db.get_accrued_rewards(oxen.address);
             }
-            balances[address] = amount.to_coin();
+            array.push_back(wallet_info_to_json(address, wallet_info));
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
     } else {
-        auto [addresses, amounts] = sql_db.get_all_accrued_rewards();
+        auto [addresses, wallets] = sql_db.get_all_accrued_rewards();
+        array.reserve(addresses.size());
         for (size_t i = 0; i < addresses.size(); i++) {
-            balances[addresses[i]] = amounts[i].to_coin();
+            const std::string& address = addresses[i];
+            const BlockchainSQLite::wallet_info& wallet_info = wallets[i];
+            array.push_back(wallet_info_to_json(address, wallet_info));
+
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
     }
 
@@ -3923,6 +3951,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
         rpc.response.erase("balances");
     }
 
+    rpc.response["height"] = height;
     rpc.response["status"] = STATUS_OK;
 }
 
