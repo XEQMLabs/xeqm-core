@@ -39,9 +39,16 @@
 
 namespace cryptonote {
 
-using block_payments = std::unordered_map<
-        std::variant<eth::address, cryptonote::account_public_address>,
-        cryptonote::reward_money>;
+struct sql_payment {
+    cryptonote::reward_money amount;  // The amount to payout not including the liqudation fee
+
+    // Fee to apply on the payment amount, 0 in most cases except when the payment is the return of
+    // a stake after being liquidated and the associated address is the operator.
+    cryptonote::reward_money liquidation;
+};
+
+using block_payments = std::
+        unordered_map<std::variant<eth::address, cryptonote::account_public_address>, sql_payment>;
 
 class BlockchainSQLite : public db::Database {
   public:
@@ -78,7 +85,25 @@ class BlockchainSQLite : public db::Database {
 
     // Add payments to the specified addresses to the SQL rewards table. The function throws if
     // insertion into the DB fails.
-    void add_sn_rewards(const block_payments& payments);
+    //
+    // If the payments are token rewards set `is_rewards` to true to ensure that rewards are
+    // tracked in a separate column. Set it to `false` if payments are for delayed/exit payments
+    // inorder to separate the tracked rewards from the exit payments values.
+    void add_sn_rewards(const block_payments& payments, bool is_rewards);
+
+    enum class delayed_payments_type {
+        all,
+        height,
+        address,
+    };
+
+    struct delayed_payments_request {
+        delayed_payments_type type;
+        uint64_t height;
+        eth::address address;
+    };
+
+    block_payments get_delayed_payments(const delayed_payments_request& request);
 
   private:
     // This function throws if adding the rewards to the SQL tables for 'block'
@@ -86,10 +111,7 @@ class BlockchainSQLite : public db::Database {
     void reward_handler(
             const cryptonote::block& block,
             const service_nodes::service_node_list::state_t& service_nodes_state,
-            const service_nodes::block_add_result& block_add,
-            block_payments payments = {});
-
-    block_payments get_delayed_payments(uint64_t height);
+            const service_nodes::block_add_result& block_add);
 
     std::unordered_map<account_public_address, std::string> address_str_cache;
     std::pair<hf, cryptonote::address_parse_info> parsed_governance_addr = {hf::none, {}};
@@ -121,8 +143,14 @@ class BlockchainSQLite : public db::Database {
     struct wallet_info {
         bool found;
         uint64_t height;
-        cryptonote::reward_money total_rewards;  // Rewards + unlocked stakes owed to wallet
-        cryptonote::reward_money locked_stakes;
+        cryptonote::reward_money amount;  // Rewards + unlocked stakes owed to wallet
+        cryptonote::reward_money lifetime_locked_stakes;
+        cryptonote::reward_money lifetime_unlocked_stakes;
+        cryptonote::reward_money lifetime_rewards;
+        cryptonote::reward_money lifetime_liquidated_stakes;
+        cryptonote::reward_money locked_stakes;      // SESH locked by the network
+        cryptonote::reward_money timelocked_stakes;  // SESH awaiting to be unlocked by the network
+        cryptonote::reward_money rewards;            // Total rewards the wallet has earnt
     };
 
     // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.

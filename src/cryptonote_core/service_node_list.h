@@ -217,8 +217,9 @@ struct pulse_sort_key {
 struct eth_stake {
     crypto::ed25519_public_key sn;
     eth::address addr;
-    cryptonote::reward_money amount;
-    uint32_t block_height;  // Block that the exit event was mined in
+    cryptonote::reward_money amount;       // Original stake amount
+    cryptonote::reward_money liquidation;  // Liquidation penalty on `amount` if applicable
+    uint32_t block_height;                 // Block that the exit event was mined in
     uint32_t tx_index;  // Index of transaction in the block that the exit event was mined in
     uint32_t contributor_index;  // Index of the contributor in the event the exit stake is for
 };
@@ -229,6 +230,7 @@ struct block_add_result {
     std::vector<crypto::public_key> payable_nodes_hf19_onwards;
     std::vector<eth_stake> locked_stakes;
     std::vector<eth_stake> unlocked_stakes;
+    std::vector<eth_stake> purged_stakes;
 };
 
 struct service_node_info  // registration information

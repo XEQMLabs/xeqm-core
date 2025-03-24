@@ -291,6 +291,99 @@ static uint64_t min_recent_height(cryptonote::network_type nettype, uint64_t hei
     return result;
 }
 
+// NOTE: In debug mode, check that the total locked SESH as stored in the SQL rewards DB matches
+// the amount of locked SESH that is currently recorded on the SNL. We only verify if the SNL
+// height matches the rewards DB height (e.g. the 2 are in sync).
+//
+// The values we are verifying are do not contribute to chain consensus, they are auxiliary values
+// like the amount of locked SESH, the amount of timelocked SESH for analytics purposes hence gating
+// these checks into debug builds.
+static void verify_rewards_db_values(
+        [[maybe_unused]] cryptonote::Blockchain& blockchain,
+        [[maybe_unused]] const service_node_list::state_t& state) {
+#if !defined(NDEBUG)
+    cryptonote::BlockchainSQLite& db = blockchain.sqlite_db();
+    if (blockchain.get_network_version() >= hf::hf21_eth && db.height == state.height) {
+        struct pubkey_stake {
+            crypto::ed25519_public_key pubkey;  // The SN pubkey
+            uint64_t stake;                     // Amount staked for SN pubkey for the ETH address
+        };
+
+        struct stake_history {
+            uint64_t total;                    // Total SESH the ETH address staked
+            std::vector<pubkey_stake> stakes;  // Individual stakes that the ETH address contributed
+        };
+
+        // NOTE: Enumerate all the current SESH that an ETH address has locked up in the network
+        std::unordered_map<eth::address, stake_history> eth_to_locked_stakes;
+
+        // NOTE: Enumerate SNL
+        for (auto it : state.service_nodes_infos) {
+            for (auto contrib_it : it.second->contributors) {
+                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
+                dest.total += contrib_it.amount;
+                dest.stakes.push_back({crypto::ed25519_public_key{it.first}, contrib_it.amount});
+            }
+        }
+
+        // NOTE: Enumerate nodes in the recently removed list (considered locked until exited)
+        for (auto it : state.recently_removed_nodes) {
+            for (auto contrib_it : it.info.contributors) {
+                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
+                dest.total += contrib_it.amount;
+                dest.stakes.push_back(
+                        {crypto::ed25519_public_key{it.service_node_pubkey}, contrib_it.amount});
+            }
+        }
+
+        // NOTE: Enumerate payments sitting in the timelocked queue (considered locked until expired)
+        cryptonote::BlockchainSQLite::delayed_payments_request request = {};
+        request.type = cryptonote::BlockchainSQLite::delayed_payments_type::all;
+
+        cryptonote::block_payments locked_payments = db.get_delayed_payments(request);
+        for (auto it : locked_payments) {
+            auto& dest = eth_to_locked_stakes[*std::get_if<eth::address>(&it.first)];
+            dest.total += it.second.amount.to_coin();
+        }
+
+        // NOTE: Walk the locked stakes per ETH address and verify the numbers in the rewards DB
+        for (auto it : eth_to_locked_stakes) {
+            cryptonote::BlockchainSQLite::wallet_info wallet_info =
+                    db.get_accrued_rewards(it.first);
+            if (!wallet_info.found) {
+                log::error(
+                        logcat,
+                        "Internal error: SN contributor ({}) was not recorded into the rewards DB",
+                        it.first);
+                assert(wallet_info.found);
+            }
+
+            if (wallet_info.locked_stakes.to_coin() != it.second.total) {
+                fmt::memory_buffer buffer;
+                fmt::format_to(
+                        std::back_inserter(buffer),
+                        "Internal error: SN contributor ({}) in the SNL has {} staked SESH but the "
+                        "rewards DB claims it has {} staked SESH",
+                        it.first,
+                        cryptonote::print_money(it.second.total),
+                        cryptonote::print_money(wallet_info.locked_stakes.to_coin()));
+
+                for (auto stake_it : it.second.stakes) {
+                    fmt::format_to(
+                            std::back_inserter(buffer),
+                            "\n  SN {} => {} SESH",
+                            stake_it.pubkey,
+                            cryptonote::print_money(stake_it.stake));
+                }
+
+                log::error(logcat, "{}", fmt::to_string(buffer));
+                assert(wallet_info.locked_stakes.to_coin() == it.second.total);
+            }
+        }
+    }
+#endif
+}
+
 service_node_list::service_node_list(cryptonote::Blockchain& blockchain) :
         blockchain(blockchain)  // Warning: don't touch `blockchain`, it gets initialized *after* us
         ,
@@ -336,79 +429,7 @@ void service_node_list::init() {
         }
     }
 
-    // NOTE: In debug mode, check that the total locked SESH as stored in the SQL rewards DB matches
-    // the amount of locked SESH that is currently recorded on the SNL.
-#if !defined(NDEBUG)
-    if (blockchain.get_network_version() >= hf::hf21_eth) {
-        struct pubkey_stake {
-            crypto::ed25519_public_key pubkey;  // The SN pubkey
-            uint64_t stake;                     // Amount staked for SN pubkey for the ETH address
-        };
-
-        struct stake_history {
-            uint64_t total;                    // Total SESH the ETH address staked
-            std::vector<pubkey_stake> stakes;  // Individual stakes that the ETH address contributed
-        };
-
-        // NOTE: Enumerate all the current SESH that an ETH address has locked up in the network
-        std::unordered_map<eth::address, stake_history> eth_to_locked_stakes;
-
-        // NOTE: Enumerate SNL
-        for (auto it : m_state.service_nodes_infos) {
-            for (auto contrib_it : it.second->contributors) {
-                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
-                dest.total += contrib_it.amount;
-                dest.stakes.push_back({crypto::ed25519_public_key{it.first}, contrib_it.amount});
-            }
-        }
-
-        // NOTE: Enumerate nodes in the recently removed list (considered locked until exited)
-        for (auto it : m_state.recently_removed_nodes) {
-            for (auto contrib_it : it.info.contributors) {
-                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
-                dest.total += contrib_it.amount;
-                dest.stakes.push_back(
-                        {crypto::ed25519_public_key{it.service_node_pubkey}, contrib_it.amount});
-            }
-        }
-
-        // NOTE: Walk the locked stakes per ETH address and verify the numbers in the rewards DB
-        cryptonote::BlockchainSQLite& db = blockchain.sqlite_db();
-        for (auto it : eth_to_locked_stakes) {
-            cryptonote::BlockchainSQLite::wallet_info wallet_info =
-                    db.get_accrued_rewards(it.first);
-            if (!wallet_info.found) {
-                log::error(
-                        logcat,
-                        "Internal error: SN contributor ({}) was not recorded into the rewards DB",
-                        it.first);
-                assert(wallet_info.found);
-            }
-
-            if (wallet_info.locked_stakes.to_coin() != it.second.total) {
-                fmt::memory_buffer buffer;
-                fmt::format_to(
-                        std::back_inserter(buffer),
-                        "Internal error: SN contributor ({}) in the SNL has {} staked SESH but the "
-                        "rewards DB claims it has {} staked SESH",
-                        it.first,
-                        cryptonote::print_money(it.second.total),
-                        cryptonote::print_money(wallet_info.locked_stakes.to_coin()));
-
-                for (auto stake_it : it.second.stakes) {
-                    fmt::format_to(
-                            std::back_inserter(buffer),
-                            "\n  SN {} => {} SESH",
-                            stake_it.pubkey,
-                            cryptonote::print_money(stake_it.stake));
-                }
-
-                log::error(logcat, "{}", fmt::to_string(buffer));
-                assert(wallet_info.locked_stakes.to_coin() == it.second.total);
-            }
-        }
-    }
-#endif
+    verify_rewards_db_values(blockchain, m_state);
 }
 
 template <std::predicate<const service_node_info&> UnaryPredicate>
@@ -2223,10 +2244,8 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
     }
 
     // NOTE: Enumerate the contributors to refund to
-    std::vector<service_nodes::eth_stake> returned_stakes;
-    for (size_t contrib_index = 0; contrib_index < node->info.contributors.size();
-         contrib_index++) {
-        const auto& contributor = node->info.contributors[contrib_index];
+    for (size_t index = 0; index < node->info.contributors.size(); index++) {
+        const auto& contributor = node->info.contributors[index];
         // TODO: Once merge code is in this can be re-evaluated. Right now in the localdev tests
         // we don't have migration code so we're putting in bad data into the DB. The DB checks if
         // the payment has an eth address defined, if it does it stores the delayed payment as an
@@ -2235,22 +2254,17 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
         // This leads us to storing a cryptonote address in the delayed payments which causes the
         // network to stall as code tries to deserialise that address into an eth address and fails.
         if (contributor.ethereum_address) {
-            auto& item = returned_stakes.emplace_back();
+            auto& item = result.exit_stakes.emplace_back();
             item.sn = crypto::ed25519_public_key{node->service_node_pubkey};
             item.addr = contributor.ethereum_address;
             item.amount = cryptonote::reward_money::coin_amount(contributor.amount);
             item.block_height = confirm.height;
             item.tx_index = confirm.tx_index;
-            item.contributor_index = contrib_index;
+            item.contributor_index = index;
         }
     }
 
-    // NOTE: Make a copy of the returned stakes before slashing is applied. This is to preserve
-    // the original amount that the user stake and is used to correctly count the amount of SESH
-    // that gets unlocked from the network.
-    result.exit_stakes = returned_stakes;
-
-    if (returned_stakes.empty()) {
+    if (result.exit_stakes.empty()) {
         log::warning(
                 logcat,
                 "ETH exit event for BLS pubkey {}: SN {} has 0 contributors detected, null data "
@@ -2261,7 +2275,7 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
     }
 
     // NOTE: Apply the slash penalty to the operator
-    if (slash_amount > returned_stakes[0].amount.to_coin()) {
+    if (slash_amount > result.exit_stakes[0].amount.to_coin()) {
         log::error(
                 logcat,
                 "ETH exit of BLS pubkey {} rejected: SN {} returned amount {} is less than the "
@@ -2269,11 +2283,11 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
                 node->info.bls_public_key,
                 node->service_node_pubkey,
                 slash_amount,
-                returned_stakes[0].amount);
+                result.exit_stakes[0].amount);
         return result;
     }
-    returned_stakes[0].amount = cryptonote::reward_money::coin_amount(
-            returned_stakes[0].amount.to_coin() - slash_amount);
+
+    result.exit_stakes[0].liquidation = cryptonote::reward_money::coin_amount(slash_amount);
 
     std::string exit_label = "";
     if (slash_amount)
@@ -2299,7 +2313,7 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
 
     // NOTE: Add the funds to the unlock queue in the DB, can be retrieved by BLS aggregation when
     // fully unlocked..
-    sn_list->blockchain.sqlite_db().add_delayed_payments(returned_stakes, height, block_delay);
+    sn_list->blockchain.sqlite_db().add_delayed_payments(result.exit_stakes, height, block_delay);
 
     // NOTE: Remove the x25519/bls lookup entries:
     x25519_map.erase(snpk_to_xpk(node->service_node_pubkey));
@@ -4060,6 +4074,7 @@ block_add_result service_node_list::state_t::update_from_block(
                             .sn = crypto::ed25519_public_key{ptr->sn_pubkey},
                             .addr = it.address,
                             .amount = cryptonote::reward_money::coin_amount(it.amount),
+                            .liquidation = cryptonote::reward_money{},
                             .block_height = static_cast<uint32_t>(block.get_height()),
                             .tx_index = static_cast<uint32_t>(tx_index),
                             .contributor_index = static_cast<uint32_t>(it_index),
@@ -4069,13 +4084,11 @@ block_add_result service_node_list::state_t::update_from_block(
                     }
                 }
 
-                if (std::holds_alternative<eth::event::ServiceNodeExit>(event) ||
-                    std::holds_alternative<eth::event::ServiceNodePurge>(event)) {
-                    result.unlocked_stakes.insert(
-                            result.unlocked_stakes.end(),
-                            conf_result.exit_stakes.begin(),
-                            conf_result.exit_stakes.end());
-                }
+                if (std::holds_alternative<eth::event::ServiceNodeExit>(event))
+                    result.unlocked_stakes = conf_result.exit_stakes;
+
+                if (std::holds_alternative<eth::event::ServiceNodePurge>(event))
+                    result.purged_stakes = conf_result.exit_stakes;
             }
 
             // NOTE: Post-amble, advance iterator

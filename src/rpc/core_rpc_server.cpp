@@ -3894,10 +3894,10 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
             cryptonote::reward_money amount = {};
             if (eth::address eth_address{};
                 tools::try_load_from_hex_guts<eth::address>(address, eth_address)) {
-                amount = sql_db.get_accrued_rewards(eth_address).total_rewards.to_coin();
+                amount = sql_db.get_accrued_rewards(eth_address).amount.to_coin();
             } else if (address_parse_info parse_info{};
                        get_account_address_from_str(parse_info, net, address)) {
-                amount = sql_db.get_accrued_rewards(parse_info.address).total_rewards.to_coin();
+                amount = sql_db.get_accrued_rewards(parse_info.address).amount.to_coin();
             }
             balances[address] = amount.to_coin();
         }

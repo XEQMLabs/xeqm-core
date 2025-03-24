@@ -793,7 +793,7 @@ void bls_aggregator::get_rewards(oxenmq::Message& m) const {
     // where everything is in bytes, and recipientAmount is a 32-byte big
     // endian integer value.
     std::array<std::byte, 32> amount_be =
-            tools::encode_integer_be<32>(wallet_info.total_rewards.to_coin());
+            tools::encode_integer_be<32>(wallet_info.amount.to_coin());
 
     std::vector<uint8_t> msg =
             get_reward_balance_msg_to_sign(core.get_nettype(), eth_addr, amount_be);
@@ -801,7 +801,7 @@ void bls_aggregator::get_rewards(oxenmq::Message& m) const {
 
     oxenc::bt_dict_producer d;
     d.append("address", tools::view_guts(eth_addr));          // Address requesting balance
-    d.append("amount", wallet_info.total_rewards.to_coin());  // Balance
+    d.append("amount", wallet_info.amount.to_coin());  // Balance
     d.append("height", height);                               // Height of balance
     d.append("signature", tools::view_guts(sig));             // Signature of addr + balance
 
@@ -820,7 +820,7 @@ void bls_aggregator::rewards_request(
     oxen::log::trace(
             logcat,
             "Initiating rewards request of {} SENT for {} at height {}",
-            wallet_info.total_rewards,
+            wallet_info.amount,
             addr,
             height);
 
@@ -837,12 +837,12 @@ void bls_aggregator::rewards_request(
                 "Aggregating a rewards request for the zero address for {} SENT at height {} is "
                 "invalid. Request rejected"_format(
                         addr,
-                        wallet_info.total_rewards.to_coin(),
+                        wallet_info.amount.to_coin(),
                         height,
                         core.service_node_list.height()));
     }
 
-    if (wallet_info.total_rewards.to_coin() == 0) {
+    if (wallet_info.amount.to_coin() == 0) {
         throw oxen::traced<std::invalid_argument>(
                 "Aggregating a rewards request for '{}' for 0 SENT at height {} is invalid because "
                 "no rewards are available. Request rejected."_format(addr, height));
@@ -855,14 +855,14 @@ void bls_aggregator::rewards_request(
         if (cache_it != rewards_response_cache.end()) {
             auto cache_response = cache_it->second;
             if (cache_response->height == height &&
-                cache_response->amount == wallet_info.total_rewards.to_coin()) {
+                cache_response->amount == wallet_info.amount.to_coin()) {
                 log::trace(
                         logcat,
                         "Serving rewards request from cache for address {} at height {} with "
                         "rewards {} amount",
                         addr,
                         height,
-                        wallet_info.total_rewards.to_coin());
+                        wallet_info.amount.to_coin());
                 callback(cache_response);
                 return;
             }
@@ -872,12 +872,12 @@ void bls_aggregator::rewards_request(
     auto result_data = std::make_shared<aggregate_result<bls_rewards_response>>();
     auto& result = *result_data->result;
     result.addr = std::move(addr);
-    result.amount = wallet_info.total_rewards.to_coin();
+    result.amount = wallet_info.amount.to_coin();
     result.height = height;
     result.msg_to_sign = get_reward_balance_msg_to_sign(
             core.get_nettype(),
             result.addr,
-            tools::encode_integer_be<32>(wallet_info.total_rewards.to_coin()));
+            tools::encode_integer_be<32>(wallet_info.amount.to_coin()));
 
     oxenc::bt_dict_producer d;
     d.append("address", tools::view_guts(result.addr));
