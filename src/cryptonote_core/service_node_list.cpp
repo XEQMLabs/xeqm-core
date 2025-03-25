@@ -336,7 +336,8 @@ static void verify_rewards_db_values(
             }
         }
 
-        // NOTE: Enumerate payments sitting in the timelocked queue (considered locked until expired)
+        // NOTE: Enumerate payments sitting in the timelocked queue (considered locked until
+        // expired)
         cryptonote::BlockchainSQLite::delayed_payments_request request = {};
         request.type = cryptonote::BlockchainSQLite::delayed_payments_type::all;
 
@@ -2407,7 +2408,8 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
                 confirm.vote_index,
                 purge.l2_height);
 
-    for (size_t contrib_index = 0; contrib_index < it->second->contributors.size(); contrib_index++) {
+    for (size_t contrib_index = 0; contrib_index < it->second->contributors.size();
+         contrib_index++) {
         const auto& contributor = it->second->contributors[contrib_index];
         eth_stake& stake = result.exit_stakes.emplace_back();
         stake.sn = crypto::ed25519_public_key{it->first};
@@ -2420,7 +2422,7 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
     erase_info(it, recently_removed_node::type_t::purged);
 
     result.success = true;
-    result.need_swarm_update = true; // NOTE: Removing a SN affects swarms
+    result.need_swarm_update = true;  // NOTE: Removing a SN affects swarms
     return result;
 }
 
@@ -4067,17 +4069,17 @@ block_add_result service_node_list::state_t::update_from_block(
             // This currently leaves a hole in terms of "losing" visiblity of locked/unlocked SESH
             // through the collected stake metadata here.
             if (conf_result.success) {
-                if (auto *ptr = std::get_if<eth::event::NewServiceNodeV2>(&event)) {
+                if (auto* ptr = std::get_if<eth::event::NewServiceNodeV2>(&event)) {
                     for (size_t it_index = 0; it_index < ptr->contributors.size(); it_index++) {
                         const eth::event::ContributorV2& it = ptr->contributors[it_index];
                         eth_stake stake = {
-                            .sn = crypto::ed25519_public_key{ptr->sn_pubkey},
-                            .addr = it.address,
-                            .amount = cryptonote::reward_money::coin_amount(it.amount),
-                            .liquidation = cryptonote::reward_money{},
-                            .block_height = static_cast<uint32_t>(block.get_height()),
-                            .tx_index = static_cast<uint32_t>(tx_index),
-                            .contributor_index = static_cast<uint32_t>(it_index),
+                                .sn = crypto::ed25519_public_key{ptr->sn_pubkey},
+                                .addr = it.address,
+                                .amount = cryptonote::reward_money::coin_amount(it.amount),
+                                .liquidation = cryptonote::reward_money{},
+                                .block_height = static_cast<uint32_t>(block.get_height()),
+                                .tx_index = static_cast<uint32_t>(tx_index),
+                                .contributor_index = static_cast<uint32_t>(it_index),
                         };
 
                         result.locked_stakes.push_back(stake);
