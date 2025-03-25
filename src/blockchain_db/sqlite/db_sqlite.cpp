@@ -682,7 +682,6 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
                 result.timelocked_stakes += payment.amount - payment.liquidation;
             }
         }
-
     }
     return result;
 }
@@ -702,7 +701,8 @@ static BlockchainSQLite::wallet_info get_accrued_rewards_impl(
     return result;
 }
 
-void BlockchainSQLite::add_sn_rewards(hf hf_version, const block_payments& payments, bool rewards_payment) {
+void BlockchainSQLite::add_sn_rewards(
+        hf hf_version, const block_payments& payments, bool rewards_payment) {
     ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
