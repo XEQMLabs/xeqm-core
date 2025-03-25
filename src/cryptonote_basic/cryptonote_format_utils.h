@@ -300,14 +300,14 @@ constexpr std::string_view get_unit() {
 // Returns a monetary value with a decimal point; optionally strips insignificant trailing 0s.
 std::string print_money(
         uint64_t amount,
-        size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT,
-        bool strip_zeros = false);
+        bool strip_zeros = false,
+        size_t decimal_point = oxen::DISPLAY_DECIMAL_POINT);
 // Returns a formatted monetary value including the unit, e.g. "1.234567 OXEN"; strips
 // insignificant trailing 0s by default (unlike the above) but can be overridden to not do that.
 std::string format_money(
         uint64_t amount,
-        size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT,
-        bool strip_zeros = true);
+        bool strip_zeros = true,
+        size_t decimal_point = oxen::DISPLAY_DECIMAL_POINT);
 
 std::string print_tx_verification_context(
         tx_verification_context const& tvc, transaction const* tx = nullptr);
