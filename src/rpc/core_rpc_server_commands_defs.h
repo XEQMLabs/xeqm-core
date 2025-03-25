@@ -2255,6 +2255,9 @@ struct GET_PENDING_EVENTS : PUBLIC {
 ///  - `balances` -- an array of objects containing the reward metadata for the associated addresses
 ///    in the same order as specified in the input `addresses`, irrespective of if the wallet exists
 ///    or not. Each object contains the following fields:
+///    - `address` -- the address of the wallet this object is for. This matches 1:1 with the given
+///    requested addresses in input. If no addresses were specified then all addresses are returned
+///    and this field identifies said address it's describing.
 ///    - `amount` -- the total amount of claimable tokens for the given address. This includes the
 ///    earnt rewards as well as unlocked stakes that are available to be claimed.
 ///    - `found` -- flag that indicates if the address has ever participated in the network. When

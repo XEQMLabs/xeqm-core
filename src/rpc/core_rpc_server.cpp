@@ -3883,8 +3883,8 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
-static nlohmann::json wallet_info_to_json(std::string address, const BlockchainSQLite::wallet_info& wallet_info)
-{
+static nlohmann::json wallet_info_to_json(
+        std::string address, const BlockchainSQLite::wallet_info& wallet_info) {
     nlohmann::json result = {
             {"found", wallet_info.found},
             {"address", address},
