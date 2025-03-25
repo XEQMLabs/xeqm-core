@@ -229,7 +229,6 @@ struct block_add_result {
     // otherwise
     std::vector<crypto::public_key> payable_nodes_hf19_onwards;
     std::vector<eth_stake> locked_stakes;
-    std::vector<eth_stake> unlocked_stakes;
     std::vector<eth_stake> purged_stakes;
 };
 

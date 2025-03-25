@@ -4084,9 +4084,6 @@ block_add_result service_node_list::state_t::update_from_block(
                     }
                 }
 
-                if (std::holds_alternative<eth::event::ServiceNodeExit>(event))
-                    result.unlocked_stakes = conf_result.exit_stakes;
-
                 if (std::holds_alternative<eth::event::ServiceNodePurge>(event))
                     result.purged_stakes = conf_result.exit_stakes;
             }
