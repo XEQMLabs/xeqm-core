@@ -152,6 +152,9 @@ class BlockchainSQLite : public db::Database {
         // For ETH addresses, lifetime rewards _and_ unlocked stakes for the address. (Note that,
         // unlike Oxen addresses, these rewards never reset to zero; but rather the rewards contract
         // keeps track of the current paid and current total and pays out the difference).
+        //
+        // For ETH addresses, this can be derived by
+        // `lifetime_unlocked_stakes + lifetime_rewards - lifetime_liquidated_stakes`
         cryptonote::reward_money amount;
 
         // For ETH addresses _only_, the total amount of tokens that were locked by this wallet and
@@ -162,18 +165,14 @@ class BlockchainSQLite : public db::Database {
         cryptonote::reward_money lifetime_liquidated_stakes;
 
         // For ETH addresses _only_, the amount of tokens currently locked in the network (e.g.
-        // staked in a node). This is defined as `lifetime locked - lifetimed unlocked`
+        // staked in a node). This is defined as `lifetime locked - lifetimed unlocked` and
+        // precalculated for convenience. This number includes `timelocked_stakes`.
         cryptonote::reward_money locked_stakes;
 
         // For ETH addresses _only_, the amount of tokens awaiting to be unlocked from the network
         // (e.g. an exit has been processed and the stake is under a time lock before being
         // claimable by the address)
         cryptonote::reward_money timelocked_stakes;
-
-        // Total lifetime rewards the wallet has earnt from participating as a staker in a node.
-        // This is defined as `amount - (lifetime unlock - lifetime liquidated)` and precalculated
-        // for convenience
-        cryptonote::reward_money rewards;
     };
 
     // See `wallet_info`

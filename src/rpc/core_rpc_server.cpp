@@ -3881,18 +3881,17 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
-static nlohmann::json wallet_info_to_json(std::string_view address, const BlockchainSQLite::wallet_info& wallet_info)
+static nlohmann::json wallet_info_to_json(const BlockchainSQLite::wallet_info& wallet_info)
 {
     nlohmann::json result = {
-            {"address", address},
             {"found", wallet_info.found},
             {"amount", wallet_info.amount.to_coin()},
             {"lifetime_locked_stakes", wallet_info.lifetime_locked_stakes.to_coin()},
             {"lifetime_unlocked_stakes", wallet_info.lifetime_unlocked_stakes.to_coin()},
             {"lifetime_rewards", wallet_info.lifetime_rewards.to_coin()},
             {"lifetime_liquidated_stakes", wallet_info.lifetime_liquidated_stakes.to_coin()},
+            {"locked_stakes", wallet_info.locked_stakes.to_coin()},
             {"timelocked_stakes", wallet_info.timelocked_stakes.to_coin()},
-            {"rewards", wallet_info.rewards.to_coin()},
     };
     return result;
 }
@@ -3917,7 +3916,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
                        get_account_address_from_str(oxen, net, address)) {
                 wallet_info = sql_db.get_accrued_rewards(oxen.address);
             }
-            array.push_back(wallet_info_to_json(address, wallet_info));
+            array.push_back(wallet_info_to_json(wallet_info));
             if (height == 0)
                 height = wallet_info.height;
             assert(wallet_info.height == height);
@@ -3928,7 +3927,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
         for (size_t i = 0; i < addresses.size(); i++) {
             const std::string& address = addresses[i];
             const BlockchainSQLite::wallet_info& wallet_info = wallets[i];
-            array.push_back(wallet_info_to_json(address, wallet_info));
+            array.push_back(wallet_info_to_json(wallet_info));
 
             if (height == 0)
                 height = wallet_info.height;

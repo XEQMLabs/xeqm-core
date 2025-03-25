@@ -2249,8 +2249,26 @@ struct GET_PENDING_EVENTS : PUBLIC {
 ///    with balances are returned.
 ///
 /// Outputs:
-///  - `balances` -- a dict where keys are the wallet addresses and values are the balance (in
-///    atomic SENT units).
+///  - `balances` -- an array of objects containing the reward metadata for the associated addresses
+///    in the same order as specified in the input `addresses`, irrespective of if the wallet exists
+///    or not. Each object contains the following fields:
+///    - `amount` -- the total amount of claimable tokens for the given address. This includes the
+///    earnt rewards as well as unlocked stakes that are available to be claimed.
+///    - `found` -- flag that indicates if the address has ever participated in the network. When
+///    false, all rewards metadata values will be 0.
+///    - `lifetime_liquidated_stakes` -- the total amount of tokens in the lifetime of the network
+///    that have been liquidated from the stakes for this address.
+///    - `lifetime_locked_stakes` -- the total amount of tokens in the lifetime of the network that
+///    has been staked into nodes for this address.
+///    - `lifetime_rewards` -- the total amount of tokens in the lifetime of the network that has
+///    been earnt from staking into nodes for this address.
+///    - `lifetime_unlocked_stakes` -- the total amount of tokens in the lifetime of the network
+///    that has been unlocked from the nodes this address has staked into.
+///    - `locked_stakes` -- the amount of tokens currently locked into nodes on the network. This is
+///    defined as `lifetime locked - lifetime unlocked`.
+///    - `timelocked_stakes` -- the amount of tokens that have been unstaked from nodes but cannot
+//     be claimed until the time lock on those individual stakes have been unlocked.
+
 struct GET_ACCRUED_REWARDS : PUBLIC {
     static constexpr auto names() { return NAMES("get_accrued_rewards"); }
     struct request_parameters {
