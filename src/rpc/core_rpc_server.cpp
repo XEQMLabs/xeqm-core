@@ -3883,10 +3883,11 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
-static nlohmann::json wallet_info_to_json(const BlockchainSQLite::wallet_info& wallet_info)
+static nlohmann::json wallet_info_to_json(std::string address, const BlockchainSQLite::wallet_info& wallet_info)
 {
     nlohmann::json result = {
             {"found", wallet_info.found},
+            {"address", address},
             {"amount", wallet_info.amount.to_coin()},
             {"lifetime_locked_stakes", wallet_info.lifetime_locked_stakes.to_coin()},
             {"lifetime_unlocked_stakes", wallet_info.lifetime_unlocked_stakes.to_coin()},
@@ -3918,7 +3919,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
                        get_account_address_from_str(oxen, net, address)) {
                 wallet_info = sql_db.get_accrued_rewards(oxen.address);
             }
-            array.push_back(wallet_info_to_json(wallet_info));
+            array.push_back(wallet_info_to_json(address, wallet_info));
             if (height == 0)
                 height = wallet_info.height;
             assert(wallet_info.height == height);
@@ -3929,7 +3930,7 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
         for (size_t i = 0; i < addresses.size(); i++) {
             const std::string& address = addresses[i];
             const BlockchainSQLite::wallet_info& wallet_info = wallets[i];
-            array.push_back(wallet_info_to_json(wallet_info));
+            array.push_back(wallet_info_to_json(address, wallet_info));
 
             if (height == 0)
                 height = wallet_info.height;
@@ -3938,20 +3939,26 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
     }
 
     if (rpc.request.oxen10_compat) {
-        // Oxen 10.x wallets expect `"addresses": [...], "amounts": [...]` because old Monero
+        // Oxen 10.x wallets expect `"addresses": [...], "amounts": [...]`
         // serialization didn't support dicts, so rewrite it if this came through the old endpoint
         // name to maintain compatibility.
         auto& addrs = rpc.response["addresses"];
         auto& amts = rpc.response["amounts"];
-        for (auto& [addr, amt] : balances.items()) {
-            addrs.emplace_back(std::move(addr));
-            amts.emplace_back(std::move(amt));
+        for (auto& it : array) {
+            nlohmann::json::iterator address = it.find("address");
+            nlohmann::json::iterator amount = it.find("amount");
+            assert(address != it.end());
+            assert(amount != it.end());
+            assert(address->is_string());
+            assert(amount->is_number_unsigned());
+            addrs.emplace_back(address->get<std::string>());
+            amts.emplace_back(amount->get<uint64_t>());
         }
         rpc.response.erase("balances");
+    } else {
+        rpc.response["height"] = height;
     }
 
-    rpc.response["height"] = height;
     rpc.response["status"] = STATUS_OK;
 }
-
 }  // namespace cryptonote::rpc
