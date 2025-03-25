@@ -15274,9 +15274,19 @@ void wallet2::refresh_batching_cache() {
     THROW_WALLET_EXCEPTION_IF(
             res["status"] != rpc::STATUS_OK, error::get_accrued_rewards_error, res["status"]);
 
-    auto records = res["balances"].get<std::unordered_map<std::string, uint64_t>>();
     batching_records_cache.clear();
-    batching_records_cache = std::move(records);
+    for (auto it : res["balances"]) {
+        nlohmann::json::iterator address = it.find("address");
+        nlohmann::json::iterator amount = it.find("amount");
+        assert(address != it.end());
+        assert(amount != it.end());
+        assert(address->is_string());
+        assert(amount->is_number_unsigned());
+
+        auto address_str = address->get_ref<const std::string&>();
+        assert(batching_records_cache.count(address_str) == 0);
+        batching_records_cache[address_str] = amount->get<uint64_t>();
+    }
 }
 
 uint64_t wallet2::get_batched_amount(std::optional<std::string> address) const {
