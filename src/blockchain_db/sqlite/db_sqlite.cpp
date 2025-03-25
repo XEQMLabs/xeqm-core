@@ -114,7 +114,6 @@ constexpr std::string_view BATCHED_PAYMENTS_SCHEMA_WITH_HEIGHT = R"(address TEXT
    CHECK(lifetime_unlocked_stakes  <= lifetime_locked_stakes)
    CHECK(lifetime_rewards          >= 0))";
 
-
 void BlockchainSQLite::create_schema() {
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
     auto& netconf = cryptonote::get_config(m_nettype);
@@ -395,16 +394,16 @@ void BlockchainSQLite::upgrade_schema() {
     // NOTE: Add new stakes fields to batch accrued table row for tracking
     {
         std::string_view tables[] = {
-            "batched_payments_accrued",
-            "batched_payments_accrued_archive",
-            "batched_payments_accrued_recent",
+                "batched_payments_accrued",
+                "batched_payments_accrued_archive",
+                "batched_payments_accrued_recent",
         };
 
         std::string_view fields[] = {
-            "lifetime_locked_stakes",
-            "lifetime_unlocked_stakes",
-            "lifetime_liquidated_stakes",
-            "lifetime_rewards",
+                "lifetime_locked_stakes",
+                "lifetime_unlocked_stakes",
+                "lifetime_liquidated_stakes",
+                "lifetime_rewards",
         };
 
         for (auto it : tables) {
@@ -420,7 +419,8 @@ void BlockchainSQLite::upgrade_schema() {
                 }
 
                 if (!has_field)
-                    db.exec("ALTER TABLE {} ADD COLUMN {} INTEGER NOT NULL DEFAULT 0;"_format(it, field));
+                    db.exec("ALTER TABLE {} ADD COLUMN {} INTEGER NOT NULL DEFAULT 0;"_format(
+                            it, field));
             }
         }
     }
@@ -428,9 +428,9 @@ void BlockchainSQLite::upgrade_schema() {
     // NOTE: Add new liquidation field to delayed payment table
     {
         std::string_view tables[] = {
-            "delayed_payments",
-            "delayed_payments_archive",
-            "delayed_payments_recent",
+                "delayed_payments",
+                "delayed_payments_archive",
+                "delayed_payments_recent",
         };
 
         constexpr std::string_view field = "liquidation_amount";
@@ -446,7 +446,8 @@ void BlockchainSQLite::upgrade_schema() {
             }
 
             if (!has_field)
-                db.exec("ALTER TABLE {} ADD COLUMN {} INTEGER NOT NULL DEFAULT 0;"_format(it, field));
+                db.exec("ALTER TABLE {} ADD COLUMN {} INTEGER NOT NULL DEFAULT 0;"_format(
+                        it, field));
         }
     }
 
@@ -568,8 +569,7 @@ const std::string& BlockchainSQLite::get_address_str(const cryptonote::batch_sn_
 // formatting of an ETH address is now the checksum address. This was changed _after_ we started
 // using lowercase ETH addresses in the DB. We should at some point just migrate entirely to byte
 // addresses.
-static std::string eth_address_to_sql_address(const eth::address& addr)
-{
+static std::string eth_address_to_sql_address(const eth::address& addr) {
     std::string result = "0x{:x}"_format(addr);
     return result;
 }
@@ -610,42 +610,19 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
     BlockchainSQLite::wallet_info result = {};
     result.height = height;
     if (metadata) {
+        eth::address eth_addr = {};
+        bool is_eth = tools::try_load_from_hex_guts(address, eth_addr);
+
         int64_t amount = std::get<0>(*metadata);
         int64_t lifetime_locked_stakes = std::get<1>(*metadata);
         int64_t lifetime_unlocked_stakes = std::get<2>(*metadata);
         int64_t lifetime_liquidated_stakes = std::get<3>(*metadata);
         int64_t lifetime_rewards = std::get<4>(*metadata);
         assert(amount >= 0);
-        assert(lifetime_locked_stakes >= 0);
-        assert(lifetime_unlocked_stakes >= 0);
-        assert(lifetime_rewards >= 0);
-
-        int64_t rederived_amount = lifetime_unlocked_stakes + lifetime_rewards - lifetime_liquidated_stakes;
-        if (amount != rederived_amount) {
-            log::error(
-                    logcat,
-                    "Internal error: SN contributor {} at height {} lifetime claimable amount "
-                    "does not match the sum of the unlocked stakes, rewards and liquidated stakes\n"
-                    "  lifetime claimable  {}\n"
-                    "  lifetime rewards    {}\n"
-                    "  lifetime unlocked   {}\n"
-                    "  lifetime liquidated {}\n"
-                    "Final calculated values were (claimable vs rederived claimable): {} != {}",
-                    address,
-                    height,
-                    cryptonote::print_money(amount,                     false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                    cryptonote::print_money(lifetime_unlocked_stakes,   false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                    cryptonote::print_money(lifetime_rewards,           false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                    cryptonote::print_money(lifetime_liquidated_stakes, false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                    cryptonote::print_money(amount,                     false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                    cryptonote::print_money(rederived_amount,           false, oxen::DISPLAY_DECIMAL_POINT + 3));
-            assert(amount == rederived_amount);
-        }
 
         result.found = true;
         result.amount = cryptonote::reward_money::db_amount(amount);
-        result.lifetime_locked_stakes =
-                cryptonote::reward_money::db_amount(lifetime_locked_stakes);
+        result.lifetime_locked_stakes = cryptonote::reward_money::db_amount(lifetime_locked_stakes);
         result.lifetime_unlocked_stakes =
                 cryptonote::reward_money::db_amount(lifetime_unlocked_stakes);
         result.lifetime_liquidated_stakes =
@@ -653,13 +630,47 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
         result.lifetime_rewards = cryptonote::reward_money::db_amount(lifetime_rewards);
         result.locked_stakes = result.lifetime_locked_stakes - result.lifetime_unlocked_stakes;
 
-        cryptonote::reward_money rederived_lifetime_rewards =
-                result.amount -
-                (result.lifetime_unlocked_stakes - result.lifetime_liquidated_stakes);
-        assert(rederived_lifetime_rewards == result.lifetime_rewards);
+        // NOTE: Some of these fields are only enumerated on ETH addresses so gate error checking
+        // behind said flag.
+        if (is_eth) {
+            assert(lifetime_locked_stakes >= 0);
+            assert(lifetime_unlocked_stakes >= 0);
+            assert(lifetime_rewards >= 0);
 
-        // NOTE: Delayed payments is only supported on ETH addresses
-        if (eth::address eth_addr; tools::try_load_from_hex_guts(address, eth_addr)) {
+            int64_t rederived_amount =
+                    lifetime_unlocked_stakes + lifetime_rewards - lifetime_liquidated_stakes;
+            if (amount != rederived_amount) {
+                log::error(
+                        logcat,
+                        "Internal error: SN contributor {} at height {} lifetime claimable amount "
+                        "does not match the sum of the unlocked stakes, rewards and liquidated "
+                        "stakes\n"
+                        "  lifetime claimable  {}\n"
+                        "  lifetime rewards    {}\n"
+                        "  lifetime unlocked   {}\n"
+                        "  lifetime liquidated {}\n"
+                        "Final calculated values were (claimable vs rederived claimable): {} != {}",
+                        address,
+                        height,
+                        cryptonote::print_money(amount, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                lifetime_unlocked_stakes, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                lifetime_rewards, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                lifetime_liquidated_stakes, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(amount, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                rederived_amount, false, oxen::DISPLAY_DECIMAL_POINT + 3));
+                assert(amount == rederived_amount);
+            }
+
+            cryptonote::reward_money rederived_lifetime_rewards =
+                    result.amount -
+                    (result.lifetime_unlocked_stakes - result.lifetime_liquidated_stakes);
+            assert(rederived_lifetime_rewards == result.lifetime_rewards);
+
+            // NOTE: Delayed payments is only supported on ETH addresses
             cryptonote::BlockchainSQLite::delayed_payments_request request = {};
             request.type = cryptonote::BlockchainSQLite::delayed_payments_type::address;
             request.address = eth_addr;
@@ -671,11 +682,13 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
                 result.timelocked_stakes += payment.amount - payment.liquidation;
             }
         }
+
     }
     return result;
 }
 
-static BlockchainSQLite::wallet_info get_accrued_rewards_impl(BlockchainSQLite& db, const std::string& address) {
+static BlockchainSQLite::wallet_info get_accrued_rewards_impl(
+        BlockchainSQLite& db, const std::string& address) {
     log::trace(logcat, "BlockchainDB_SQLITE {} for {}", __func__, address);
     auto tuple = db.prepared_maybe_get<int64_t, int64_t, int64_t, int64_t, int64_t>(
             "SELECT"
@@ -988,7 +1001,8 @@ void BlockchainSQLite::add_rewards(
                                                : sn_info.operator_ethereum_address;
             payments[fee_recipient].amount += cryptonote::reward_money::db_amount(operator_fee);
         } else {
-            payments[sn_info.operator_address].amount += cryptonote::reward_money::db_amount(operator_fee);
+            payments[sn_info.operator_address].amount +=
+                    cryptonote::reward_money::db_amount(operator_fee);
         }
     }
 
@@ -1095,7 +1109,6 @@ void BlockchainSQLite::reward_handler(
 
     add_sn_rewards(get_delayed_payments(request), false /*rewards_payment*/);
     add_sn_rewards(payments, true /*rewards_payment*/);
-
 }
 
 block_payments BlockchainSQLite::get_delayed_payments(const delayed_payments_request& request) {
@@ -1152,8 +1165,8 @@ block_payments BlockchainSQLite::get_delayed_payments(const delayed_payments_req
     return result;
 }
 
-static void submit_stakes_metadata(BlockchainSQLite& db, const service_nodes::block_add_result& block_add)
-{
+static void submit_stakes_metadata(
+        BlockchainSQLite& db, const service_nodes::block_add_result& block_add) {
     // NOTE: Submit (locked) stakes information
     // New ETH addresses that are staking may not exist in the table yet if it's their first time
     // because they haven't received rewards yet. The adding of locked stakes has to account for
@@ -1163,7 +1176,8 @@ static void submit_stakes_metadata(BlockchainSQLite& db, const service_nodes::bl
     // NOTE: We specify amount and payout_offset because older DBs don't have the 'DEFAULT 0' clause
     // applied to those rows.
     auto lifetime_locked_stakes = db.prepared_st(
-            "INSERT INTO batched_payments_accrued (lifetime_locked_stakes, address, amount, payout_offset)"
+            "INSERT INTO batched_payments_accrued (lifetime_locked_stakes, address, amount, "
+            "payout_offset)"
             " VALUES (?, ?, 0, 0)"
             " ON CONFLICT(address) DO UPDATE SET"
             "  lifetime_locked_stakes = lifetime_locked_stakes + excluded.lifetime_locked_stakes;");
@@ -1176,7 +1190,8 @@ static void submit_stakes_metadata(BlockchainSQLite& db, const service_nodes::bl
         BlockchainSQLite::wallet_info wallet_info_before = get_accrued_rewards_impl(db, address);
 
         // NOTE: Add the locked SESH
-        int rows_changed = exec_query(lifetime_locked_stakes, static_cast<int64_t>(it.amount.to_db()), address);
+        int rows_changed = exec_query(
+                lifetime_locked_stakes, static_cast<int64_t>(it.amount.to_db()), address);
         lifetime_locked_stakes->reset();
         assert(rows_changed == 1);
 
@@ -1224,7 +1239,8 @@ static void submit_stakes_metadata(BlockchainSQLite& db, const service_nodes::bl
         }
 
         // NOTE: Add the purged SESH
-        int rows_changed = db::exec_query(purged_stakes, static_cast<int64_t>(it.amount.to_db()), address);
+        int rows_changed =
+                db::exec_query(purged_stakes, static_cast<int64_t>(it.amount.to_db()), address);
         assert(rows_changed == 1);
         purged_stakes->reset();
 
@@ -1302,8 +1318,10 @@ bool BlockchainSQLite::add_block(
             return false;
 
         reward_handler(block, service_nodes_state, block_add);
-        submit_stakes_metadata(*this, block_add);
-        update_height(height + 1); // NOTE: Update height which synchronises the archive/recent tables
+        if (hf_version >= hf::hf21_eth)
+            submit_stakes_metadata(*this, block_add);
+        update_height(
+                height + 1);  // NOTE: Update height which synchronises the archive/recent tables
 
         if (transaction) {
             transaction->commit();
@@ -1316,7 +1334,11 @@ bool BlockchainSQLite::add_block(
         }
 
     } catch (std::exception& e) {
-        log::error(logcat, "Error adding reward payments at block {}: {}", block.get_height(), e.what());
+        log::error(
+                logcat,
+                "Error adding reward payments at block {}: {}",
+                block.get_height(),
+                e.what());
         return false;
     }
     return true;
