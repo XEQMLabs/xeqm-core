@@ -89,7 +89,7 @@ class BlockchainSQLite : public db::Database {
     // If the payments are token rewards set `is_rewards` to true to ensure that rewards are
     // tracked in a separate column. Set it to `false` if payments are for delayed/exit payments
     // inorder to separate the tracked rewards from the exit payments values.
-    void add_sn_rewards(const block_payments& payments, bool is_rewards);
+    void add_sn_rewards(hf hf_version, const block_payments& payments, bool is_rewards);
 
     enum class delayed_payments_type {
         all,

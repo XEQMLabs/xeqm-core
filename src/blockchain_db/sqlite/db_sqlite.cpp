@@ -702,7 +702,7 @@ static BlockchainSQLite::wallet_info get_accrued_rewards_impl(
     return result;
 }
 
-void BlockchainSQLite::add_sn_rewards(const block_payments& payments, bool rewards_payment) {
+void BlockchainSQLite::add_sn_rewards(hf hf_version, const block_payments& payments, bool rewards_payment) {
     ZoneScoped;
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
@@ -743,7 +743,8 @@ void BlockchainSQLite::add_sn_rewards(const block_payments& payments, bool rewar
 
         if (rewards_payment) {
             exec_query(insert_payment, address_str, offset, amount_i64);
-            exec_query(update_lifetime_rewards, amount_i64, address_str);
+            if (hf_version >= hf::hf21_eth)
+                exec_query(update_lifetime_rewards, amount_i64, address_str);
         } else {
             db::exec_query(
                     insert_payment,
@@ -1107,8 +1108,8 @@ void BlockchainSQLite::reward_handler(
     request.type = delayed_payments_type::height;
     request.height = block.get_height();
 
-    add_sn_rewards(get_delayed_payments(request), false /*rewards_payment*/);
-    add_sn_rewards(payments, true /*rewards_payment*/);
+    add_sn_rewards(block.major_version, get_delayed_payments(request), false /*rewards_payment*/);
+    add_sn_rewards(block.major_version, payments, true /*rewards_payment*/);
 }
 
 block_payments BlockchainSQLite::get_delayed_payments(const delayed_payments_request& request) {
