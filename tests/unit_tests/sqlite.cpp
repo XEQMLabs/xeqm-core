@@ -58,7 +58,7 @@ TEST(SQLITE, AddSNRewards)
 
   t1[wallet_address.address].amount = cryptonote::reward_money::db_amount(16500000001'789/2);
 
-  EXPECT_NO_THROW(sqliteDB.add_sn_rewards(t1, false));
+  EXPECT_NO_THROW(sqliteDB.add_sn_rewards(cryptonote::hf::_next, t1, false));
   EXPECT_EQ(sqliteDB.batching_count(), 1);
 
   std::vector<cryptonote::batch_sn_payment> p1;
