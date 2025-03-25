@@ -800,10 +800,10 @@ void bls_aggregator::get_rewards(oxenmq::Message& m) const {
     bls_signature sig = eth::sign(core.get_nettype(), core.get_service_keys().key_bls, msg);
 
     oxenc::bt_dict_producer d;
-    d.append("address", tools::view_guts(eth_addr));          // Address requesting balance
+    d.append("address", tools::view_guts(eth_addr));   // Address requesting balance
     d.append("amount", wallet_info.amount.to_coin());  // Balance
-    d.append("height", height);                               // Height of balance
-    d.append("signature", tools::view_guts(sig));             // Signature of addr + balance
+    d.append("height", height);                        // Height of balance
+    d.append("signature", tools::view_guts(sig));      // Signature of addr + balance
 
     m.send_reply("200", std::move(d).str());
 }

@@ -105,7 +105,7 @@ TEST(SQLITE, CalculateRewards)
     contributor.amount = reward.to_coin();
 
     sqliteDB.add_rewards(hf_version, reward, single_contributor, rewards);
-    EXPECT_EQ(rewards[first_address.address].to_coin(), reward.to_coin());
+    EXPECT_EQ(rewards[first_address.address].amount.to_coin(), reward.to_coin());
   }
 
   // Check that 3 contributor receives their portion of the block reward
