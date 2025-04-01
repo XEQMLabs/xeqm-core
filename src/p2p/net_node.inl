@@ -580,6 +580,7 @@ std::set<std::string> node_server<t_payload_net_handler>::get_seed_nodes(
         cryptonote::network_type nettype) const {
     std::set<std::string> full_addrs;
     if (nettype == cryptonote::network_type::TESTNET) {
+        full_addrs.insert("84.247.143.210:38156");  // New Test Seed node
         full_addrs.insert("144.76.164.202:38156");  // public-eu.optf.ngo
     } else if (nettype == cryptonote::network_type::DEVNET) {
         full_addrs.insert("144.76.164.202:38856");

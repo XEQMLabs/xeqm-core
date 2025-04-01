@@ -149,8 +149,8 @@ std::pair<std::optional<boost::program_options::variables_map>, bool> main(
 
             if (help) {
                 print(
-                        "{}\n"_format(wallet_args::tr("This is the command line oxen wallet. It "
-                                                      "needs to connect to a oxen\n"
+                        "{}\n"_format(wallet_args::tr("This is the command line xeq wallet. It "
+                                                      "needs to connect to a xeq\n"
                                                       "daemon to work correctly.")));
                 print("{}\n  {}"_format(wallet_args::tr("Usage:"), usage));
 
