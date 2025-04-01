@@ -592,7 +592,7 @@ bool wallet_rpc_server::init() {
             m_login.emplace(
                     default_rpc_username, oxenc::to_base64(rand_128bit.begin(), rand_128bit.end()));
 
-            std::string temp = "oxen-wallet-rpc." + std::to_string(port) + ".login";
+            std::string temp = "xeq-wallet-rpc." + std::to_string(port) + ".login";
             rpc_login_file = tools::private_file::create(temp);
             if (!rpc_login_file.handle()) {
                 log::error(
@@ -3767,11 +3767,11 @@ int main(int argc, char** argv) {
     auto [vm, should_terminate] = wallet_args::main(
             argc,
             argv,
-            "oxen-wallet-rpc "
+            "xeq-wallet-rpc "
             "[--wallet-file=<file>|--generate-from-json=<file>|--wallet-dir=<directory>] "
             "[--rpc-bind-port=<port>]",
-            tools::wallet_rpc_server::tr("This is the RPC oxen wallet. It needs to connect to a "
-                                         "oxen\ndaemon to work correctly."),
+            tools::wallet_rpc_server::tr("This is the RPC xeq wallet. It needs to connect to a "
+                                         "xeq\ndaemon to work correctly."),
             desc_params,
             hidden_params,
             po::positional_options_description(),
