@@ -21,9 +21,7 @@ inline constexpr network_config config{
                 0x49, 0x41, 0x4e, 0x54, // "IANT"
         }},
         .GENESIS_TX =
-                "04011e1e01ff00018080c9db97f4fb2702fa27e905f604faa4eb084ee675faca77b0cfea9adec152"
-                "6da33cae5e286f31624201dae05bf3fa1662b7fd373c92426763d921cf3745e10ee43edb510f690c"
-                "656f247200000000000000000000000000000000000000000000000000000000000000000000"sv,
+                "011e01ff00018080c9db97f4fb2702a183e39cd219d7c08703bb74ed5db5e13da301e56f6c1d0fa59bb1d8abd4ff842101c955c9b530a9d80d80e87d83b038948723d99099579ca7ddfdf49550f576a1cd"sv,
         .GENESIS_NONCE = 12345,
         .GOVERNANCE_REWARD_INTERVAL = 2000min,
         .GOVERNANCE_WALLET_ADDRESS =
