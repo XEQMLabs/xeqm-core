@@ -33,8 +33,7 @@ inline constexpr network_config config{
         .GOVERNANCE_REWARD_INTERVAL = 2000min,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
-                        "T6Tnu9YUgVcSzswBgVioqFNTfcqGopvTrcYjs4YDLHUfU64DuHxFoEmbwoyipTidGiTXx5EuYdgzZhDLMTo9uEv82M482ypm7"sv,  // HF7-9
-                        "T6Tnu9YUgVcSzswBgVioqFNTfcqGopvTrcYjs4YDLHUfU64DuHxFoEmbwoyipTidGiTXx5EuYdgzZhDLMTo9uEv82M482ypm7"sv,  // HF10
+                        "XEQTFqMuebu297Y6W7BusrByocVUDm5hpU1jCuSpDGHxC29c1yPL5uZTkHSK9tzj4XZPaL6NRMgjSRzbKFwjU5626CwXwDmDoD",  // HF10
                 },
         .UPTIME_PROOF_TOLERANCE = mainnet::config.UPTIME_PROOF_TOLERANCE,
         .UPTIME_PROOF_STARTUP_DELAY = mainnet::config.UPTIME_PROOF_STARTUP_DELAY,
