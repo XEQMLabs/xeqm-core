@@ -80,13 +80,7 @@ class omq_rpc final {
             const tx_pool_options& opts);
 
     void send_snode_addr_notifications(
-            const crypto::public_key& snode_pk,
-            const crypto::ed25519_public_key& ed_pk,
-            const crypto::x25519_public_key& x_pk,
-            std::string_view public_ip,
-            uint16_t qnet_port,
-            uint16_t storage_https_port,
-            uint16_t storage_quic_port);
+            const uptime_proof::Proof& proof, const crypto::x25519_public_key& x_pk);
 
   private:
     void on_get_blocks(oxenmq::Message& m);

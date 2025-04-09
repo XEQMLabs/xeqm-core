@@ -358,14 +358,7 @@ omq_rpc::omq_rpc(
     });
     core_.service_node_list.snode_addr_change_notifier =
             [this](const uptime_proof::Proof& proof, const crypto::x25519_public_key& xpk) {
-                send_snode_addr_notifications(
-                        proof.pubkey,
-                        proof.pubkey_ed25519,
-                        xpk,
-                        epee::string_tools::get_ip_string_from_int32(proof.public_ip),
-                        proof.qnet_port,
-                        proof.storage_https_port,
-                        proof.storage_omq_port);
+                send_snode_addr_notifications(proof, xpk);
             };
 }
 
@@ -432,23 +425,18 @@ void omq_rpc::send_mempool_notifications(
 }
 
 void omq_rpc::send_snode_addr_notifications(
-        const crypto::public_key& snode_pk,
-        const crypto::ed25519_public_key& ed_pk,
-        const crypto::x25519_public_key& x_pk,
-        std::string_view public_ip,
-        uint16_t qnet_port,
-        uint16_t storage_https_port,
-        uint16_t storage_quic_port) {
+        const uptime_proof::Proof& proof, const crypto::x25519_public_key& x_pk) {
     oxenc::bt_dict_producer addr;
     // 'l' + 3 '32:...' values +  + 32:...
-    constexpr size_t MAX_RECORD_LENGTH = 2       // de around the dict
-                                       + 3       // 1:K
-                                       + 6 * 4   // 2:.. for the 6 other, length-2 dict keys
-                                       + 3 * 35  // 32:... for the three pubkeys
-                                       + 18      // IP, at longest: 15:AAA.BBB.CCC.DDD
-                                       + 3 * 7;  // iXXXXXe port, times 3.
-    // 2 for the le around it, and then currently send exactly one record inside the list:
-    addr.reserve(2 + 1 * MAX_RECORD_LENGTH);
+    constexpr size_t MAX_RECORD_LENGTH = 2        // de around the dict
+                                       + 3 * 2    // 1:K + 1:v
+                                       + 8 * 4    // 2:.. for the 8 other, length-2 dict keys
+                                       + 3 * 35   // 32:... for the three pubkeys
+                                       + 18       // IP, at longest: 15:AAA.BBB.CCC.DDD
+                                       + 3 * 7    // iXXXXXe port, times 3.
+                                       + 3 * 14;  // 3 versions such as `liAAeiBBeiCCee`
+    addr.reserve(MAX_RECORD_LENGTH);
+
     // - K -- the snode's primary key (32 bytes).
     // - Ke -- the server's Ed pubkey, but only if different from K; otherwise this key is omitted.
     // - Kx -- the server's X pubkey, derived from the Ed pubkey.  32 bytes.
@@ -456,14 +444,20 @@ void omq_rpc::send_snode_addr_notifications(
     // - qn -- the service node oxend OMQ port (AKA "quorumnet" port), integer.
     // - sh -- the storage server HTTPS port, integer.
     // - sq -- the storage server QUIC (UDP) and OMQ (TCP) port, integer.
-    addr.append("K", tools::view_guts(snode_pk));
-    if (tools::view_guts(snode_pk) != tools::view_guts(ed_pk))
-        addr.append("Ke", tools::view_guts(ed_pk));
+    // - v -- oxend version triplet
+    // - vl -- lokinet version triplet
+    // - vs -- storage server version triplet
+    addr.append("K", tools::view_guts(proof.pubkey));
+    if (tools::view_guts(proof.pubkey) != tools::view_guts(proof.pubkey_ed25519))
+        addr.append("Ke", tools::view_guts(proof.pubkey_ed25519));
     addr.append("Kx", tools::view_guts(x_pk));
-    addr.append("ip", public_ip);
-    addr.append("qn", qnet_port);
-    addr.append("sh", storage_https_port);
-    addr.append("sq", storage_quic_port);
+    addr.append("ip", epee::string_tools::get_ip_string_from_int32(proof.public_ip));
+    addr.append("qn", proof.qnet_port);
+    addr.append("sh", proof.storage_https_port);
+    addr.append("sq", proof.storage_omq_port);
+    addr.append_list("v", proof.version);
+    addr.append_list("vl", proof.lokinet_version);
+    addr.append_list("vs", proof.storage_server_version);
     send_notifies(
             subs_mutex_,
             snode_addr_subs_,
