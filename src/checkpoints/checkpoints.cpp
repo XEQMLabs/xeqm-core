@@ -65,6 +65,16 @@ bool checkpoint_t::check(crypto::hash const& hash) const {
 
 height_to_hash const HARDCODED_MAINNET_CHECKPOINTS[] = {
         {0, "aa042aefba685a47ae03b353196d090ef8994f60a880dd2b454b19672bb71af4"},
+        {1, "647997953a5ea9b5ab329c2291d4cbb08eed587c287e451eeeb2c79bab9b940f"},
+        {10, "4a7cd8b9bff380d48d6f3533a5e0509f8589cc77d18218b3f7218846e77738fc"},
+        {100, "01b8d33a50713ff837f8ad7146021b8e3060e0316b5e4afc407e46cdb50b6760"},
+        {1000, "5e3b0a1f931885bc0ab1d6ecdc625816576feae29e2f9ac94c5ccdbedb1465ac"},
+        {86535, "52b7c5a60b97bf1efbf0d63a0aa1a313e8f0abe4627eb354b0c5a73cb1f4391e"},
+        {97407, "504af73abbaba85a14ddc16634658bf4dcc241dc288b1eaad09e216836b71023"},
+        {98552, "2058d5c675bd91284f4996435593499c9ab84a5a0f569f57a86cde2e815e57da"},
+        {144650, "a1ab207afc790675070ecd7aac874eb0691eb6349ea37c44f8f58697a5d6cbc4"},
+        {266284, "c42801a37a41e3e9f934a266063483646072a94bfc7269ace178e93c91414b1f"},
+        {301187, "e23e4cf3a2fe3e9f0ffced5cc76426e5bdffd3aad822268f4ad63d82cb958559"},
 };
 
 crypto::hash get_newest_hardcoded_checkpoint(cryptonote::network_type nettype, uint64_t* height) {
@@ -308,6 +318,15 @@ bool checkpoints::init(network_type nettype, BlockchainDB* db) {
     if (nettype == network_type::MAINNET) {
         for (size_t i = 0; i < oxen::array_count(HARDCODED_MAINNET_CHECKPOINTS); ++i) {
             height_to_hash const& checkpoint = HARDCODED_MAINNET_CHECKPOINTS[i];
+            
+            // Skip if checkpoint already exists
+            checkpoint_t existing_checkpoint;
+            if (get_checkpoint(checkpoint.height, existing_checkpoint)) {
+                log::info(logcat, "Checkpoint at height {} already exists, skipping", checkpoint.height);
+                continue;
+            }
+            
+            // Add the checkpoint
             bool added = add_checkpoint(checkpoint.height, checkpoint.hash);
             CHECK_AND_ASSERT(added, false);
         }
