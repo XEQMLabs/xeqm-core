@@ -62,6 +62,8 @@ class daemon {
     void stop();
 
   private:
+    void cleanup_socket_files();
+    
     boost::program_options::variables_map vm;
 
     /// 💩

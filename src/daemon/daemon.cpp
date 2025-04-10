@@ -337,6 +337,9 @@ bool daemon::run(bool interactive) {
     if (!core)
         throw oxen::traced<std::runtime_error>{"Can't run stopped daemon"};
 
+    // Clean up any stale socket files before starting
+    cleanup_socket_files();
+
     std::atomic<bool> stop_sig(false), shutdown(false);
     std::thread stop_thread{[&stop_sig, &shutdown, this] {
         while (!stop_sig)
@@ -350,6 +353,8 @@ bool daemon::run(bool interactive) {
     OXEN_DEFER {
         stop_sig = true;
         stop_thread.join();
+        // Ensure socket files are cleaned up even if the daemon crashes
+        cleanup_socket_files();
     };
 
     tools::signal_handler::install([&stop_sig, &shutdown](int) {
@@ -447,10 +452,56 @@ bool daemon::run(bool interactive) {
 }
 
 void daemon::stop() {
-    if (!core)
-        throw oxen::traced<std::logic_error>{"Can't send stop signal to a stopped daemon"};
+    log::info(logcat, fg(fmt::terminal_color::blue), "Stopping node...");
 
-    p2p->send_stop_signal();  // Make p2p stop so that `run()` above continues with tear down
+    if (http_rpc_admin) {
+        log::info(logcat, "Stopping admin HTTP RPC server...");
+        http_rpc_admin->shutdown();
+    }
+    if (http_rpc_public) {
+        log::info(logcat, "Stopping public HTTP RPC server...");
+        http_rpc_public->shutdown();
+    }
+
+    if (p2p) {
+        log::info(logcat, "Stopping p2p...");
+        p2p->send_stop_signal();  // Make p2p stop so that `run()` above continues with tear down
+    }
+
+    // Clean up socket files after stopping services
+    cleanup_socket_files();
+}
+
+void daemon::cleanup_socket_files() {
+    try {
+        // Get the data directory path
+        std::string data_dir = command_line::get_arg(vm, cryptonote::arg_data_dir);
+        if (data_dir.empty()) {
+            data_dir = tools::get_default_data_dir();
+        }
+        
+        // If testnet is enabled, append testnet to the path
+        if (command_line::get_arg(vm, command_line::arg_testnet)) {
+            data_dir = (std::filesystem::path(data_dir) / "testnet").string();
+        }
+        
+        // Paths to socket files
+        std::string equilibria_sock = (std::filesystem::path(data_dir) / "equilibria.sock").string();
+        std::string lokid_sock = (std::filesystem::path(data_dir) / "lokid.sock").string();
+        
+        // Remove socket files if they exist
+        if (std::filesystem::exists(equilibria_sock)) {
+            log::info(logcat, "Removing stale socket file: {}", equilibria_sock);
+            std::filesystem::remove(equilibria_sock);
+        }
+        
+        if (std::filesystem::exists(lokid_sock)) {
+            log::info(logcat, "Removing stale socket file: {}", lokid_sock);
+            std::filesystem::remove(lokid_sock);
+        }
+    } catch (const std::exception& e) {
+        log::warning(logcat, "Failed to clean up socket files: {}", e.what());
+    }
 }
 
 }  // namespace daemonize

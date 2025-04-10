@@ -1,4 +1,3 @@
-
 #include "omq_server.h"
 
 #include <common/exception.h>
@@ -175,7 +174,7 @@ omq_rpc::omq_rpc(
     }
     for (const auto& addr : locals) {
         check_omq_listen_addr(addr);
-        log::info(globallogcat, "OMQ listening on {} (unauthenticated local admin)", addr);
+        log::info(globallogcat, "XEQMQ listening on {} (unauthenticated local admin)", addr);
         omq.listen_plain(addr, [&core](std::string_view ip, std::string_view pk, bool /*sn*/) {
             return core.omq_allow(ip, pk, AuthLevel::admin);
         });
