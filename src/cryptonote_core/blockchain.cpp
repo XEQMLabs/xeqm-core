@@ -46,7 +46,6 @@
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
-#include "common/boost_serialization_helper.h"
 #include "common/exception.h"
 #include "common/guts.h"
 #include "common/lock.h"
@@ -60,16 +59,10 @@
 #include "common/util.h"
 #include "common/varint.h"
 #include "crypto/crypto.h"
-#include "crypto/eth.h"
-#include "crypto/hash.h"
-#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
-#include "cryptonote_basic/cryptonote_boost_serialization.h"
 #include "cryptonote_basic/hardfork.h"
-#include "cryptonote_basic/miner.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
-#include "cryptonote_core/cryptonote_tx_utils.h"
 #include "epee/int-util.h"
 #include "epee/warnings.h"
 #include "ethereum_transactions.h"
@@ -766,7 +759,6 @@ bool Blockchain::init(
         sqlite3* ons_db,
         cryptonote::BlockchainSQLite* sqlite_db,
         eth::L2Tracker* l2_tracker,
-        bool offline,
         const cryptonote::test_options* test_options,
         difficulty_type fixed_difficulty,
         const GetCheckpointsCallback& get_checkpoints /* = nullptr*/,
@@ -807,7 +799,6 @@ bool Blockchain::init(
 
     m_l2_tracker = l2_tracker;
 
-    m_offline = offline;
     m_fixed_difficulty = fixed_difficulty;
 
     if (test_options)  // Fakechain mode
@@ -4388,15 +4379,17 @@ bool Blockchain::check_tx_inputs(
                     }
                 }
 
-                uint64_t unlock_height = 0;
-                if (service_node_list.is_key_image_locked(in_to_key.k_image, &unlock_height)) {
-                    log::error(
-                            log::Cat("verify"),
-                            "Key image: {} is locked in a stake until height: {}",
-                            in_to_key.k_image,
-                            unlock_height);
-                    tvc.m_key_image_locked_by_snode = true;
-                    return false;
+                if (hf_version < hf::hf21_eth) {
+                    uint64_t unlock_height = 0;
+                    if (service_node_list.is_key_image_locked(in_to_key.k_image, &unlock_height)) {
+                        log::error(
+                                log::Cat("verify"),
+                                "Key image: {} is locked in a stake until height: {}",
+                                in_to_key.k_image,
+                                unlock_height);
+                        tvc.m_key_image_locked_by_snode = true;
+                        return false;
+                    }
                 }
             }
         }
@@ -4690,14 +4683,16 @@ bool Blockchain::check_tx_inputs(
 
             service_nodes::service_node_info::contribution_t contribution = {};
             uint64_t unlock_height = 0;
-            if (!service_node_list.is_key_image_locked(
-                        unlock.key_image, &unlock_height, &contribution)) {
-                log::error(
-                        log::Cat("verify"),
-                        "Requested key image: {} to unlock is not locked",
-                        unlock.key_image);
-                tvc.m_invalid_input = true;
-                return false;
+            if (hf_version < hf::hf21_eth) {
+                if (!service_node_list.is_key_image_locked(
+                            unlock.key_image, &unlock_height, &contribution)) {
+                    log::error(
+                            log::Cat("verify"),
+                            "Requested key image: {} to unlock is not locked",
+                            unlock.key_image);
+                    tvc.m_invalid_input = true;
+                    return false;
+                }
             }
 
             if (!crypto::check_signature(
@@ -5943,6 +5938,7 @@ bool Blockchain::add_new_block(
     crypto::hash id = get_block_hash(bl);
     auto lock = tools::unique_locks(tx_pool, *this);
     db_rtxn_guard rtxn_guard{*m_db};
+
     if (have_block(id)) {
         log::trace(logcat, "block with id = {} already exists", id);
         bvc.m_already_exists = true;
@@ -6072,7 +6068,7 @@ bool Blockchain::get_checkpoint(uint64_t height, checkpoint_t& checkpoint) const
 //------------------------------------------------------------------
 void Blockchain::block_longhash_worker(
         uint64_t height,
-        const epee::span<const block>& blocks,
+        const std::span<const block>& blocks,
         std::unordered_map<crypto::hash, crypto::hash>& map) const {
     for (const auto& block : blocks) {
         if (m_cancel)

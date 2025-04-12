@@ -204,6 +204,11 @@ class BlockchainSQLite : public db::Database {
     // batched_payments_paid database as height_paid.
     bool save_payments(uint64_t block_height, std::span<const batch_sn_payment> paid_amounts);
 
+    // Just before HF21, all pending oxen rewards for addresses not registered to transition
+    // will be paid out.  At HF21, all pending oxen rewards for addresses which *are*
+    // registered to transition will be converted to SENT.
+    void set_rewards_hf21(const std::unordered_map<eth::address, uint64_t>& rewards);
+
     uint64_t height;
 
   protected:

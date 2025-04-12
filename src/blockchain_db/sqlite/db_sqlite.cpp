@@ -33,6 +33,7 @@
 #include <cryptonote_config.h>
 #include <cryptonote_core/blockchain.h>
 #include <cryptonote_core/cryptonote_tx_utils.h>
+#include <cryptonote_core/sent_transition/sent_transition.h>
 #include <fmt/core.h>
 #include <sodium.h>
 #include <sqlite3.h>
@@ -608,18 +609,59 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
     const auto& conf = get_config(m_nettype);
 
-    auto accrued_amounts = prepared_results<std::string_view, int64_t>(
-            "SELECT address, amount FROM batched_payments_accrued WHERE payout_offset = ? AND "
-            "amount >= ? ORDER BY address ASC",
-            static_cast<int>(block_height % conf.BATCHING_INTERVAL),
-            static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+    std::vector<std::pair<std::string, int64_t>> accrued_pairs;
+    {
+        auto accrued_amounts = prepared_results<std::string_view, int64_t>(
+                "SELECT address, amount FROM batched_payments_accrued WHERE payout_offset = ? AND "
+                "amount >= ? ORDER BY address ASC",
+                static_cast<int>(block_height % conf.BATCHING_INTERVAL),
+                static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+
+        for (const auto& [address, amount] : accrued_amounts)
+            accrued_pairs.emplace_back(std::string{address}, amount);
+    }
+
+    // The block before HF21, addresses which have not registered an ETH address for the
+    // SENT transition will have their balances paid out, regardless of balance.
+    bool pre_hf21_final_payout = false;
+    auto hf21_begins = *cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth);
+    if (block_height == hf21_begins - 1) {
+        log::debug(
+                logcat,
+                "block before hf21, doing final payout to addresses not registered for conversion");
+        pre_hf21_final_payout = true;
+        auto all_accrued_amounts = prepared_results<std::string_view, int64_t>(
+                "SELECT address, amount FROM batched_payments_accrued ORDER BY address ASC");
+        accrued_pairs.clear();
+        for (auto [address, amount] : all_accrued_amounts)
+            accrued_pairs.emplace_back(std::string{address}, amount);
+    }
 
     std::vector<cryptonote::batch_sn_payment> payments;
 
-    for (auto [address, amount] : accrued_amounts) {
+    const auto& sent_addr_map =
+            *oxen::sent::get_transition_context(m_nettype, block_height).addresses;
+    for (const auto& pair : accrued_pairs) {
+        const auto& address = pair.first;
+        const auto& amount = pair.second;
+        const uint64_t truncated_db_amount =
+                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR;  // truncate to atomic OXEN
+
+        if (pre_hf21_final_payout) {
+            log::debug(logcat, "address {} has amount {}", address, amount);
+            if (sent_addr_map.contains(std::string{address}))  // Registered for transition
+                continue;
+
+            if (truncated_db_amount > 0) {
+                log::debug(logcat, "pre_hf21_final_payout, paying out {}", address);
+            } else {
+                log::debug(logcat, "pre_hf21_final_payout, skipping {} (truncated to 0)", address);
+                continue;  // Insufficient OXEN to payout
+            }
+        }
+
         auto& p = payments.emplace_back();
-        p.amount = reward_money::db_amount(
-                amount / BATCH_REWARD_FACTOR * BATCH_REWARD_FACTOR); /* truncate to atomic OXEN */
+        p.amount = reward_money::db_amount(truncated_db_amount);
         [[maybe_unused]] bool addr_ok =
                 cryptonote::get_account_address_from_str(p.address_info, m_nettype, address);
         assert(addr_ok);
@@ -1101,5 +1143,30 @@ bool BlockchainSQLite::save_payments(
         select_sum->reset();
     }
     return true;
+}
+
+void BlockchainSQLite::set_rewards_hf21(const std::unordered_map<eth::address, uint64_t>& rewards) {
+    log::trace(
+            logcat, "BlockchainSQLite::{} removing OXEN rewards and adding SENT rewards", __func__);
+
+    // values in `rewards` represent converted OXEN -> SENT rewards,
+    // any unconverted are dropped (but were paid out last block anyway).
+    db.exec("DELETE FROM batched_payments_accrued");
+
+    auto insert_payment = prepared_st(
+            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, "
+            "?)");
+
+    for (auto& [addr, amt] : rewards) {
+        auto address_str = "0x{:x}"_format(addr);
+        auto amount = static_cast<int64_t>(amt * BATCH_REWARD_FACTOR);
+        log::trace(
+                logcat,
+                "Adding converted OXEN as SENT for contributor {} to database with amount {}",
+                address_str,
+                amt);
+        db::exec_query(insert_payment, address_str, 0, amount);
+        insert_payment->reset();
+    }
 }
 }  // namespace cryptonote

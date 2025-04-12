@@ -1013,7 +1013,7 @@ bool oxen_chain_generator::block_begin(oxen_blockchain_entry &entry, oxen_create
 
     // NOTE: Get Pulse Quorum necessary for this block
     std::vector<crypto::hash> entropy = service_nodes::get_pulse_entropy_for_next_block(db_, params.prev.block, blk.pulse.round);
-    pulse_quorum = service_nodes::generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, blk.major_version, active_snode_list, entropy, blk.pulse.round);
+    pulse_quorum = service_nodes::generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, blk.major_version, active_snode_list, entropy, blk.pulse.round, height);
     assert(pulse_quorum.validators.size() == service_nodes::PULSE_QUORUM_NUM_VALIDATORS);
     assert(pulse_quorum.workers.size() == 1);
 
@@ -1180,8 +1180,17 @@ bool oxen_chain_generator::block_begin(oxen_blockchain_entry &entry, oxen_create
 void oxen_chain_generator::block_end(oxen_blockchain_entry &entry, oxen_create_block_params const &params) const
 {
   entry.service_node_state = params.prev.service_node_state;
-  auto block_add = entry.service_node_state.update_from_block(db_, cryptonote::network_type::FAKECHAIN, state_history_, {} /*state_archive*/, {} /*alt_states*/, entry.block, entry.txs, nullptr, nullptr);
-
+  auto block_add = entry.service_node_state.update_from_block(
+          db_,
+          sqlite_db_.get(),
+          cryptonote::network_type::FAKECHAIN,
+          state_history_,
+          {} /*state_archive*/,
+          {} /*alt_states*/,
+          entry.block,
+          entry.txs,
+          nullptr,
+          nullptr);
   sqlite_db_->add_block(entry.block, entry.service_node_state, block_add);
 }
 

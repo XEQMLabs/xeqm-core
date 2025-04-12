@@ -61,6 +61,7 @@
 namespace cryptonote {
 class Blockchain;
 class BlockchainDB;
+class BlockchainSQLite;
 struct checkpoint_t;
 };  // namespace cryptonote
 
@@ -339,7 +340,8 @@ struct service_node_info  // registration information
     bool is_payable(uint64_t at_height, cryptonote::network_type nettype) const {
         auto& netconf = get_config(nettype);
         return is_active() &&
-               at_height >= active_since_height + netconf.SERVICE_NODE_PAYABLE_AFTER_BLOCKS;
+               at_height >= active_since_height + netconf.SERVICE_NODE_PAYABLE_AFTER_BLOCKS &&
+               staking_requirement > 0;
     }
 
     bool can_transition_to_state(
@@ -604,6 +606,15 @@ class service_node_list {
         auto it = proofs.find(pubkey);
         if (it != proofs.end())
             f(it->second);
+    }
+
+    /// FIXME: remove some time after HF21
+    /// core needs to update the service node keys (to which we have a pointer) at HF21,
+    /// this allows core to make sure we're not using them at that moment
+    template <typename Func>
+    void while_locked(Func f) const {
+        std::unique_lock lock{m_sn_mutex};
+        f();
     }
 
     /// Returns the primary SN pubkey associated with a x25519 pubkey.  Returns a null public key if
@@ -1087,8 +1098,13 @@ class service_node_list {
                 cryptonote::network_type nettype,
                 cryptonote::hf hf_version,
                 uint64_t block_height) const;
+
+        // oxen_chain_generator in core_tests does not have a Blockchain,
+        // but we can't include db_sqlite header here because it includes us,
+        // so this overload is necessary.
         block_add_result update_from_block(
-                cryptonote::BlockchainDB const& db,
+                const cryptonote::BlockchainDB& db,
+                cryptonote::BlockchainSQLite* sqlite_db_ptr,
                 cryptonote::network_type nettype,
                 state_set const& state_history,
                 state_set const& state_archive,
@@ -1096,7 +1112,7 @@ class service_node_list {
                 const cryptonote::block& block,
                 const std::vector<cryptonote::transaction>& txs,
                 const service_node_keys* my_keys,
-                const pulse_entropy_feeder* entropy_window);
+                const pulse_entropy_feeder* pulse_entropy_feed);
 
         // Returns true if there was a registration:
         bool process_registration_tx(
@@ -1300,6 +1316,13 @@ class service_node_list {
 
     cryptonote::Blockchain& blockchain;
 
+    struct hf21_transition_result {
+        service_nodes_infos_t sns_after;
+        std::pair<std::vector<std::string>, std::vector<uint64_t>> rewards_after;
+    };
+
+    hf21_transition_result hf21_dry_run(cryptonote::network_type nettype) const;
+
   private:
     bool m_rescanning = false; /* set to true when doing a rescan so we know not to reset proofs */
     block_add_result process_block(
@@ -1430,7 +1453,8 @@ service_nodes::quorum generate_pulse_quorum(
         cryptonote::hf hf_version,
         std::vector<pubkey_and_sninfo> const& active_snode_list,
         std::vector<crypto::hash> const& pulse_entropy,
-        uint8_t pulse_round);
+        uint8_t pulse_round,
+        uint64_t block_height);
 
 // The pulse entropy is generated for the next block after the top_block passed in.
 std::vector<crypto::hash> get_pulse_entropy_for_next_block(
