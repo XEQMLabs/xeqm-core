@@ -12,12 +12,12 @@
 #include "crypto/eth.h"
 #include "cryptonote_basic/verification_context.h"
 #include "cryptonote_core/cryptonote_core.h"
+#include "cryptonote_core/sent_transition/sent_transition.h"
 #include "cryptonote_core/service_node_list.h"
 #include "cryptonote_core/service_node_quorum_cop.h"
 #include "cryptonote_core/service_node_rules.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "logging/oxen_logger.h"
-#include "cryptonote_core/sent_transition/sent_transition.h"
 
 static auto logcat = oxen::log::Cat("mocknet");
 
