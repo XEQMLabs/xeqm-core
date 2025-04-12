@@ -27,18 +27,27 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-oxen_add_library(network_config mocknet.cpp)
-
-target_link_libraries(network_config
-  PUBLIC
-    cryptonote_core
-    common
-  PRIVATE
-    extra)
-
 option(WITH_MOCKNET "Enable mocknet support for forking the blockchain to use pre-defined quorums with known keys" OFF)
 if (WITH_MOCKNET)
+    if(BUILD_SHARED_LIBS)
+        # There's a circular dependency mess here that breaks with shared libs, so for now just
+        # fatal error if you try to do both at once:
+        message(FATAL_ERROR "WITH_MOCKNET=ON currently does not support a shared library build!")
+    endif()
+
+    oxen_add_library(network_config mocknet.cpp)
+
+    target_link_libraries(network_config
+      PUBLIC
+        cryptonote_core
+        common
+      PRIVATE
+        extra)
+
     target_compile_definitions(network_config PUBLIC WITH_MOCKNET)
     target_link_libraries(network_config PUBLIC cryptonote_protocol)
+else()
+    # Dummy target
+    add_library(network_config INTERFACE)
 endif()
 
