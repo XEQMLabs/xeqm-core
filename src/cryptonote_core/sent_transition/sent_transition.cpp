@@ -1,8 +1,9 @@
 #include "sent_transition.h"
 
 #include <fmt/chrono.h>
-#include <fmt/os.h>
 
+#include <fstream>
+#include <iterator>
 #include <ranges>
 
 #include "crypto/crypto.h"
@@ -86,6 +87,28 @@ struct node_transition {
     bool insufficient_sesh;
 };
 
+namespace {
+    // Drop-in replacement for fmt::output_file that supports a formatted .print(), because
+    // fmt::output_file fails to link if fmt is in header-only mode, and fmt closed the issue about
+    // "it doesn't work" by basically saying "it doesn't work" and closing the issue
+    // (https://github.com/fmtlib/fmt/issues/3708).
+    class FileFormatter {
+        std::ofstream os;
+        std::ostreambuf_iterator<char> out{os};
+
+      public:
+        explicit FileFormatter(std::string_view filename) {
+            os.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+            os.open(tools::utf8_path(filename), std::ios_base::out | std::ios_base::trunc);
+        }
+
+        template <typename... Args>
+        void print(fmt::format_string<Args...> format, Args&&... args) {
+            fmt::format_to(out, format, std::forward<Args>(args)...);
+        }
+    };
+}  // namespace
+
 static void dump_transition_outcome_csv(
         const transition_context& context,
         const service_nodes::service_node_list::state_t& snl_state,
@@ -107,12 +130,12 @@ static void dump_transition_outcome_csv(
 
     const size_t decimal_places = oxen::DISPLAY_DECIMAL_POINT;
     {
-        auto file = fmt::output_file(
+        FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
                         fmt::localtime(now),
                         cryptonote::print_money(context.staking_requirement, decimal_places, true),
                         cryptonote::print_money(context.conv_ratio.second),
-                        cryptonote::print_money(context.conv_ratio.first)));
+                        cryptonote::print_money(context.conv_ratio.first))};
         file.print("height,{}\n", snl_state.height);
         file.print("rewards_program_snapshot_date,2025-02-27\n");
         file.print(
@@ -300,13 +323,13 @@ static void dump_transition_outcome_csv(
                 transitioned_node_count / static_cast<float>(node_list.size()) * 100.f;
 
         // NOTE: Generate file
-        auto file = fmt::output_file(
+        FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
                         fmt::localtime(now),
                         cryptonote::print_money(context.staking_requirement, decimal_places, true),
                         cryptonote::print_money(context.conv_ratio.second),
                         cryptonote::print_money(context.conv_ratio.first),
-                        int(transition_pct)));
+                        int(transition_pct))};
 
         // NOTE: CSV metadata
         file.print("height,{}\n", snl_state.height);
