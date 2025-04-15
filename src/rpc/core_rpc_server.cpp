@@ -3225,7 +3225,7 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
     for (size_t i = 0; i < rewards_before_pair.first.size(); i++) {
         const auto& addr = rewards_before_pair.first[i];
         const auto& amt = rewards_before_pair.second[i];
-        rewards_before[addr] = amt.to_coin();
+        rewards_before[addr] = amt.amount.to_coin();
     }
     for (size_t i = 0; i < transition_result.rewards_after.first.size(); i++) {
         const auto& addr = transition_result.rewards_after.first[i];

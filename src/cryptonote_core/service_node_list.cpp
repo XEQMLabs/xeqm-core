@@ -6986,7 +6986,7 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
     auto old_rewards = blockchain.sqlite_db().get_all_accrued_rewards();
     for (size_t i = 0; i < old_rewards.first.size(); i++) {
         const auto& addr = old_rewards.first[i];
-        const cryptonote::reward_money& amt = old_rewards.second[i];
+        const cryptonote::reward_money& amt = old_rewards.second[i].amount;
         db::exec_query(insert_payment, addr, 0, static_cast<int64_t>(amt.to_db()));
         insert_payment->reset();
     }
@@ -6995,7 +6995,16 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
             oxen::sent::get_transition_context(nettype, state_copy.height);
     oxen::sent::transition(context, state_copy, db_copy, nettype);
 
-    return {state_copy.service_nodes_infos, db_copy.get_all_accrued_rewards()};
+    service_node_list::hf21_transition_result result = {};
+    result.sns_after = std::move(state_copy.service_nodes_infos);
+
+    auto accrued_rewards_after = db_copy.get_all_accrued_rewards();
+    result.rewards_after.first = std::move(accrued_rewards_after.first);
+    result.rewards_after.second.reserve(accrued_rewards_after.second.size());
+    for (auto it : accrued_rewards_after.second)
+        result.rewards_after.second.push_back(it.amount);
+
+    return result;
 }
 
 }  // namespace service_nodes

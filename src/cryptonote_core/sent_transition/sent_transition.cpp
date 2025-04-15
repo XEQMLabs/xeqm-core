@@ -449,7 +449,6 @@ void transition(
     // batching db.  (If there is SENT left over at the end we'll put it back in, but under the
     // converted SENT address).
 
-    cryptonote::block_payments converted_rewards;
     auto [accrued_addr, accrued_value] = sql.get_all_accrued_rewards();
     assert(accrued_addr.size() == accrued_value.size());
     for (size_t i = 0; i < accrued_addr.size(); i++) {
@@ -464,14 +463,13 @@ void transition(
             continue;
 
         const auto& eth_addr = it->second;
-        unallocated[eth_addr] += oxen_to_sent(val);
+        unallocated[eth_addr] += oxen_to_sent(val.amount);
         log::debug(
                 logcat,
                 "oxen -> sent ({} -> {}) accrued unpaid oxen rewards: {}",
                 addr,
                 eth_addr,
-                val);
-        converted_rewards[oxen_addr] = val;
+                cryptonote::print_money(val.amount.to_coin()));
     }
 
     for (const auto& [eth, amount] : unallocated) {
