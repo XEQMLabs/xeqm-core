@@ -3821,8 +3821,15 @@ bool BlockchainLMDB::block_rtxn_start(MDB_txn** mtxn, mdb_txn_cursors** mcur) co
 }
 
 void BlockchainLMDB::block_rtxn_stop() const {
-    mdb_txn_reset(m_tinfo->m_ti_rtxn);
-    memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
+    if (mdb_threadinfo* mdb_tls = m_tinfo.get(); mdb_tls) {
+        mdb_txn_reset(mdb_tls->m_ti_rtxn);
+        memset(&mdb_tls->m_ti_rflags, 0, sizeof(mdb_tls->m_ti_rflags));
+    } else {
+        // NOTE: If a read transaction is not present (i.e. m_tinfo is not initialised) then the
+        // current legacy code was built to reuse the already open write transaction (so we expect
+        // m_write_txn to be set).
+        assert(m_write_txn);
+    }
 }
 
 bool BlockchainLMDB::block_rtxn_start() const {
