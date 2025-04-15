@@ -3326,6 +3326,9 @@ service_nodes::quorum generate_pulse_quorum(
             pulse_round,
             block_height);
 
+    if (mocknet_has_forked(block_height)) {
+        mocknet_replace_quorum_with_mock_nodes(result, block_height);
+    }
     return result;
 }
 
@@ -6824,11 +6827,8 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
     auto old_rewards = blockchain.sqlite_db().get_all_accrued_rewards();
     for (size_t i = 0; i < old_rewards.first.size(); i++) {
         const auto& addr = old_rewards.first[i];
-        const auto& amt = old_rewards.second[i];
-
-        // amt * 1000 because get_all_accrued_rewards divides by 1000 before returning it
-        // this means we lose a bit of precision but it should be fine
-        db::exec_query(insert_payment, addr, 0, static_cast<int64_t>(amt * 1000));
+        const cryptonote::reward_money& amt = old_rewards.second[i];
+        db::exec_query(insert_payment, addr, 0, static_cast<int64_t>(amt.to_db()));
         insert_payment->reset();
     }
 

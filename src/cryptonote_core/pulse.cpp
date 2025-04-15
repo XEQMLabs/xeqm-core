@@ -238,7 +238,6 @@ namespace {
     }
 
     constexpr size_t BITSET_VIEW16_SIZE = sizeof(uint16_t) * 8;
-
     std::bitset<BITSET_VIEW16_SIZE> bitset_view16(uint16_t val) {
         std::bitset<BITSET_VIEW16_SIZE> result = val;
         return result;
