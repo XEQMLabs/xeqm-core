@@ -1000,10 +1000,9 @@ void BlockchainSQLite::add_rewards(
             eth::address fee_recipient = sn_info.contributors.size()
                                                ? sn_info.contributors[0].ethereum_beneficiary
                                                : sn_info.operator_ethereum_address;
-            payments[fee_recipient].amount += cryptonote::reward_money::db_amount(operator_fee);
+            payments[fee_recipient].amount += operator_fee;
         } else {
-            payments[sn_info.operator_address].amount +=
-                    cryptonote::reward_money::db_amount(operator_fee);
+            payments[sn_info.operator_address].amount += operator_fee;
         }
     }
 
@@ -1028,7 +1027,7 @@ void BlockchainSQLite::add_rewards(
             // be assigned to the ethereum address by default.
             auto& balance = use_eth_address ? payments[contributor.ethereum_beneficiary]
                                             : payments[contributor.address];
-            balance.amount += cryptonote::reward_money::db_amount(c_reward);
+            balance.amount += c_reward;
         }
     }
 }
@@ -1088,7 +1087,7 @@ void BlockchainSQLite::reward_handler(
 
             auto foundation_reward = cryptonote::reward_money::coin_amount(
                     cryptonote::governance_reward_formula(block.major_version));
-            payments[parsed_governance_addr.second.address] += foundation_reward;
+            payments[parsed_governance_addr.second.address].amount += foundation_reward;
         }
     }
 

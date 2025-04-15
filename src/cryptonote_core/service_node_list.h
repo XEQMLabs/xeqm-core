@@ -63,6 +63,7 @@ class Blockchain;
 class BlockchainDB;
 class BlockchainSQLite;
 struct checkpoint_t;
+struct wallet_info;
 };  // namespace cryptonote
 
 namespace service_nodes {
