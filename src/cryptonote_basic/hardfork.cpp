@@ -96,6 +96,13 @@ static constexpr std::array mainnet_hard_forks = {
         // Oxen 11.1 was publicly released but did not contain a HF: it was to bring various
         // improvements from the 11.x branch to stable nodes before the transition started.
 
+        // Oxen 11.2: SESH transition; this sets up the pieces needed for the full transition to
+        // follow in Oxen 11.3.
+        hard_fork{hf::hf20_eth_transition, 0, 1836239, 1745884800 /*Tue, 29 Apr 2025 00:00*/},
+
+        // Oxen 11.3: SESH TGE and completion of the Oxen network transition to SESH
+        // hard_fork{hf::hf21_eth, 0, 184????, 174??????? /*Date TBD*/},
+
         // NOTE: See contrib/hardfork-calc.py to aid with new HF block/date calculations!
 };
 
