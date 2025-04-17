@@ -3864,6 +3864,7 @@ block_add_result service_node_list::state_t::update_from_block(
 
     // On first block of hf21, do hf21 transition.
     // TODO: chaingen doesn't have a BlockchainSQLite so it can't test this correctly.
+    block_add_result result = {};
     auto hf21_height = hard_fork_begins(nettype, hf::hf21_eth);
     if (hf21_height && height == *hf21_height && sqlite_db_ptr) {
         auto print_sns = [&]() {
@@ -3909,7 +3910,7 @@ block_add_result service_node_list::state_t::update_from_block(
         auto& sqlite_db = *sqlite_db_ptr;
         oxen::sent::transition_context context =
                 oxen::sent::get_transition_context(nettype, height);
-        oxen::sent::transition(context, *this, sqlite_db, nettype);
+        oxen::sent::transition(context, *this, sqlite_db, nettype, result, block.tx_hashes.size());
         print_sns();
     }
 
@@ -3969,7 +3970,6 @@ block_add_result service_node_list::state_t::update_from_block(
     // Process any votes to pending eth state changes (this has to be done before we process
     // transactions, because that might add new unconfirmed txes and make the vote index no longer
     // match up).
-    block_add_result result = {};
     if (hf_version >= feature::ETH_BLS) {
         ZoneScopedN("Process pending ETH state changes");
         // Basic block validation (long before this) is responsible for ensuring this:
@@ -6991,9 +6991,10 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
         insert_payment->reset();
     }
 
+    block_add_result add_result = {};
     oxen::sent::transition_context context =
             oxen::sent::get_transition_context(nettype, state_copy.height);
-    oxen::sent::transition(context, state_copy, db_copy, nettype);
+    oxen::sent::transition(context, state_copy, db_copy, nettype, add_result, /*block_tx_count=*/0);
 
     service_node_list::hf21_transition_result result = {};
     result.sns_after = std::move(state_copy.service_nodes_infos);

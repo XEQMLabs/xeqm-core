@@ -405,7 +405,9 @@ void transition(
         const transition_context& context,
         service_nodes::service_node_list::state_t& snl_state,
         cryptonote::BlockchainSQLite& sql,
-        network_type net) {
+        network_type net,
+        service_nodes::block_add_result& add_result,
+        uint32_t block_tx_count) {
 
     auto address_info_from_str = [](network_type network, const std::string& addr) {
         cryptonote::address_parse_info api;
@@ -782,8 +784,18 @@ void transition(
     }
 
     // Any yet-unallocated SENT balance goes in the rewards db to be claimed
-    // All OXEN rewards are wiped first
-    sql.set_rewards_hf21(unallocated);
+    // All OXEN rewards are wiped first, any unconverted are dropped (but were paid out last block
+    // anyway).
+    {
+        sql.db.exec("DELETE FROM batched_payments_accrued");
+        cryptonote::block_payments rewards_payments;
+        for (auto it : unallocated) {
+            cryptonote::sql_payment payment = {};
+            payment.amount = cryptonote::reward_money::coin_amount(it.second);
+            rewards_payments[it.first] = payment;
+        }
+        sql.add_sn_rewards(cryptonote::hf::hf21_eth, rewards_payments, /*rewards_payment=*/ true);
+    }
 
     // First, clear the old key image blacklist so we don't leave unconverted stakes locked
     // any longer than necessary (and can re-use the blacklist for perma-locks)
@@ -809,9 +821,40 @@ void transition(
                 final_allocation_before_distrib,
                 unallocated);
 
+    // When we collect stake metadata (like the individual contributions of a user, we store them
+    // into the database and have a unique clause on the (block, tx, contribution index) which
+    // prevents duplicates from being submitted.
+    //
+    // These are typically extracted from an individual smart contract event witnessed on Arbitrum
+    // and they get inserted into a TX. For HF21 we initially bootstrap the amount of locked tokens
+    // by a user by their participation in the $OXEN->$SESH migration. These locked amounts don't
+    // have a transaction associated with them. The DB is written to directly, so to encode these
+    // stakes we set a synthetic TX index which is guaranteed to not conflict with any other TXs in
+    // the block itself.
+    uint32_t synthetic_tx_index = static_cast<uint32_t>(block_tx_count);
+
     snl_state.service_nodes_infos.clear();
-    for (auto& it : post_transition_sns)
+    for (auto& it : post_transition_sns) {
+        // Record the stake metadata to the `block_add_result`. The SQL DB will process these when
+        // it's update set is triggered
+        for (size_t contrib_index = 0; contrib_index < it.sn_info->contributors.size(); contrib_index++) {
+            auto contrib_it = it.sn_info->contributors[contrib_index];
+            assert(!it.zombie && "Contributors should only be populated on non-zombie nodes");
+            service_nodes::eth_stake stake = {
+                    .sn = crypto::ed25519_public_key{it.pkey},
+                    .addr = contrib_it.ethereum_address,
+                    .amount = cryptonote::reward_money::coin_amount(contrib_it.amount),
+                    .liquidation = cryptonote::reward_money{},
+                    .block_height = static_cast<uint32_t>(snl_state.height),
+                    .tx_index = synthetic_tx_index++,
+                    .contributor_index = static_cast<uint32_t>(contrib_index),
+            };
+            add_result.locked_stakes.push_back(stake);
+        }
+
+        // Update the SNL with the new SN details
         snl_state.service_nodes_infos[it.pkey] = std::move(it.sn_info);
+    }
 }
 
 }  // namespace oxen::sent
