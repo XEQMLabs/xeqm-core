@@ -665,7 +665,7 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
                 assert(amount == rederived_amount);
             }
 
-            cryptonote::reward_money rederived_lifetime_rewards =
+            [[maybe_unused]] cryptonote::reward_money rederived_lifetime_rewards =
                     result.amount -
                     (result.lifetime_unlocked_stakes - result.lifetime_liquidated_stakes);
             assert(rederived_lifetime_rewards == result.lifetime_rewards);
@@ -1540,30 +1540,5 @@ bool BlockchainSQLite::save_payments(
         exec_query(cleanup_st);
     }
     return true;
-}
-
-void BlockchainSQLite::set_rewards_hf21(const std::unordered_map<eth::address, uint64_t>& rewards) {
-    log::trace(
-            logcat, "BlockchainSQLite::{} removing OXEN rewards and adding SENT rewards", __func__);
-
-    // values in `rewards` represent converted OXEN -> SENT rewards,
-    // any unconverted are dropped (but were paid out last block anyway).
-    db.exec("DELETE FROM batched_payments_accrued");
-
-    auto insert_payment = prepared_st(
-            "INSERT INTO batched_payments_accrued (address, payout_offset, amount) VALUES (?, ?, "
-            "?)");
-
-    for (auto& [addr, amt] : rewards) {
-        auto address_str = "0x{:x}"_format(addr);
-        auto amount = static_cast<int64_t>(amt * BATCH_REWARD_FACTOR);
-        log::trace(
-                logcat,
-                "Adding converted OXEN as SENT for contributor {} to database with amount {}",
-                address_str,
-                amt);
-        db::exec_query(insert_payment, address_str, 0, amount);
-        insert_payment->reset();
-    }
 }
 }  // namespace cryptonote
