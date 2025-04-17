@@ -330,7 +330,7 @@ class iterable_db {
                         "{}",
                         v.mv_size,
                         tools::type_name<value_type>());
-                var::get<0>(element.second) = nullptr;
+                std::get<0>(element.second) = nullptr;
             }
         }
 
@@ -1059,7 +1059,7 @@ uint64_t BlockchainLMDB::add_output(
     else
         ok.amount_index = 0;
     ok.output_id = m_num_outputs;
-    ok.data.pubkey = var::get<txout_to_key>(tx_output.target).key;
+    ok.data.pubkey = std::get<txout_to_key>(tx_output.target).key;
     ok.data.unlock_time = unlock_time;
     ok.data.height = m_height;
     if (tx_output.amount == 0) {
@@ -6489,12 +6489,12 @@ BlockchainLMDB::get_all_service_node_proofs() const {
                  service_node_proof_serialized,
                  service_node_proof_serialized_old>(m_cursors->service_node_proofs)) {
         if (std::holds_alternative<service_node_proof_serialized*>(pair.second))
-            result.emplace(*pair.first, *var::get<service_node_proof_serialized*>(pair.second));
+            result.emplace(*pair.first, *std::get<service_node_proof_serialized*>(pair.second));
         else
             result.emplace(
                     *pair.first,
                     service_node_proof_serialized{
-                            *var::get<service_node_proof_serialized_old*>(pair.second)});
+                            *std::get<service_node_proof_serialized_old*>(pair.second)});
     }
 
     return result;

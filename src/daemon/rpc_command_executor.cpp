@@ -36,7 +36,6 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 #include <oxenc/base32z.h>
-#include <oxenc/variant.h>
 #include <oxenmq/connections.h>
 
 #include <chrono>
@@ -230,7 +229,7 @@ rpc_command_executor::rpc_command_executor(
         std::string http_url, const std::optional<tools::login>& login) :
         m_rpc{std::in_place_type<cryptonote::rpc::http_client>, http_url} {
     if (login)
-        var::get<cryptonote::rpc::http_client>(m_rpc).set_auth(
+        std::get<cryptonote::rpc::http_client>(m_rpc).set_auth(
                 login->username, std::string{login->password.password().view()});
 }
 
@@ -260,7 +259,7 @@ json rpc_command_executor::invoke(
         result = rpc_client->json_rpc(method, std::move(params).value_or(nullptr));
     } else {
         assert(m_omq);
-        auto conn = var::get<oxenmq::ConnectionID>(m_rpc);
+        auto conn = std::get<oxenmq::ConnectionID>(m_rpc);
         auto endpoint = (public_method ? "rpc." : "admin.") + std::string{method};
         std::promise<json> result_p;
         m_omq->request(

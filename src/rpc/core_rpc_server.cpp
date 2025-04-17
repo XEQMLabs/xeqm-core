@@ -819,7 +819,7 @@ namespace {
         extra_extractor visitor{
                 e, nettype, is_bt ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex};
         for (const auto& extra : extras)
-            var::visit(visitor, extra);
+            std::visit(visitor, extra);
     }
 }  // namespace
 

@@ -89,7 +89,7 @@ bool find_tx_extra_field_by_type(
         if (!std::holds_alternative<T>(f))
             continue;
         if (skip_fields == 0) {
-            field = var::get<T>(f);
+            field = std::get<T>(f);
             return true;
         }
         skip_fields--;
@@ -427,7 +427,7 @@ crypto::secret_key decrypt_key(crypto::secret_key key, const epee::wipeable_stri
             "wrong variant type: {}, expected {}",                                               \
             tools::type_name(tools::variant_type(variant_var)),                                  \
             tools::type_name<specific_type>());                                                  \
-    auto& variable_name = var::get<specific_type>(variant_var);
+    auto& variable_name = std::get<specific_type>(variant_var);
 
 // Provide an inline header implementation of this function because device_default needs it (but
 // it doesn't link to us, rather we link to it).

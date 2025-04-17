@@ -1179,7 +1179,7 @@ class wallet2 {
             for (size_t i = 0; i < m_transfers.size(); ++i) {
                 const transfer_details& td = m_transfers[i];
                 const cryptonote::tx_out& out = td.m_tx.vout[td.m_internal_output_index];
-                const cryptonote::txout_to_key& o = var::get<cryptonote::txout_to_key>(out.target);
+                const cryptonote::txout_to_key& o = std::get<cryptonote::txout_to_key>(out.target);
                 m_pub_keys.emplace(o.key, i);
             }
             return;
