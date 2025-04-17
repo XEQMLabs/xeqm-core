@@ -840,6 +840,8 @@ void transition(
         for (size_t contrib_index = 0; contrib_index < it.sn_info->contributors.size(); contrib_index++) {
             auto contrib_it = it.sn_info->contributors[contrib_index];
             assert(!it.zombie && "Contributors should only be populated on non-zombie nodes");
+            assert(contrib_it.ethereum_address);
+            assert(contrib_it.address == cryptonote::account_public_address{});
             service_nodes::eth_stake stake = {
                     .sn = crypto::ed25519_public_key{it.pkey},
                     .addr = contrib_it.ethereum_address,

@@ -316,6 +316,7 @@ static void verify_rewards_db_values(
         // NOTE: Enumerate SNL
         for (auto it : state.service_nodes_infos) {
             for (auto contrib_it : it.second->contributors) {
+                assert(contrib_it.ethereum_address);
                 auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
                 dest.total += contrib_it.amount;
                 dest.stakes.push_back({crypto::ed25519_public_key{it.first}, contrib_it.amount});
@@ -325,6 +326,7 @@ static void verify_rewards_db_values(
         // NOTE: Enumerate nodes in the recently removed list (considered locked until exited)
         for (auto it : state.recently_removed_nodes) {
             for (auto contrib_it : it.info.contributors) {
+                assert(contrib_it.ethereum_address);
                 auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
                 dest.total += contrib_it.amount;
                 dest.stakes.push_back(
@@ -348,6 +350,8 @@ static void verify_rewards_db_values(
             cryptonote::BlockchainSQLite::wallet_info wallet_info =
                     db.get_accrued_rewards(it.first);
             if (!wallet_info.found) {
+                if (mocknet_is_mock_ethereum_address(it.first))
+                    continue;
                 log::error(
                         logcat,
                         "Internal error: SN contributor ({}) was not recorded into the rewards DB",
@@ -3908,6 +3912,7 @@ block_add_result service_node_list::state_t::update_from_block(
                 (uint8_t)nettype);
         print_sns();
         auto& sqlite_db = *sqlite_db_ptr;
+
         oxen::sent::transition_context context =
                 oxen::sent::get_transition_context(nettype, height);
         oxen::sent::transition(context, *this, sqlite_db, nettype, result, block.tx_hashes.size());
