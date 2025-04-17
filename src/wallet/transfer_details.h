@@ -63,7 +63,7 @@ struct transfer_details {
     bool is_rct() const { return m_rct; }
     uint64_t amount() const { return m_amount; }
     const crypto::public_key& get_public_key() const {
-        return var::get<cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key;
+        return std::get<cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key;
     }
 };
 

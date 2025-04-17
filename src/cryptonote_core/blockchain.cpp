@@ -1821,7 +1821,7 @@ bool Blockchain::validate_block_rewards(
                     m_db->height(),
                     cryptonote::get_config(m_nettype).governance_wallet_address(version),
                     b.miner_tx->vout.size() - 1,
-                    var::get<txout_to_key>(b.miner_tx->vout.back().target).key,
+                    std::get<txout_to_key>(b.miner_tx->vout.back().target).key,
                     m_nettype)) {
             log::error(log::Cat("verify"), "Governance reward public key incorrect.");
             return false;
@@ -3884,7 +3884,7 @@ bool Blockchain::check_for_double_spend(
     };
 
     for (const txin_v& in : tx.vin) {
-        if (!var::visit(add_transaction_input_visitor, in)) {
+        if (!std::visit(add_transaction_input_visitor, in)) {
             log::error(logcat, "Double spend detected!");
             return false;
         }
@@ -3940,7 +3940,7 @@ void Blockchain::on_new_tx_from_block(const cryptonote::transaction& tx) {
         if (m_show_time_stats) {
             size_t ring_size = 0;
             if (!tx.vin.empty() && std::holds_alternative<txin_to_key>(tx.vin[0]))
-                ring_size = var::get<txin_to_key>(tx.vin[0]).key_offsets.size();
+                ring_size = std::get<txin_to_key>(tx.vin[0]).key_offsets.size();
             log::info(
                     logcat,
                     "HASH: - I/M/O: {}/{}/{} H: {} chcktx: {}",
@@ -3986,7 +3986,7 @@ bool Blockchain::check_tx_inputs(
     if (m_show_time_stats) {
         size_t ring_size = 0;
         if (!tx.vin.empty() && std::holds_alternative<txin_to_key>(tx.vin[0]))
-            ring_size = var::get<txin_to_key>(tx.vin[0]).key_offsets.size();
+            ring_size = std::get<txin_to_key>(tx.vin[0]).key_offsets.size();
         log::info(
                 logcat,
                 "HASH: {} I/M/O: {}/{}/{} H: {} ms: {} B: {} W: {}",
@@ -4184,7 +4184,7 @@ bool Blockchain::expand_transaction_2(
         rv.p.MGs.resize(1);
         rv.p.MGs[0].II.resize(tx.vin.size());
         for (size_t n = 0; n < tx.vin.size(); ++n)
-            rv.p.MGs[0].II[n] = rct::ki2rct(var::get<txin_to_key>(tx.vin[n]).k_image);
+            rv.p.MGs[0].II[n] = rct::ki2rct(std::get<txin_to_key>(tx.vin[n]).k_image);
     } else if (tools::equals_any(
                        rv.type,
                        rct::RCTType::Simple,
@@ -4193,13 +4193,13 @@ bool Blockchain::expand_transaction_2(
         CHECK_AND_ASSERT_MES(rv.p.MGs.size() == tx.vin.size(), false, "Bad MGs size");
         for (size_t n = 0; n < tx.vin.size(); ++n) {
             rv.p.MGs[n].II.resize(1);
-            rv.p.MGs[n].II[0] = rct::ki2rct(var::get<txin_to_key>(tx.vin[n]).k_image);
+            rv.p.MGs[n].II[0] = rct::ki2rct(std::get<txin_to_key>(tx.vin[n]).k_image);
         }
     } else if (rv.type == rct::RCTType::CLSAG) {
         if (!tx.pruned) {
             CHECK_AND_ASSERT_MES(rv.p.CLSAGs.size() == tx.vin.size(), false, "Bad CLSAGs size");
             for (size_t n = 0; n < tx.vin.size(); ++n) {
-                rv.p.CLSAGs[n].I = rct::ki2rct(var::get<txin_to_key>(tx.vin[n]).k_image);
+                rv.p.CLSAGs[n].I = rct::ki2rct(std::get<txin_to_key>(tx.vin[n]).k_image);
             }
         }
     } else {
@@ -4289,7 +4289,7 @@ bool Blockchain::check_tx_inputs(
                     std::holds_alternative<txin_to_key>(txin),
                     false,
                     "wrong type id in tx input at Blockchain::check_tx_inputs");
-            const txin_to_key& in_to_key = var::get<txin_to_key>(txin);
+            const txin_to_key& in_to_key = std::get<txin_to_key>(txin);
             {
                 // make sure tx output has key offset(s) (is signed to be used)
                 CHECK_AND_ASSERT_MES(
@@ -4478,10 +4478,10 @@ bool Blockchain::check_tx_inputs(
                     bool error;
                     if (rv.type == rct::RCTType::CLSAG)
                         error = memcmp(
-                                &var::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32);
+                                &std::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32);
                     else
                         error = rv.p.MGs[n].II.empty() ||
-                                memcmp(&var::get<txin_to_key>(tx.vin[n]).k_image,
+                                memcmp(&std::get<txin_to_key>(tx.vin[n]).k_image,
                                        &rv.p.MGs[n].II[0],
                                        32);
                     if (error) {
@@ -4550,7 +4550,7 @@ bool Blockchain::check_tx_inputs(
                     return false;
                 }
                 for (size_t n = 0; n < tx.vin.size(); ++n) {
-                    if (memcmp(&var::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.MGs[0].II[n], 32)) {
+                    if (memcmp(&std::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.MGs[0].II[n], 32)) {
                         log::error(
                                 log::Cat("verify"),
                                 "Failed to check ringct signatures: mismatched II/vin sizes");
@@ -6514,7 +6514,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
             // check all tx.vin(s)
             if (!tx.is_miner_tx()) {
                 for (const auto& txin : tx.vin) {
-                    const auto& in_to_key = var::get<txin_to_key>(txin);
+                    const auto& in_to_key = std::get<txin_to_key>(txin);
 
                     // check for duplicate
                     auto it = its->second.find(in_to_key.k_image);
@@ -6531,7 +6531,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
                 if (!tx.is_miner_tx())
                     for (const auto& txin : tx.vin)
                         for (auto off : relative_output_offsets_to_absolute(
-                                     var::get<txin_to_key>(txin).key_offsets))
+                                     std::get<txin_to_key>(txin).key_offsets))
                             offsets.push_back(off);
             }
         }
@@ -6575,7 +6575,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
 
             if (!tx.is_miner_tx()) {
                 for (const auto& txin : tx.vin) {
-                    const txin_to_key& in_to_key = var::get<txin_to_key>(txin);
+                    const txin_to_key& in_to_key = std::get<txin_to_key>(txin);
                     auto needed_offsets =
                             relative_output_offsets_to_absolute(in_to_key.key_offsets);
 

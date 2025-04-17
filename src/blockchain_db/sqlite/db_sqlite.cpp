@@ -955,7 +955,7 @@ bool BlockchainSQLite::add_block(
     std::vector<std::pair<crypto::public_key, uint64_t>> miner_tx_vouts;
     if (block.miner_tx)
         for (auto& vout : block.miner_tx->vout)
-            miner_tx_vouts.emplace_back(var::get<txout_to_key>(vout.target).key, vout.amount);
+            miner_tx_vouts.emplace_back(std::get<txout_to_key>(vout.target).key, vout.amount);
 
     try {
         std::optional<SQLite::Transaction> transaction{std::nullopt};

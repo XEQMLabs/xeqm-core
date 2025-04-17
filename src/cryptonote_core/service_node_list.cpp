@@ -1010,7 +1010,7 @@ bool tx_get_staking_components_and_amounts(
                 // Stealth address public key should match the public key referenced in the TX only
                 // if valid information is given.
                 const auto& out_to_key =
-                        var::get<cryptonote::txout_to_key>(tx.vout[output_index].target);
+                        std::get<cryptonote::txout_to_key>(tx.vout[output_index].target);
                 if (out_to_key.key != ephemeral_pub_key) {
                     log::info(
                             logcat,
@@ -4595,7 +4595,7 @@ static void verify_coinbase_tx_output(
                 derivation, output_index, receiver.m_spend_public_key, out_eph_public_key))
         throw oxen::traced<std::runtime_error>{"Failed derive public key"};
 
-    if (var::get<cryptonote::txout_to_key>(output.target).key != out_eph_public_key)
+    if (std::get<cryptonote::txout_to_key>(output.target).key != out_eph_public_key)
         throw oxen::traced<std::runtime_error>{
                 "Invalid service node reward at output: {}, output key, specifies wrong key"_format(
                         output_index)};
@@ -4922,7 +4922,7 @@ void service_node_list::validate_miner_tx(const cryptonote::miner_tx_info& info)
                     throw oxen::traced<std::runtime_error>{
                             "Failed to generate output one-time public key"};
 
-                const auto& out_to_key = var::get<cryptonote::txout_to_key>(vout.target);
+                const auto& out_to_key = std::get<cryptonote::txout_to_key>(vout.target);
                 if (tools::view_guts(out_to_key) != tools::view_guts(out_eph_public_key))
                     throw oxen::traced<std::runtime_error>{
                             "Output Ephermeral Public Key does not match (payment to wrong "
