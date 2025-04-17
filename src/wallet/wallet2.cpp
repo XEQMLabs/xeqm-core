@@ -1142,7 +1142,7 @@ namespace {
         std::string bd;
 
         // easy case if we have the whole tx
-        if (entry["as_hex"] || (entry["prunable"] && entry["pruned"])) {
+        if (entry.contains("as_hex") || (entry.contains("prunable") && entry.contains("pruned"))) {
             std::string hex_blob;
             if (entry["as_hex"])
                 hex_blob = entry["as_hex"].get<std::string>();
@@ -1164,7 +1164,7 @@ namespace {
             return true;
         }
         // case of a pruned tx with its prunable data hash
-        if (entry["pruned"] && entry["prunable_hash"]) {
+        if (entry.contains("pruned") && entry.contains("prunable_hash")) {
             crypto::hash ph;
             CHECK_AND_ASSERT_MES(
                     tools::try_load_from_hex_guts(
