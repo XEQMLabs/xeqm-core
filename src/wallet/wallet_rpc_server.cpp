@@ -230,11 +230,15 @@ void wallet_rpc_server::handle_json_rpc_request(HttpResponse& res, HttpRequest& 
         if (std::string str_val; ps.get_value("id", str_val, nullptr)) {
             epee_id = str_val;
             id = std::move(str_val);
-         } else if (int64_t i64_val; ps.get_value("id", i64_val, nullptr)) {
+        } else if (int64_t i64_val; ps.get_value("id", i64_val, nullptr)) {
             epee_id = i64_val;
             id = i64_val;
         } else {
-            return jsonrpc_error_response(res, -32700, "Parse error, missing a valid (string or integer) JSON RPC 'id'", {});
+            return jsonrpc_error_response(
+                    res,
+                    -32700,
+                    "Parse error, missing a valid (string or integer) JSON RPC 'id'",
+                    {});
         }
 
         std::string method;
