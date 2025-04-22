@@ -460,8 +460,7 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
     }
 }
 
-bool mocknet_is_mock_ethereum_address(const eth::address& addr)
-{
+bool mocknet_is_mock_ethereum_address(const eth::address& addr) {
     bool result = addr == MOCK_ETH_ADDRESS;
     return result;
 }

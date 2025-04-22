@@ -12,7 +12,6 @@ namespace eth {
 struct address;
 };
 
-
 namespace oxen::sent {
 struct transition_context;
 };
