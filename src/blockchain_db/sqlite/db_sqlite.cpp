@@ -613,11 +613,11 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
         eth::address eth_addr = {};
         bool is_eth = tools::try_load_from_hex_guts(address, eth_addr);
 
-        int64_t amount = std::get<0>(*metadata);
-        int64_t lifetime_locked_stakes = std::get<1>(*metadata);
-        int64_t lifetime_unlocked_stakes = std::get<2>(*metadata);
-        int64_t lifetime_liquidated_stakes = std::get<3>(*metadata);
-        int64_t lifetime_rewards = std::get<4>(*metadata);
+        auto [amount,
+              lifetime_locked_stakes,
+              lifetime_unlocked_stakes,
+              lifetime_liquidated_stakes,
+              lifetime_rewards] = *metadata;
         assert(amount >= 0);
 
         result.found = true;

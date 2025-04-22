@@ -3947,12 +3947,15 @@ void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
         for (auto& it : array) {
             nlohmann::json::iterator address = it.find("address");
             nlohmann::json::iterator amount = it.find("amount");
-            assert(address != it.end());
-            assert(amount != it.end());
-            assert(address->is_string());
-            assert(amount->is_number_unsigned());
-            addrs.emplace_back(address->get<std::string>());
-            amts.emplace_back(amount->get<uint64_t>());
+            if (address == it.end() || amount == it.end()) {
+                assert(address != it.end());
+                assert(amount != it.end());
+            } else {
+                assert(address->is_string());
+                assert(amount->is_number_unsigned());
+                addrs.emplace_back(address->get<std::string>());
+                amts.emplace_back(amount->get<uint64_t>());
+            }
         }
         rpc.response.erase("balances");
     } else {
