@@ -133,7 +133,10 @@ static void dump_transition_outcome_csv(
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
                         fmt::localtime(now),
-                        cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                        cryptonote::print_money(
+                                context.staking_requirement,
+                                cryptonote::strip_zeros::yes,
+                                decimal_places),
                         cryptonote::print_money(context.conv_ratio.second),
                         cryptonote::print_money(context.conv_ratio.first))};
         file.print("height,{}\n", snl_state.height);
@@ -326,7 +329,10 @@ static void dump_transition_outcome_csv(
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
                         fmt::localtime(now),
-                        cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                        cryptonote::print_money(
+                                context.staking_requirement,
+                                cryptonote::strip_zeros::yes,
+                                decimal_places),
                         cryptonote::print_money(context.conv_ratio.second),
                         cryptonote::print_money(context.conv_ratio.first),
                         int(transition_pct))};

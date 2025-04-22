@@ -652,16 +652,30 @@ static BlockchainSQLite::wallet_info wallet_metadata_tuple_to_wallet_info(
                         "Final calculated values were (claimable vs rederived claimable): {} != {}",
                         address,
                         height,
-                        cryptonote::print_money(amount, false, oxen::DISPLAY_DECIMAL_POINT + 3),
                         cryptonote::print_money(
-                                lifetime_unlocked_stakes, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                                amount,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3),
                         cryptonote::print_money(
-                                lifetime_rewards, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                                lifetime_unlocked_stakes,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3),
                         cryptonote::print_money(
-                                lifetime_liquidated_stakes, false, oxen::DISPLAY_DECIMAL_POINT + 3),
-                        cryptonote::print_money(amount, false, oxen::DISPLAY_DECIMAL_POINT + 3),
+                                lifetime_rewards,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3),
                         cryptonote::print_money(
-                                rederived_amount, false, oxen::DISPLAY_DECIMAL_POINT + 3));
+                                lifetime_liquidated_stakes,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                amount,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3),
+                        cryptonote::print_money(
+                                rederived_amount,
+                                cryptonote::strip_zeros::no,
+                                oxen::DISPLAY_DECIMAL_POINT + 3));
                 assert(amount == rederived_amount);
             }
 
