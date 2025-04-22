@@ -2296,7 +2296,8 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
 
     std::string exit_label = "";
     if (slash_amount)
-        exit_label = "liquidation ({})"_format(cryptonote::format_money(slash_amount, false));
+        exit_label = "liquidation ({})"_format(
+                cryptonote::format_money(slash_amount, cryptonote::strip_zeros::no));
     else
         exit_label = "exit";
 
