@@ -128,7 +128,8 @@ constexpr uint64_t burn_needed(cryptonote::hf hf_version, mapping_type type) {
 
     // The base amount for session/wallet/lokinet-1year:
     const uint64_t basic_fee =
-            (hf_version >= cryptonote::hf::hf18         ? 7 * oxen::COIN
+            (hf_version >= cryptonote::hf::hf21_eth     ? 100 * oxen::COIN
+             : hf_version >= cryptonote::hf::hf18       ? 7 * oxen::COIN
              : hf_version >= cryptonote::hf::hf16_pulse ? 15 * oxen::COIN
                                                         : 20 * oxen::COIN);
     switch (type) {

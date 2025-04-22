@@ -4683,16 +4683,14 @@ bool Blockchain::check_tx_inputs(
 
             service_nodes::service_node_info::contribution_t contribution = {};
             uint64_t unlock_height = 0;
-            if (hf_version < hf::hf21_eth) {
-                if (!service_node_list.is_key_image_locked(
-                            unlock.key_image, &unlock_height, &contribution)) {
-                    log::error(
-                            log::Cat("verify"),
-                            "Requested key image: {} to unlock is not locked",
-                            unlock.key_image);
-                    tvc.m_invalid_input = true;
-                    return false;
-                }
+            if (!service_node_list.is_key_image_locked(
+                        unlock.key_image, &unlock_height, &contribution)) {
+                log::error(
+                        log::Cat("verify"),
+                        "Requested key image: {} to unlock is not locked",
+                        unlock.key_image);
+                tvc.m_invalid_input = true;
+                return false;
             }
 
             if (!crypto::check_signature(
@@ -4719,7 +4717,6 @@ bool Blockchain::check_tx_inputs(
                     tx.type,
                     get_transaction_hash(tx));
             tvc.m_invalid_type = true;
-            ;
             return false;
         }
     }
