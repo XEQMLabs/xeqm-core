@@ -477,7 +477,7 @@ void transition(
                 "oxen -> sent ({} -> {}) accrued unpaid oxen rewards: {}",
                 addr,
                 eth_addr,
-                cryptonote::print_money(val.amount.to_coin()));
+                val.amount);
     }
 
     for (const auto& [eth, amount] : unallocated) {
@@ -795,12 +795,12 @@ void transition(
     {
         sql.db.exec("DELETE FROM batched_payments_accrued");
         cryptonote::block_payments rewards_payments;
-        for (auto it : unallocated) {
+        for (const auto& [eth_addr, amt] : unallocated) {
             cryptonote::sql_payment payment = {};
-            payment.amount = cryptonote::reward_money::coin_amount(it.second);
-            rewards_payments[it.first] = payment;
+            payment.amount = cryptonote::reward_money::coin_amount(amt);
+            rewards_payments[eth_addr] = payment;
         }
-        sql.add_sn_rewards(cryptonote::hf::hf21_eth, rewards_payments, /*rewards_payment=*/ true);
+        sql.add_sn_rewards(cryptonote::hf::hf21_eth, rewards_payments, /*rewards_payment=*/true);
     }
 
     // First, clear the old key image blacklist so we don't leave unconverted stakes locked
@@ -843,21 +843,20 @@ void transition(
     for (auto& it : post_transition_sns) {
         // Record the stake metadata to the `block_add_result`. The SQL DB will process these when
         // it's update set is triggered
-        for (size_t contrib_index = 0; contrib_index < it.sn_info->contributors.size(); contrib_index++) {
-            auto contrib_it = it.sn_info->contributors[contrib_index];
+        for (size_t contrib_index = 0; contrib_index < it.sn_info->contributors.size();
+             contrib_index++) {
+            const auto& contrib = it.sn_info->contributors[contrib_index];
             assert(!it.zombie && "Contributors should only be populated on non-zombie nodes");
-            assert(contrib_it.ethereum_address);
-            assert(contrib_it.address == cryptonote::account_public_address{});
-            service_nodes::eth_stake stake = {
-                    .sn = crypto::ed25519_public_key{it.pkey},
-                    .addr = contrib_it.ethereum_address,
-                    .amount = cryptonote::reward_money::coin_amount(contrib_it.amount),
-                    .liquidation = cryptonote::reward_money{},
-                    .block_height = static_cast<uint32_t>(snl_state.height),
-                    .tx_index = synthetic_tx_index++,
-                    .contributor_index = static_cast<uint32_t>(contrib_index),
-            };
-            add_result.locked_stakes.push_back(stake);
+            assert(contrib.ethereum_address);
+            assert(contrib.address == cryptonote::account_public_address{});
+            auto& s = add_result.locked_stakes.emplace_back();
+            s.sn = crypto::ed25519_public_key{it.pkey};
+            s.addr = contrib.ethereum_address;
+            s.amount = cryptonote::reward_money::coin_amount(contrib.amount);
+            s.liquidation = cryptonote::reward_money{};
+            s.block_height = static_cast<uint32_t>(snl_state.height);
+            s.tx_index = synthetic_tx_index++;
+            s.contributor_index = static_cast<uint32_t>(contrib_index);
         }
 
         // Update the SNL with the new SN details

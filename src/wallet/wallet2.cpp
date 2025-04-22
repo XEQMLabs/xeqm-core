@@ -15275,17 +15275,19 @@ void wallet2::refresh_batching_cache() {
             res["status"] != rpc::STATUS_OK, error::get_accrued_rewards_error, res["status"]);
 
     batching_records_cache.clear();
-    for (auto it : res["balances"]) {
-        nlohmann::json::iterator address = it.find("address");
-        nlohmann::json::iterator amount = it.find("amount");
-        assert(address != it.end());
-        assert(amount != it.end());
-        assert(address->is_string());
-        assert(amount->is_number_unsigned());
-
-        auto address_str = address->get_ref<const std::string&>();
-        assert(batching_records_cache.count(address_str) == 0);
-        batching_records_cache[address_str] = amount->get<uint64_t>();
+    for (const auto& it : res["balances"]) {
+        nlohmann::json::const_iterator address = it.find("address");
+        nlohmann::json::const_iterator amount = it.find("amount");
+        if (address == it.end() || amount == it.end()) {
+            assert(address != it.end());
+            assert(amount != it.end());
+        } else {
+            assert(address->is_string());
+            assert(amount->is_number_unsigned());
+            const auto& address_str = address->get_ref<const std::string&>();
+            assert(batching_records_cache.count(address_str) == 0);
+            batching_records_cache[address_str] = amount->get<uint64_t>();
+        }
     }
 }
 

@@ -318,23 +318,23 @@ static void verify_rewards_db_values(
         std::unordered_map<eth::address, stake_history> eth_to_locked_stakes;
 
         // NOTE: Enumerate SNL
-        for (auto it : state.service_nodes_infos) {
-            for (auto contrib_it : it.second->contributors) {
-                assert(contrib_it.ethereum_address);
-                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
-                dest.total += contrib_it.amount;
-                dest.stakes.push_back({crypto::ed25519_public_key{it.first}, contrib_it.amount});
+        for (const auto& [pk, sni] : state.service_nodes_infos) {
+            for (const auto& contrib : sni->contributors) {
+                assert(contrib.ethereum_address);
+                auto& dest = eth_to_locked_stakes[contrib.ethereum_address];
+                dest.total += contrib.amount;
+                dest.stakes.push_back({crypto::ed25519_public_key{pk}, contrib.amount});
             }
         }
 
         // NOTE: Enumerate nodes in the recently removed list (considered locked until exited)
-        for (auto it : state.recently_removed_nodes) {
-            for (auto contrib_it : it.info.contributors) {
-                assert(contrib_it.ethereum_address);
-                auto& dest = eth_to_locked_stakes[contrib_it.ethereum_address];
-                dest.total += contrib_it.amount;
+        for (const auto& it : state.recently_removed_nodes) {
+            for (const auto& contrib : it.info.contributors) {
+                assert(contrib.ethereum_address);
+                auto& dest = eth_to_locked_stakes[contrib.ethereum_address];
+                dest.total += contrib.amount;
                 dest.stakes.push_back(
-                        {crypto::ed25519_public_key{it.service_node_pubkey}, contrib_it.amount});
+                        {crypto::ed25519_public_key{it.service_node_pubkey}, contrib.amount});
             }
         }
 
@@ -344,45 +344,44 @@ static void verify_rewards_db_values(
         request.type = cryptonote::BlockchainSQLite::delayed_payments_type::all;
 
         cryptonote::block_payments locked_payments = db.get_delayed_payments(request);
-        for (auto it : locked_payments) {
-            auto& dest = eth_to_locked_stakes[*std::get_if<eth::address>(&it.first)];
-            dest.total += it.second.amount.to_coin();
+        for (const auto& [addr, payment] : locked_payments) {
+            auto& dest = eth_to_locked_stakes[*std::get_if<eth::address>(&addr)];
+            dest.total += payment.amount.to_coin();
         }
 
         // NOTE: Walk the locked stakes per ETH address and verify the numbers in the rewards DB
-        for (auto it : eth_to_locked_stakes) {
-            cryptonote::BlockchainSQLite::wallet_info wallet_info =
-                    db.get_accrued_rewards(it.first);
+        for (const auto& [addr, history] : eth_to_locked_stakes) {
+            cryptonote::BlockchainSQLite::wallet_info wallet_info = db.get_accrued_rewards(addr);
             if (!wallet_info.found) {
-                if (mocknet_is_mock_ethereum_address(it.first))
+                if (mocknet_is_mock_ethereum_address(addr))
                     continue;
                 log::error(
                         logcat,
                         "Internal error: SN contributor ({}) was not recorded into the rewards DB",
-                        it.first);
+                        addr);
                 assert(wallet_info.found);
             }
 
-            if (wallet_info.locked_stakes.to_coin() != it.second.total) {
+            if (wallet_info.locked_stakes.to_coin() != history.total) {
                 fmt::memory_buffer buffer;
                 fmt::format_to(
                         std::back_inserter(buffer),
                         "Internal error: SN contributor ({}) in the SNL has {} staked SESH but the "
                         "rewards DB claims it has {} staked SESH",
-                        it.first,
-                        cryptonote::print_money(it.second.total),
+                        addr,
+                        cryptonote::print_money(history.total),
                         cryptonote::print_money(wallet_info.locked_stakes.to_coin()));
 
-                for (auto stake_it : it.second.stakes) {
+                for (const auto& stake : history.stakes) {
                     fmt::format_to(
                             std::back_inserter(buffer),
                             "\n  SN {} => {} SESH",
-                            stake_it.pubkey,
-                            cryptonote::print_money(stake_it.stake));
+                            stake.pubkey,
+                            cryptonote::print_money(stake.stake));
                 }
 
                 log::error(logcat, "{}", fmt::to_string(buffer));
-                assert(wallet_info.locked_stakes.to_coin() == it.second.total);
+                assert(wallet_info.locked_stakes.to_coin() == history.total);
             }
         }
     }
@@ -2107,11 +2106,10 @@ service_node_list::state_t::confirm_result service_node_list::state_t::process_c
         insert_info(key, std::move(service_node_info));
         result.success = true;
         result.need_swarm_update = true;
-        return result;
     } catch (const std::exception& e) {
         log::error(logcat, "Failed to register node from ethereum transaction: {}", e.what());
-        return result;
     }
+    return result;
 }
 
 service_node_list::state_t::confirm_result service_node_list::state_t::process_confirmed_event(
