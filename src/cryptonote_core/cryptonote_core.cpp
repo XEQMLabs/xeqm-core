@@ -454,13 +454,16 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
         if (command_line::get_arg(vm, arg_l2_provider).empty() &&
             command_line::get_arg(vm, arg_l2_oxend).empty()) {
             auto latest_hf_known = get_latest_hard_fork(m_nettype);
-            if (latest_hf_known.version < hf::hf20_eth_transition) {
-                // If HF20 is not yet scheduled on this chain then only warn but don't error.
-                log::warning(globallogcat, "No L2 provider URL was given.");
-                log::warning(
+            if (latest_hf_known.version < hf::hf21_eth) {
+                // If HF21 is not yet scheduled on this chain then show an error in the logs because
+                // we won't send proofs, but don't make it fatal.  This is needed, in particular, to
+                // help with HF20 package migration where oxend might get restarted with
+                // service-node=1 configured by without the l2-provider= configuration added yet.
+                log::error(globallogcat, "No L2 providers given.");
+                log::error(
                         globallogcat,
-                        "At least one L2 provider URL (or L2 oxend proxy) will be REQUIRED "
-                        "starting with the HF20/Anchor release");
+                        "At least one L2 provider URL (or L2 oxend proxy) is REQUIRED. Uptime "
+                        "proofs will not be sent until this is corrected!");
             } else {
                 log::error(
                         logcat,
