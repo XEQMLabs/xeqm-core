@@ -403,7 +403,7 @@ std::pair<bool, nlohmann::json> NodeRPCProxy::ons_names_to_owners(
         return result;
 
     try {
-        auto res = m_http_client.json_rpc("get_output_histogram", request);
+        auto res = m_http_client.json_rpc("ons_names_to_owners", request);
         resolved = res;
     } catch (...) {
         return result;
