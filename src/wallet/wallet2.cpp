@@ -9822,80 +9822,74 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
                                 wallet.nettype(), *backup_owner, result.backup_owner, reason))
         return {};
 
-    {
-        nlohmann::json req_params{
-                {"entries",
-                 {{"name_hash", oxenc::to_base64(tools::view_guts(result.name_hash))},
-                  {"types", std::vector<uint16_t>{ons::db_mapping_type(type)}}}},
-        };
-        auto [success, response_] = wallet.ons_names_to_owners(req_params);
-        if (!response)
-            response = &response_;
-        else
-            *response = std::move(response_);
-        if (!success) {
+    nlohmann::json req_params{
+            {"name_hash", std::array{oxenc::to_base64(tools::view_guts(result.name_hash))}},
+            {"types", std::vector<uint16_t>{ons::db_mapping_type(type)}}};
+
+    auto [success, response_] = wallet.ons_names_to_owners(req_params);
+    if (!response)
+        response = &response_;
+    else
+        *response = std::move(response_);
+    if (!success) {
+        if (reason)
+            *reason =
+                    "Failed to query previous owner for ONS entry: communication with daemon "
+                    "failed";
+        return result;
+    }
+
+    if ((*response).size()) {
+        if (!tools::try_load_from_hex_guts(
+                    (*response)[0]["txid"].get<std::string_view>(), result.prev_txid)) {
+            if (reason)
+                *reason = "Failed to convert response txid=" +
+                          (*response)[0]["txid"].get<std::string>() +
+                          " from the daemon into a 32 byte hash, it must be a 64 char hex "
+                          "string";
+            return result;
+        }
+    }
+
+    if (txtype == ons::ons_tx_type::update && make_signature) {
+        if (response->empty()) {
             if (reason)
                 *reason =
-                        "Failed to query previous owner for ONS entry: communication with daemon "
-                        "failed";
+                        "Signature requested when preparing ONS TX but record to update does "
+                        "not exist";
             return result;
         }
 
-        if ((*response)["entries"].size()) {
-            if (!tools::try_load_from_hex_guts(
-                        (*response)["entries"][0]["txid"].get<std::string_view>(),
-                        result.prev_txid)) {
-                if (reason)
-                    *reason = "Failed to convert response txid=" +
-                              (*response)["entries"][0]["txid"].get<std::string>() +
-                              " from the daemon into a 32 byte hash, it must be a 64 char hex "
-                              "string";
+        cryptonote::address_parse_info curr_owner_parsed = {};
+        cryptonote::address_parse_info curr_backup_owner_parsed = {};
+        auto& rowner = response->front()["owner"];
+        std::string* rbackup_owner = response->front().value("backup_owner", nullptr);
+        ;
+        bool curr_owner = cryptonote::get_account_address_from_str(
+                curr_owner_parsed, wallet.nettype(), rowner.get<std::string_view>());
+        bool curr_backup_owner =
+                rbackup_owner &&
+                cryptonote::get_account_address_from_str(
+                        curr_backup_owner_parsed, wallet.nettype(), *rbackup_owner);
+        if (!try_generate_ons_signature(wallet, rowner, owner, backup_owner, result)) {
+            if (!rbackup_owner ||
+                !try_generate_ons_signature(wallet, *rbackup_owner, owner, backup_owner, result)) {
+                if (reason) {
+                    *reason =
+                            "Signature requested when preparing ONS TX, but this wallet is not "
+                            "the owner of the record owner=" +
+                            rowner.get<std::string>();
+                    if (rbackup_owner)
+                        *reason += ", backup_owner=" + *rbackup_owner;
+                }
                 return result;
             }
         }
-
-        if (txtype == ons::ons_tx_type::update && make_signature) {
-            if (response->empty()) {
-                if (reason)
-                    *reason =
-                            "Signature requested when preparing ONS TX but record to update does "
-                            "not exist";
-                return result;
-            }
-
-            cryptonote::address_parse_info curr_owner_parsed = {};
-            cryptonote::address_parse_info curr_backup_owner_parsed = {};
-            auto& rowner = (*response)["entries"].front()["owner"];
-            std::string* rbackup_owner =
-                    (*response)["entries"].front().value("backup_owner", nullptr);
-            ;
-            bool curr_owner = cryptonote::get_account_address_from_str(
-                    curr_owner_parsed, wallet.nettype(), rowner.get<std::string_view>());
-            bool curr_backup_owner =
-                    rbackup_owner &&
-                    cryptonote::get_account_address_from_str(
-                            curr_backup_owner_parsed, wallet.nettype(), *rbackup_owner);
-            if (!try_generate_ons_signature(wallet, rowner, owner, backup_owner, result)) {
-                if (!rbackup_owner ||
-                    !try_generate_ons_signature(
-                            wallet, *rbackup_owner, owner, backup_owner, result)) {
-                    if (reason) {
-                        *reason =
-                                "Signature requested when preparing ONS TX, but this wallet is not "
-                                "the owner of the record owner=" +
-                                rowner.get<std::string>();
-                        if (rbackup_owner)
-                            *reason += ", backup_owner=" + *rbackup_owner;
-                    }
-                    return result;
-                }
-            }
-        } else if (txtype == ons::ons_tx_type::renew) {
-            if ((*response)["entries"].empty()) {
-                if (reason)
-                    *reason = "Renewal requested but record to renew does not exist or has expired";
-                return result;
-            }
+    } else if (txtype == ons::ons_tx_type::renew) {
+        if (response->empty()) {
+            if (reason)
+                *reason = "Renewal requested but record to renew does not exist or has expired";
+            return result;
         }
     }
 

@@ -7140,11 +7140,13 @@ bool simple_wallet::ons_lookup(std::vector<std::string> args) {
         return true;
     }
 
-    nlohmann::json req_params{{"entries", {}}};
-    for (auto& name : args) {
-        name = tools::lowercase_ascii_string(std::move(name));
-        req_params["entries"].emplace_back(nlohmann::json{
-                {"name_hash", ons::name_to_base64_hash(name)}, {"types", requested_types}});
+    nlohmann::json req_params{
+            {"name_hash", nlohmann::json::array()},
+            {"type", std::move(requested_types)},
+    };
+    for (const auto& name : args) {
+        auto lower = tools::lowercase_ascii_string(name);
+        req_params["name_hash"].emplace_back(ons::name_to_base64_hash(lower));
     }
 
     auto [success, response] = m_wallet->ons_names_to_owners(req_params);
@@ -7153,30 +7155,27 @@ bool simple_wallet::ons_lookup(std::vector<std::string> args) {
         return false;
     }
 
-    int last_index = -1;
     for (auto const& mapping : response) {
         auto enc_hex = mapping["encrypted_value"].get<std::string>();
-        if (mapping["entry_index"].get<uint64_t>() >= args.size() || !oxenc::is_hex(enc_hex) ||
-            enc_hex.size() > 2 * ons::mapping_value::BUFFER_SIZE) {
-            fail_msg_writer() << "Received invalid ONS mapping data from oxend";
-            return false;
-        }
-
-        // Print any skipped (i.e. not registered) results:
-        for (size_t i = last_index + 1; i < mapping["entry_index"]; i++)
-            fail_msg_writer() << args[i] << " not found\n";
-        last_index = mapping["entry_index"];
-
-        const auto& name = args[mapping["entry_index"]];
         ons::mapping_value value{};
         value.len = enc_hex.size() / 2;
         value.encrypted = true;
         oxenc::from_hex(enc_hex.begin(), enc_hex.end(), value.buffer.begin());
 
-        if (!value.decrypt(name, mapping["type"])) {
-            fail_msg_writer() << "Failed to decrypt the mapping value=" << enc_hex;
-            return false;
+        // TODO: We lost the mapping of result to name e.g. entry_index so we don't know which name
+        // matches which, try them all for now. These endpoints need a larger re-evaluation (note,
+        // only 3 projects in the ecosystem use this endpoint, simplewallet, oxen-observer and GUI
+        // wallet)
+        std::string_view name;
+        for (const auto& check_name : args) {
+            if (value.decrypt(check_name, mapping["type"])) {
+                name = check_name;
+                break;
+            }
         }
+
+        if (name.empty())
+            continue;
 
         auto writer = message_writer();
         writer << "Name: " << name
@@ -7192,11 +7191,11 @@ bool simple_wallet::ons_lookup(std::vector<std::string> args) {
         writer << "\n";
 
         tools::wallet2::ons_detail detail = {
-                static_cast<ons::mapping_type>(mapping["type"]), name, mapping["name_hash"]};
+                static_cast<ons::mapping_type>(mapping["type"]),
+                std::string(name),
+                mapping["name_hash"]};
         m_wallet->set_ons_cache_record(detail);
     }
-    for (size_t i = last_index + 1; i < args.size(); i++)
-        fail_msg_writer() << args[i] << " not found\n";
 
     return true;
 }

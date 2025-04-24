@@ -3745,7 +3745,11 @@ void core_rpc_server::invoke(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_conte
         }
         types.push_back(*maybe_type);
     }
-    ons_names_to_owners.response["type"] = ons_names_to_owners.request.type;
+
+    ons_names_to_owners.response = nlohmann::json{
+        {"type", ons_names_to_owners.request.type},
+        {"result", nlohmann::json::array()},
+    };
 
     auto binary_format =
             ons_names_to_owners.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
@@ -3762,22 +3766,21 @@ void core_rpc_server::invoke(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_conte
                     ERROR_WRONG_PARAM,
                     "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
 
-        std::vector<ons::mapping_record> record = db.get_mappings(types, *name_hash, height);
-        for (size_t type_index = 0; type_index < ons_names_to_owners.request.type.size();
-             type_index++) {
+        std::vector<ons::mapping_record> records = db.get_mappings(types, *name_hash, height);
+        for (const auto& record : records) {
             auto& elem = ons_names_to_owners.response["result"].emplace_back();
-            elem["type"] = record[type_index].type;
-            elem["name_hash"] = record[type_index].name_hash;
-            elem["owner"] = record[type_index].owner.to_string(nettype());
-            if (record[type_index].backup_owner)
-                elem["backup_owner"] = record[type_index].backup_owner.to_string(nettype());
+            elem["type"] = record.type;
+            elem["name_hash"] = record.name_hash;
+            elem["owner"] = record.owner.to_string(nettype());
+            if (record.backup_owner)
+                elem["backup_owner"] = record.backup_owner.to_string(nettype());
 
             json_binary_proxy elem_hex{elem, binary_format};
-            elem_hex["encrypted_value"] = record[type_index].encrypted_value.to_view();
-            if (record[0].expiration_height)
-                elem["expiration_height"] = *(record[type_index].expiration_height);
-            elem["update_height"] = record[type_index].update_height;
-            elem_hex["txid"] = record[type_index].txid;
+            elem_hex["encrypted_value"] = record.encrypted_value.to_view();
+            if (record.expiration_height)
+                elem["expiration_height"] = *(record.expiration_height);
+            elem["update_height"] = record.update_height;
+            elem_hex["txid"] = record.txid;
         }
     }
 
