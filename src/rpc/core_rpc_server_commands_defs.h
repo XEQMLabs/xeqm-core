@@ -504,7 +504,10 @@ struct MINING_STATUS : LEGACY, NO_ARGS {
 ///
 /// - `status` -- General RPC status string. `"OK"` means everything looks good.
 /// - `height` -- Current length of longest chain known to daemon.
-/// - `l2_height` -- Current Arbitrum height that the network is synchronized to
+/// - `l2_height` -- Current Arbitrum height that the network is synchronized to, i.e. in the
+///   current top block.
+/// - `l2_tracker_height` -- The current L2 height known by this node's L2 tracker.  Omitted if this
+///   node does not have an L2 tracker.
 /// - `target_height` -- The height of the next block in the chain.
 /// - `immutable_height` -- The latest height in the blockchain that can not be reorganized (i.e.
 ///   is backed by at least 2 Service Node, or 1 hardcoded checkpoint, 0 if N/A).  Omitted if it

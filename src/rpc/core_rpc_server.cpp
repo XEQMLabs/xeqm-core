@@ -226,6 +226,8 @@ void core_rpc_server::invoke(GET_INFO& info, rpc_context context) {
 
     info.response["height"] = height;
     info.response["l2_height"] = top_block.l2_height;
+    if (auto* l2 = bs.maybe_l2_tracker())
+        info.response["l2_tracker_height"] = l2->get_latest_height();
     info.response_hex["top_block_hash"] = get_block_hash(top_block);
     info.response["target_height"] = m_core.get_target_blockchain_height();
 

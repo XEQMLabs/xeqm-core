@@ -602,6 +602,10 @@ bool rpc_command_executor::show_status() {
     auto msg = tools::success_msg_writer("Height: {}", height);
     if (height != net_height)
         msg.append("/{} ({:.1f}%)", net_height, get_sync_percentage(height, net_height));
+    msg.append(" (L2: {}", info["l2_height"].get<int64_t>());
+    if (auto tracker_l2 = info.value<int64_t>("l2_tracker_height", -1); tracker_l2 >= 0)
+        msg.append("/{}", tracker_l2);
+    msg.append(")");
 
     auto nettype = cryptonote::network_type_from_string(info.value("nettype", ""));
     if (nettype != cryptonote::network_type::MAINNET) {
@@ -638,7 +642,7 @@ bool rpc_command_executor::show_status() {
     if (restricted_response) {
         std::chrono::seconds uptime{now - info["start_time"].get<std::time_t>()};
         msg.append(
-                ", {}(out)+{}(in) connections, uptime {}",
+                ", {}(out)+{}(in) conns, up {}",
                 info["outgoing_connections_count"].get<int>(),
                 info["incoming_connections_count"].get<int>(),
                 tools::friendly_duration(uptime));
