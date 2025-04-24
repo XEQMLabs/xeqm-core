@@ -404,8 +404,13 @@ std::pair<bool, nlohmann::json> NodeRPCProxy::ons_names_to_owners(
 
     try {
         auto res = m_http_client.json_rpc("ons_names_to_owners", request);
-        resolved = res;
-    } catch (...) {
+        if (!res.contains("result") || !res.contains("status"))
+            throw std::runtime_error("Missing result or status"_format(res.dump()));
+        if (res["status"] != "OK")
+            throw std::runtime_error("Response status was not OK"_format(res.dump()));
+        resolved = res["result"];
+    } catch (const std::exception& e) {
+        log::error(logcat, "Failed to get ONS name->owners: {}", e.what());
         return result;
     }
     success = true;
