@@ -2738,8 +2738,6 @@ std::vector<mapping_record> name_system_db::get_mappings(
     assert(name_base64_hash.size() == 44 && name_base64_hash.back() == '=' &&
            oxenc::is_base64(name_base64_hash));
     std::vector<mapping_record> result;
-    if (types.empty())
-        return result;
 
     std::string sql_statement;
     std::vector<std::variant<uint16_t, uint64_t, std::string_view>> bind;
@@ -2752,13 +2750,13 @@ std::vector<mapping_record> name_system_db::get_mappings(
 
     // Generate string statement
     if (types.size()) {
-        sql_statement += " AND type IN (";
+        fmt::format_to(
+                std::back_inserter(sql_statement),
+                " AND type IN ({})",
+                fmt::join(std::string(types.size(), '?'), ", "));
 
-        for (size_t i = 0; i < types.size(); i++) {
-            sql_statement += i > 0 ? ", ?" : "?";
-            bind.emplace_back(db_mapping_type(types[i]));
-        }
-        sql_statement += ")";
+        for (auto t : types)
+            bind.emplace_back(db_mapping_type(t));
     }
 
     if (blockchain_height) {
