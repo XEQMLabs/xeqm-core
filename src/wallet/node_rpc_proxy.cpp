@@ -393,8 +393,7 @@ std::pair<bool, nlohmann::json> NodeRPCProxy::ons_owners_to_names(
     return result;
 }
 
-std::pair<bool, nlohmann::json> NodeRPCProxy::ons_names_to_owners(
-        nlohmann::json const& request) const {
+std::pair<bool, nlohmann::json> NodeRPCProxy::ons_info(nlohmann::json const& request) const {
     std::pair<bool, nlohmann::json> result;
     auto& [success, resolved] = result;
     success = false;
@@ -403,7 +402,7 @@ std::pair<bool, nlohmann::json> NodeRPCProxy::ons_names_to_owners(
         return result;
 
     try {
-        auto res = m_http_client.json_rpc("ons_names_to_owners", request);
+        auto res = m_http_client.json_rpc("ons_info", request);
         if (!res.contains("result") || !res.contains("status"))
             throw std::runtime_error("Missing result or status"_format(res.dump()));
         if (res["status"] != "OK")

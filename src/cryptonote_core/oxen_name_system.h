@@ -367,16 +367,15 @@ struct name_system_db {
             std::string str, uint64_t blockchain_height, cryptonote::address_parse_info& addr_info);
     // The get_mapping* methods can return any mapping, or only active mappings: for only active
     // mappings, pass in the blockchain height.  If you omit it (or explicitly pass std::nullopt)
-    // then you will get the latest mappingsvalues regardless of whether expired or not they are
-    // expired.
+    // then you will get the latest mappingsvalues regardless of whether or not they are expired.
     mapping_record get_mapping(
             mapping_type type,
             std::string_view name_base64_hash,
             std::optional<uint64_t> blockchain_height = std::nullopt);
     std::vector<mapping_record> get_mappings(
-            std::vector<mapping_type> const& types,
             std::string_view name_base64_hash,
-            std::optional<uint64_t> blockchain_height = std::nullopt);
+            std::optional<uint64_t> blockchain_height = std::nullopt,
+            const std::unordered_set<mapping_type>& only_types = {});
     std::vector<mapping_record> get_mappings_by_owner(
             generic_owner const& key, std::optional<uint64_t> blockchain_height = std::nullopt);
     std::vector<mapping_record> get_mappings_by_owners(

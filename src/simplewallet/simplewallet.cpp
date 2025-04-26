@@ -49,7 +49,6 @@
 #define __STDC_FORMAT_MACROS  // NOTE(oxen): Explicitly define the PRIu64 macro on Mingw
 #endif
 
-#include <ctype.h>
 #include <fmt/core.h>
 #include <fmt/std.h>
 #include <locale.h>
@@ -57,15 +56,14 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
+#include <cinttypes>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
 
-#include "common/base58.h"
 #include "common/command_line.h"
 #include "common/i18n.h"
 #include "common/scoped_message_writer.h"
@@ -74,15 +72,10 @@
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_core/oxen_name_system.h"
-#include "cryptonote_core/service_node_list.h"
-#include "cryptonote_core/service_node_voting.h"
-#include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "epee/console_handler.h"
-#include "epee/int-util.h"
 #include "epee/readline_suspend.h"
 #include "mnemonics/electrum-words.h"
 #include "multisig/multisig.h"
-#include "rapidjson/document.h"
 #include "ringct/rctSigs.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "simplewallet.h"
@@ -349,7 +342,7 @@ namespace {
             "ons_make_update_mapping_signature [type=session|lokinet] [owner=<value>] "
             "[backup_owner=<value>] [value=<encrypted_ons_value>] <name>");
     const char* USAGE_ONS_BY_OWNER("ons_by_owner [<owner> ...]");
-    const char* USAGE_ONS_LOOKUP("ons_lookup [type=session|wallet|lokinet] <name> [<name> ...]");
+    const char* USAGE_ONS_LOOKUP("ons_lookup <name>");
 
     std::string input_line(const std::string& prompt, bool yesno = false) {
         std::string buf;
@@ -3201,7 +3194,7 @@ Pending or Failed: "failed"|"pending",  "out", Lock, Checkpointed, Time, Amount*
             "ons_lookup",
             [this](const auto& x) { return ons_lookup(x); },
             tr(USAGE_ONS_LOOKUP),
-            tr("Query the ed25519 public keys that own the Oxen Name System names."));
+            tr("Query the given Oxen Name System name, including supplemental registration info."));
 
     m_cmd_binder.set_handler(
             "ons_make_update_mapping_signature",
@@ -7093,68 +7086,20 @@ bool simple_wallet::ons_lookup(std::vector<std::string> args) {
     if (!try_connect_to_daemon())
         return false;
 
-    if (args.empty()) {
+    if (args.size() != 1) {
         PRINT_USAGE(USAGE_ONS_LOOKUP);
         return true;
     }
 
-    std::string typestr = eat_named_argument(args, ONS_TYPE_PREFIX);
-
-    std::vector<uint16_t> requested_types;
-    // Parse ONS Types
-    if (!typestr.empty()) {
-        auto hf_version = m_wallet->get_hard_fork_version();
-        if (!hf_version) {
-            fail_msg_writer() << tools::wallet2::ERR_MSG_NETWORK_VERSION_QUERY_FAILED;
-            return false;
-        }
-
-        for (auto type : tools::split(typestr, ",")) {
-            ons::mapping_type mapping_type;
-            std::string reason;
-            if (!ons::validate_mapping_type(
-                        type, *hf_version, ons::ons_tx_type::lookup, &mapping_type, &reason)) {
-                fail_msg_writer() << reason;
-                return false;
-            }
-            requested_types.push_back(ons::db_mapping_type(mapping_type));
-        }
-    }
-
-    if (requested_types.empty()) {
-        auto hf_version = m_wallet->get_hard_fork_version();
-        if (!hf_version) {
-            fail_msg_writer() << tools::wallet2::ERR_MSG_NETWORK_VERSION_QUERY_FAILED;
-            return false;
-        }
-        auto all_types = ons::all_mapping_types(static_cast<hf>(*hf_version));
-        std::transform(
-                all_types.begin(),
-                all_types.end(),
-                std::back_inserter(requested_types),
-                ons::db_mapping_type);
-    }
-
-    if (args.empty()) {
-        PRINT_USAGE(USAGE_ONS_LOOKUP);
-        return true;
-    }
-
-    nlohmann::json req_params{
-            {"name_hash", nlohmann::json::array()},
-            {"type", std::move(requested_types)},
-    };
-    for (const auto& name : args) {
-        auto lower = tools::lowercase_ascii_string(name);
-        req_params["name_hash"].emplace_back(ons::name_to_base64_hash(lower));
-    }
-
-    auto [success, response] = m_wallet->ons_names_to_owners(req_params);
+    auto name = tools::lowercase_ascii_string(args[0]);
+    auto [success, response] = m_wallet->ons_info(
+            {{"name_hash", ons::name_to_base64_hash(name)}, {"include_expired", true}});
     if (!success) {
         fail_msg_writer() << "Connection to daemon failed when requesting ONS owners";
         return false;
     }
 
+    bool ret = true;
     for (auto const& mapping : response) {
         auto enc_hex = mapping["encrypted_value"].get<std::string>();
         ons::mapping_value value{};
@@ -7162,42 +7107,39 @@ bool simple_wallet::ons_lookup(std::vector<std::string> args) {
         value.encrypted = true;
         oxenc::from_hex(enc_hex.begin(), enc_hex.end(), value.buffer.begin());
 
-        // TODO: We lost the mapping of result to name e.g. entry_index so we don't know which name
-        // matches which, try them all for now. These endpoints need a larger re-evaluation (note,
-        // only 3 projects in the ecosystem use this endpoint, simplewallet, oxen-observer and GUI
-        // wallet)
-        std::string_view name;
-        for (const auto& check_name : args) {
-            if (value.decrypt(check_name, mapping["type"])) {
-                name = check_name;
-                break;
-            }
+        const auto maybe_type = ons::parse_ons_type(mapping["type"].get<uint16_t>());
+        if (!maybe_type)
+            fail_msg_writer() << "Daemon returned invalid mapping type=" << mapping["type"].dump();
+        const auto type = *maybe_type;
+
+        if (!value.decrypt(name, type)) {
+            fail_msg_writer() << "Failed to decrypt the mapping value=" << enc_hex;
+            ret = false;
+            continue;
         }
 
-        if (name.empty())
-            continue;
-
         auto writer = message_writer();
-        writer << "Name: " << name
-               << "\n    Type: " << static_cast<ons::mapping_type>(mapping["type"])
-               << "\n    Value: " << value.to_readable_value(m_wallet->nettype(), mapping["type"])
+        const auto expired_label = mapping.value("expired", false) ? " -- EXPIRED!"sv : ""sv;
+        writer << "\nName: " << name << expired_label << "\n    Type: " << type
+               << "\n    Value: " << value.to_readable_value(m_wallet->nettype(), type)
                << "\n    Owner: " << mapping["owner"].get<std::string_view>();
-        if (auto got = mapping.find("backup_owner"); got != mapping.end())
-            writer << "\n    Backup owner: " << mapping["backup_owner"].get<std::string_view>();
+        if (auto it = mapping.find("backup_owner"); it != mapping.end())
+            writer << "\n    Backup owner: " << it->get<std::string_view>();
         writer << "\n    Last updated height: " << mapping["update_height"].get<int64_t>();
-        if (auto got = mapping.find("expiration_height"); got != mapping.end())
-            writer << "\n    Expiration height: " << mapping["expiration_height"].get<int64_t>();
+        if (auto it = mapping.find("expiration_height"); it != mapping.end())
+            writer << "\n    Expiration height: " << it->get<int64_t>() << expired_label;
         writer << "\n    Encrypted value: " << enc_hex;
         writer << "\n";
 
-        tools::wallet2::ons_detail detail = {
-                static_cast<ons::mapping_type>(mapping["type"]),
-                std::string(name),
-                mapping["name_hash"]};
-        m_wallet->set_ons_cache_record(detail);
+        m_wallet->set_ons_cache_record({type, name, mapping["name_hash"].get<std::string>()});
     }
 
-    return true;
+    if (response.empty()) {
+        fail_msg_writer() << name << " not found\n";
+        ret = false;
+    }
+
+    return ret;
 }
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::ons_by_owner(const std::vector<std::string>& args) {
@@ -7244,31 +7186,31 @@ bool simple_wallet::ons_by_owner(const std::vector<std::string>& args) {
     for (auto const& entry : result["entries"]) {
         std::string_view name;
         std::string value;
-        ons::mapping_type ons_type = static_cast<ons::mapping_type>(entry["type"].get<uint16_t>());
-        if (auto got = cache.find(entry["name_hash"]); got != cache.end()) {
-            name = got->second.name;
+        auto ons_type = ons::parse_ons_type(entry["type"].get<uint16_t>());
+        if (auto it = cache.find(entry["name_hash"]); it != cache.end()) {
+            name = it->second.name;
             ons::mapping_value mv;
             auto enc_val_hex = entry["encrypted_value"].get<std::string_view>();
-            if (oxenc::is_hex(enc_val_hex) &&
+            if (oxenc::is_hex(enc_val_hex) && ons_type &&
                 ons::mapping_value::validate_encrypted(
-                        ons_type, oxenc::from_hex(enc_val_hex), &mv) &&
-                mv.decrypt(name, ons_type))
-                value = mv.to_readable_value(nettype, ons_type);
+                        *ons_type, oxenc::from_hex(enc_val_hex), &mv) &&
+                mv.decrypt(name, *ons_type))
+                value = mv.to_readable_value(nettype, *ons_type);
         }
 
         auto writer = message_writer();
-        writer << "Name (hashed): " << entry["name_hash"].get<std::string_view>();
+        writer << "\nName (hashed): " << entry["name_hash"].get<std::string_view>();
         if (!name.empty())
             writer << "\n    Name: " << name;
-        writer << "\n    Type: " << ons_type;
+        writer << "\n    Type: " << (ons_type ? ons::mapping_type_str(*ons_type) : "unknown");
         if (!value.empty())
             writer << "\n    Value: " << value;
         writer << "\n    Owner: " << entry["owner"].get<std::string_view>();
-        if (auto got = entry.find("backup_owner"); got != entry.end())
-            writer << "\n    Backup owner: " << entry["backup_owner"].get<std::string_view>();
+        if (auto it = entry.find("backup_owner"); it != entry.end() && !it->is_null())
+            writer << "\n    Backup owner: " << it->get<std::string_view>();
         writer << "\n    Last updated height: " << entry["update_height"].get<int64_t>();
-        if (auto got = entry.find("expiration_height"); got != entry.end())
-            writer << "\n    Expiration height: " << entry["expiration_height"].get<int64_t>();
+        if (auto it = entry.find("expiration_height"); it != entry.end() && !it->is_null())
+            writer << "\n    Expiration height: " << it->get<uint64_t>();
         writer << "\n    Encrypted value: " << entry["encrypted_value"].get<std::string_view>();
     }
     return true;

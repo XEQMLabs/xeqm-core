@@ -448,13 +448,14 @@ void parse_request(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_input in) {
             ons_owners_to_names.request.include_expired);
 }
 
-void parse_request(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_input in) {
+void parse_request(ONS_INFO& info, rpc_input in) {
+    std::vector<uint16_t> types;
     get_values(
             in,
+            "include_expired",
+            info.request.include_expired,
             "name_hash",
-            required{ons_names_to_owners.request.name_hash},
-            "type",
-            ons_names_to_owners.request.type);
+            required{info.request.name_hash});
 }
 
 void parse_request(GET_QUORUM_STATE& qs, rpc_input in) {

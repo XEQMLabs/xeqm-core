@@ -1080,8 +1080,8 @@ class wallet2 {
     auto ons_owners_to_names(nlohmann::json const& request) const {
         return m_node_rpc_proxy.ons_owners_to_names(request);
     }
-    auto ons_names_to_owners(nlohmann::json const& request) const {
-        return m_node_rpc_proxy.ons_names_to_owners(request);
+    auto ons_info(nlohmann::json const& request) const {
+        return m_node_rpc_proxy.ons_info(request);
     }
     auto resolve(nlohmann::json const& request) const {
         return m_node_rpc_proxy.ons_resolve(request);

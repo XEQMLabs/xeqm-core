@@ -3720,71 +3720,45 @@ void core_rpc_server::invoke(TEST_TRIGGER_UPTIME_PROOF& test_trigger_uptime_proo
     test_trigger_uptime_proof.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-void core_rpc_server::invoke(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_context context) {
+void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
+    auto binary_format = info.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
 
-    if (!context.admin) {
-        check_quantity_limit(
-                ons_names_to_owners.request.name_hash.size(),
-                ONS_NAMES_TO_OWNERS::MAX_REQUEST_ENTRIES);
-        check_quantity_limit(
-                ons_names_to_owners.request.type.size(),
-                ONS_NAMES_TO_OWNERS::MAX_TYPE_REQUEST_ENTRIES,
-                "types");
-    }
+    auto height = m_core.blockchain.get_current_blockchain_height();
+    std::optional<uint64_t> req_height;
+    if (!info.request.include_expired)
+        req_height = height;
 
-    std::optional<uint64_t> height = m_core.blockchain.get_current_blockchain_height();
-    std::vector<ons::mapping_type> types;
-    types.clear();
-    if (types.capacity() < ons_names_to_owners.request.type.size())
-        types.reserve(ons_names_to_owners.request.type.size());
-    for (const auto type_str : ons_names_to_owners.request.type) {
-        const auto maybe_type = ons::parse_ons_type(type_str);
-        if (!maybe_type.has_value()) {
-            ons_names_to_owners.response["status"] = "invalid type provided";
-            return;
+    auto& db = m_core.blockchain.name_system_db();
+
+    // This also takes 32 raw bytes, but that is undocumented (because it is painful to pass
+    // through json).
+    auto name_hash = ons::name_hash_input_to_base64(info.request.name_hash);
+    if (!name_hash)
+        throw rpc_error{
+                ERROR_WRONG_PARAM,
+                "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
+
+    auto result = json::array();
+    for (const auto& record : db.get_mappings(*name_hash, req_height)) {
+        auto& elem = result.emplace_back();
+        elem["type"] = record.type;
+        elem["name_hash"] = record.name_hash;
+        elem["owner"] = record.owner.to_string(nettype());
+        if (record.backup_owner)
+            elem["backup_owner"] = record.backup_owner.to_string(nettype());
+
+        json_binary_proxy elem_hex{elem, binary_format};
+        elem_hex["encrypted_value"] = record.encrypted_value.to_view();
+        if (record.expiration_height) {
+            elem["expiration_height"] = *record.expiration_height;
+            elem["expired"] = *record.expiration_height < height;
         }
-        types.push_back(*maybe_type);
+        elem["update_height"] = record.update_height;
+        elem_hex["txid"] = record.txid;
     }
 
-    ons_names_to_owners.response = nlohmann::json{
-        {"type", ons_names_to_owners.request.type},
-        {"result", nlohmann::json::array()},
-    };
-
-    auto binary_format =
-            ons_names_to_owners.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
-
-    ons::name_system_db& db = m_core.blockchain.name_system_db();
-    for (size_t request_index = 0; request_index < ons_names_to_owners.request.name_hash.size();
-         request_index++) {
-        const auto& request = ons_names_to_owners.request.name_hash[request_index];
-        // This also takes 32 raw bytes, but that is undocumented (because it is painful to pass
-        // through json).
-        auto name_hash = ons::name_hash_input_to_base64(request);
-        if (!name_hash)
-            throw rpc_error{
-                    ERROR_WRONG_PARAM,
-                    "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
-
-        std::vector<ons::mapping_record> records = db.get_mappings(types, *name_hash, height);
-        for (const auto& record : records) {
-            auto& elem = ons_names_to_owners.response["result"].emplace_back();
-            elem["type"] = record.type;
-            elem["name_hash"] = record.name_hash;
-            elem["owner"] = record.owner.to_string(nettype());
-            if (record.backup_owner)
-                elem["backup_owner"] = record.backup_owner.to_string(nettype());
-
-            json_binary_proxy elem_hex{elem, binary_format};
-            elem_hex["encrypted_value"] = record.encrypted_value.to_view();
-            if (record.expiration_height)
-                elem["expiration_height"] = *(record.expiration_height);
-            elem["update_height"] = record.update_height;
-            elem_hex["txid"] = record.txid;
-        }
-    }
-
-    ons_names_to_owners.response["status"] = STATUS_OK;
+    info.response["result"] = std::move(result);
+    info.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_context context) {

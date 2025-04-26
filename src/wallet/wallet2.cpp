@@ -9826,7 +9826,7 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
             {"name_hash", std::array{oxenc::to_base64(tools::view_guts(result.name_hash))}},
             {"types", std::vector<uint16_t>{ons::db_mapping_type(type)}}};
 
-    auto [success, response_] = wallet.ons_names_to_owners(req_params);
+    auto [success, response_] = wallet.ons_info(req_params);
     if (!response)
         response = &response_;
     else
