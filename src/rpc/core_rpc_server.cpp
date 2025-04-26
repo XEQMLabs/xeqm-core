@@ -3767,6 +3767,9 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
                 ons_owners_to_names.request.entries.size(),
                 ONS_OWNERS_TO_NAMES::MAX_REQUEST_ENTRIES);
 
+    auto binary_format =
+            ons_owners_to_names.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
+
     std::unordered_map<ons::generic_owner, size_t> owner_to_request_index;
     std::vector<ons::generic_owner> owners;
 
@@ -3792,9 +3795,8 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
     if (!ons_owners_to_names.request.include_expired)
         height = m_core.blockchain.get_current_blockchain_height();
 
-    std::vector<ONS_OWNERS_TO_NAMES::response_entry> entries;
-    std::vector<ons::mapping_record> records = db.get_mappings_by_owners(owners, height);
-    for (auto& record : records) {
+    auto entries = nlohmann::json::array();
+    for (auto& record : db.get_mappings_by_owners(owners, height)) {
         auto it = owner_to_request_index.end();
         if (record.owner)
             it = owner_to_request_index.find(record.owner);
@@ -3810,23 +3812,22 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
                             " could not be mapped back a index in the request 'entries' array"};
 
         auto& entry = entries.emplace_back();
-        entry.request_index = it->second;
-        entry.type = record.type;
-        entry.name_hash = std::move(record.name_hash);
+        entry["request_index"] = it->second;
+        entry["type"] = static_cast<uint16_t>(record.type);
+        entry["name_hash"] = std::move(record.name_hash);
         if (record.owner)
-            entry.owner = record.owner.to_string(nettype());
+            entry["owner"] = record.owner.to_string(nettype());
         if (record.backup_owner)
-            entry.backup_owner = record.backup_owner.to_string(nettype());
-        // FIXME: binary proxy
-        entry.encrypted_value = oxenc::to_hex(record.encrypted_value.to_view());
-        entry.update_height = record.update_height;
-        entry.expiration_height = record.expiration_height;
-        // FIXME: binary proxy
-        entry.txid = tools::hex_guts(record.txid);
+            entry["backup_owner"] = record.backup_owner.to_string(nettype());
+        json_binary_proxy entry_hex{entry, binary_format};
+        entry_hex["encrypted_value"] = record.encrypted_value.to_view();
+        entry["update_height"] = record.update_height;
+        if (record.expiration_height)
+            entry["expiration_height"] = *record.expiration_height;
+        entry_hex["txid"] = record.txid;
     }
 
-    // FIXME: this seems broken; how can this vector of some random struct magically become json?
-    ons_owners_to_names.response["entries"] = entries;
+    ons_owners_to_names.response["entries"] = std::move(entries);
     ons_owners_to_names.response["status"] = STATUS_OK;
 }
 
