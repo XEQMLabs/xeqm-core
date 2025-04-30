@@ -2884,6 +2884,9 @@ struct ONS_RESOLVE : PUBLIC {
 ///
 /// - `name_hash` -- A hashed name to look up.  See ons_resolve for details on how to properly
 ///   construct this hash.  The value can be provided as either hex or base64.
+/// - `type` -- Optional record type to look up, where 0 = session, 1 = wallet, 2 = lokinet.  If
+///   omitted (or null) then all matching name_hash entries, regardless of type, will be returned.
+///   When specified, the return will consist of 0 or 1 entries.
 /// - `include_expired` -- Optional bool; if provided and true then expired records will be
 ///   included, otherwise they will not be.
 ///
@@ -2909,6 +2912,7 @@ struct ONS_INFO : PUBLIC {
 
     struct request_parameters {
         std::string name_hash;
+        std::optional<uint16_t> type;
         bool include_expired = false;
     } request;
 };

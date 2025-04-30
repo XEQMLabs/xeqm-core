@@ -455,7 +455,9 @@ void parse_request(ONS_INFO& info, rpc_input in) {
             "include_expired",
             info.request.include_expired,
             "name_hash",
-            required{info.request.name_hash});
+            required{info.request.name_hash},
+            "type",
+            info.request.type);
 }
 
 void parse_request(GET_QUORUM_STATE& qs, rpc_input in) {
