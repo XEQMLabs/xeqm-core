@@ -2907,8 +2907,6 @@ struct ONS_RESOLVE : PUBLIC {
 struct ONS_INFO : PUBLIC {
     static constexpr auto names() { return NAMES("ons_info"); }
 
-    static constexpr size_t MAX_REQUEST_ENTRIES = 256;
-
     struct request_parameters {
         std::string name_hash;
         bool include_expired = false;
