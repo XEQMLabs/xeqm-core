@@ -88,9 +88,9 @@ node_server<t_payload_net_handler>::~node_server() {
     }
 }
 //-----------------------------------------------------------------------------------
-inline bool append_net_address(
+static bool append_net_address(
         std::vector<epee::net_utils::network_address>& seed_nodes,
-        std::string const& addr,
+        std::string_view addr,
         uint16_t default_port);
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
@@ -520,9 +520,9 @@ bool node_server<t_payload_net_handler>::handle_command_line(
     return true;
 }
 //-----------------------------------------------------------------------------------
-inline bool append_net_address(
+static bool append_net_address(
         std::vector<epee::net_utils::network_address>& seed_nodes,
-        std::string const& addr,
+        std::string_view addr,
         uint16_t default_port) {
     using namespace boost::asio;
 
@@ -1601,12 +1601,13 @@ bool node_server<t_payload_net_handler>::connect_to_seed() {
     if (!m_seed_nodes_initialized) {
         std::unique_lock lock{m_seed_nodes_mutex};
         if (!m_seed_nodes_initialized) {
-            for (const auto& full_addr : get_seed_nodes()) {
+            const auto& netconf = cryptonote::get_config(m_nettype);
+            for (const auto& full_addr : netconf.P2P_SEED_NODES) {
                 log::debug(logcat, "Seed node: {}", full_addr);
                 append_net_address(
                         m_seed_nodes,
                         full_addr,
-                        cryptonote::get_config(m_nettype).P2P_DEFAULT_PORT);
+                        netconf.P2P_DEFAULT_PORT);
             }
             log::debug(logcat, "Number of seed nodes: {}", m_seed_nodes.size());
             m_seed_nodes_initialized = true;
@@ -1640,13 +1641,14 @@ bool node_server<t_payload_net_handler>::connect_to_seed() {
                 {
                     shlock.unlock();
                     {
+                        const auto& netconf = cryptonote::get_config(m_nettype);
                         std::unique_lock lock{m_seed_nodes_mutex};
-                        for (const auto& peer : get_seed_nodes(m_nettype)) {
+                        for (const auto& peer : netconf.P2P_SEED_NODES) {
                             log::debug(logcat, "Fallback seed node: {}", peer);
                             append_net_address(
                                     m_seed_nodes,
                                     peer,
-                                    cryptonote::get_config(m_nettype).P2P_DEFAULT_PORT);
+                                    netconf.P2P_DEFAULT_PORT);
                         }
                     }
                     shlock.lock();
@@ -2606,8 +2608,8 @@ bool node_server<t_payload_net_handler>::parse_peers_and_add_to_container(
         Container& container) {
     std::vector<std::string> perrs = command_line::get_arg(vm, arg);
 
+    const uint16_t default_port = cryptonote::get_config(m_nettype).P2P_DEFAULT_PORT;
     for (const std::string& pr_str : perrs) {
-        const uint16_t default_port = cryptonote::get_config(m_nettype).P2P_DEFAULT_PORT;
         expect<epee::net_utils::network_address> adr =
                 net::get_network_address(pr_str, default_port);
         if (adr) {
