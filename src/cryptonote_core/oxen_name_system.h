@@ -271,9 +271,12 @@ struct settings_record {
     int version;
 };
 
-std::optional<mapping_type> parse_ons_type(std::string input);
-
-std::optional<mapping_type> parse_ons_type(uint16_t input);
+// Look up the ONS type from string or integer input.  Returns the mapping_type if the input is a
+// valid type value, otherwise returns nullopt.  If the queryable_types_only parameter is given and
+// true, then only the base types (session/wallet/lokinet) but not the special registration types
+// (e.g. lokinet_5years) will be accepted.
+std::optional<mapping_type> parse_ons_type(std::string input, bool queryable_types_only = false);
+std::optional<mapping_type> parse_ons_type(uint16_t input, bool queryable_types_only = false);
 
 struct mapping_record {
     // NOTE: We keep expired entries in the DB indefinitely because we need to

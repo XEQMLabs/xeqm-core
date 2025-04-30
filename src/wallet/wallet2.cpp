@@ -9822,11 +9822,10 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
                                 wallet.nettype(), *backup_owner, result.backup_owner, reason))
         return {};
 
-    nlohmann::json req_params{
-            {"name_hash", std::array{oxenc::to_base64(tools::view_guts(result.name_hash))}},
-            {"types", std::vector<uint16_t>{ons::db_mapping_type(type)}}};
+    auto [success, response_] = wallet.ons_info(
+            {{"name_hash", oxenc::to_base64(tools::view_guts(result.name_hash))},
+             {"type", ons::db_mapping_type(type)}});
 
-    auto [success, response_] = wallet.ons_info(req_params);
     if (!response)
         response = &response_;
     else
@@ -9839,14 +9838,13 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
         return result;
     }
 
-    if ((*response).size()) {
-        if (!tools::try_load_from_hex_guts(
-                    (*response)[0]["txid"].get<std::string_view>(), result.prev_txid)) {
+    if (response->size()) {
+        auto txid = response->front()["txid"].get<std::string_view>();
+        if (!tools::try_load_from_hex_guts(txid, result.prev_txid)) {
             if (reason)
-                *reason = "Failed to convert response txid=" +
-                          (*response)[0]["txid"].get<std::string>() +
-                          " from the daemon into a 32 byte hash, it must be a 64 char hex "
-                          "string";
+                *reason =
+                        "Failed to convert response txid={} from the daemon into a 32-byte hash;"
+                        " expected a 64-char hex string"_format(txid);
             return result;
         }
     }
@@ -9864,7 +9862,6 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
         cryptonote::address_parse_info curr_backup_owner_parsed = {};
         auto& rowner = response->front()["owner"];
         std::string* rbackup_owner = response->front().value("backup_owner", nullptr);
-        ;
         bool curr_owner = cryptonote::get_account_address_from_str(
                 curr_owner_parsed, wallet.nettype(), rowner.get<std::string_view>());
         bool curr_backup_owner =

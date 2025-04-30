@@ -554,15 +554,18 @@ static constexpr std::array ons_str_type_mappings = {
         stringtypemap{"lokinet_5years"sv, mapping_type::lokinet_5years},
         stringtypemap{"lokinet_10years"sv, mapping_type::lokinet_10years}};
 
-std::optional<mapping_type> parse_ons_type(std::string input) {
+std::optional<mapping_type> parse_ons_type(std::string input, bool queryable_types_only) {
     // Lower-case the input:
     for (auto& c : input)
         if (c >= 'A' && c <= 'Z')
             c += ('A' - 'a');
 
     for (const auto& [str, map] : ons_str_type_mappings)
-        if (str == input)
+        if (str == input) {
+            if (queryable_types_only && is_lokinet_type(map) && map != mapping_type::lokinet)
+                return std::nullopt;
             return map;
+        }
 
     return std::nullopt;
 }
@@ -575,10 +578,13 @@ static constexpr std::array ons_int_type_mappings = {
         inttypemap{2, mapping_type::lokinet},
         inttypemap{1, mapping_type::wallet},
         inttypemap{0, mapping_type::session}};
-std::optional<mapping_type> parse_ons_type(uint16_t input) {
+std::optional<mapping_type> parse_ons_type(uint16_t input, bool queryable_types_only) {
     for (const auto& [inttype, map] : ons_int_type_mappings)
-        if (inttype == input)
+        if (inttype == input) {
+            if (queryable_types_only && is_lokinet_type(map) && map != mapping_type::lokinet)
+                return std::nullopt;
             return map;
+        }
 
     return std::nullopt;
 }

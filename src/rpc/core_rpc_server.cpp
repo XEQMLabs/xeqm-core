@@ -3738,8 +3738,19 @@ void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
                 ERROR_WRONG_PARAM,
                 "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
 
+    std::unordered_set<ons::mapping_type> type_filter;
+    if (info.request.type) {
+        if (auto t = ons::parse_ons_type(*info.request.type, /*queryable_type_only=*/true))
+            type_filter.insert(*t);
+        else
+            throw rpc_error{
+                    ERROR_WRONG_PARAM,
+                    "Invalid type: expected 0 (session), 1 (wallet), or 2 (lokinet), not: {}"_format(
+                            *info.request.type)};
+    }
+
     auto result = json::array();
-    for (const auto& record : db.get_mappings(*name_hash, req_height)) {
+    for (const auto& record : db.get_mappings(*name_hash, req_height, type_filter)) {
         auto& elem = result.emplace_back();
         elem["type"] = record.type;
         elem["name_hash"] = record.name_hash;
