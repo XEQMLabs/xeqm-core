@@ -148,7 +148,7 @@ endif()
 if(NOT TARGET nlohmann_json::nlohmann_json)
     set(JSON_BuildTests OFF CACHE INTERNAL "")
     set(JSON_MultipleHeaders ON CACHE BOOL "") # Allows multi-header nlohmann use
-    system_or_submodule(NLOHMANN nlohmann_json nlohmann_json>=3.7.0 nlohmann-json)
+    system_or_submodule(NLOHMANN nlohmann_json nlohmann_json>=3.7.0 ethyl/external/json)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         set(default_nlohmann_diags OFF)
