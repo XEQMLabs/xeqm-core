@@ -2283,10 +2283,42 @@ bool core::submit_uptime_proof() {
     }
     return true;
 }
+
+bool core::proof_filter_t::insert(const NOTIFY_BTENCODED_UPTIME_PROOF::request& req) {
+    crypto::hash proof_hash;
+    crypto_generichash_blake2b_state st;
+    crypto_generichash_blake2b_init(&st, nullptr, 0, proof_hash.size());
+    crypto_generichash_blake2b_update(
+            &st, reinterpret_cast<const unsigned char*>(req.proof.data()), req.proof.size());
+    if (req.sig)
+        crypto_generichash_blake2b_update(
+                &st, reinterpret_cast<const unsigned char*>(req.sig->data()), req.sig->size());
+    crypto_generichash_blake2b_update(
+            &st, reinterpret_cast<const unsigned char*>(req.ed_sig.data()), req.ed_sig.size());
+    crypto_generichash_blake2b_final(&st, proof_hash.data(), proof_hash.size());
+
+    std::lock_guard lock{mut};
+    if (auto now = std::chrono::steady_clock::now(); now >= rotate) {
+        seen_old.clear();
+        std::swap(seen, seen_old);
+        rotate = now + ROTATE_INTERVAL;
+    }
+    if (seen.count(proof_hash) || seen_old.count(proof_hash))
+        return false;
+    seen.insert(proof_hash);
+    return true;
+}
+
 //-----------------------------------------------------------------------------------------------
 bool core::handle_uptime_proof(
         const NOTIFY_BTENCODED_UPTIME_PROOF::request& req, bool& my_uptime_proof_confirmation) {
     ZoneScoped;
+
+    if (!proof_filter.insert(req)) {
+        log::debug(logcat, "Ignoring recently received duplicate proof");
+        return false;
+    }
+
     std::unique_ptr<uptime_proof::Proof> proof;
     try {
         // height -1 or would use new rules 1 block too early
