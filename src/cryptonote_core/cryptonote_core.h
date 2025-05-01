@@ -732,7 +732,7 @@ class core final {
      */
     bool check_tx_semantic(const transaction& tx, bool kept_by_block) const;
     void check_service_node_ip_address();
-    bool check_service_node_time();
+    void check_service_node_time();
     void set_semantics_failed(const crypto::hash& tx_hash);
 
     void parse_incoming_tx_pre(tx_verification_batch_info& tx_info);

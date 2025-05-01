@@ -1989,67 +1989,61 @@ void core::check_service_node_ip_address() {
             [connection_error_callback](auto, std::string_view) { connection_error_callback(); });
 }
 //-----------------------------------------------------------------------------------------------
-bool core::check_service_node_time() {
-    if (!is_active_sn()) {
-        return true;
-    }
+void core::check_service_node_time() {
+    if (!is_active_sn())
+        return;
 
     crypto::public_key pubkey = service_node_list.get_random_pubkey();
-    crypto::x25519_public_key x_pkey{0};
-    constexpr std::array<uint16_t, 3> MIN_TIMESTAMP_VERSION{9, 1, 0};
-    std::array<uint16_t, 3> proofversion;
-    service_node_list.access_proof(pubkey, [&](auto& proof) {
-        x_pkey = proof.pubkey_x25519;
-        proofversion = proof.proof->version;
-    });
+    auto x_pkey = crypto::null<crypto::x25519_public_key>;
+    service_node_list.access_proof(pubkey, [&](auto& proof) { x_pkey = proof.pubkey_x25519; });
 
-    if (proofversion >= MIN_TIMESTAMP_VERSION && x_pkey) {
-        m_omq->request(
-                tools::view_guts(x_pkey),
-                "quorum.timestamp",
-                [this, pubkey](bool success, std::vector<std::string> data) {
-                    const time_t local_seconds = time(nullptr);
-                    log::debug(
-                            logcat,
-                            "Timestamp message received: {}, local time is: ",
-                            data[0],
-                            local_seconds);
-                    if (success) {
-                        int64_t received_seconds;
-                        if (tools::parse_int(data[0], received_seconds)) {
-                            uint16_t variance;
-                            if (received_seconds > local_seconds + 65535 ||
-                                received_seconds < local_seconds - 65535) {
-                                variance = 65535;
-                            } else {
-                                variance = std::abs(local_seconds - received_seconds);
-                            }
-                            std::lock_guard<std::mutex> lk(m_sn_timestamp_mutex);
-                            // Records the variance into the record of our performance (m_sn_times)
-                            service_nodes::timesync_entry entry{
-                                    variance <= service_nodes::THRESHOLD_SECONDS_OUT_OF_SYNC};
-                            m_sn_times.add(entry);
+    if (!x_pkey)
+        return;  // No valid proof from this snode yet
 
-                            // Counts the number of times we have been out of sync
-                            if (m_sn_times.failures() >
-                                (m_sn_times.size() * service_nodes::MAXIMUM_EXTERNAL_OUT_OF_SYNC /
-                                 100)) {
-                                log::warning(logcat, "service node time might be out of sync");
-                                // If we are out of sync record the other service node as in sync
-                                service_node_list.record_timesync_status(pubkey, true);
-                            } else {
-                                service_node_list.record_timesync_status(
-                                        pubkey,
-                                        variance <= service_nodes::THRESHOLD_SECONDS_OUT_OF_SYNC);
-                            }
+    m_omq->request(
+            tools::view_guts(x_pkey),
+            "quorum.timestamp",
+            [this, pubkey](bool success, std::vector<std::string> data) {
+                const time_t local_seconds = time(nullptr);
+                log::debug(
+                        logcat,
+                        "Timestamp message received: {}, local time is: ",
+                        data[0],
+                        local_seconds);
+                if (success) {
+                    int64_t received_seconds;
+                    if (tools::parse_int(data[0], received_seconds)) {
+                        uint16_t variance;
+                        if (received_seconds > local_seconds + 65535 ||
+                            received_seconds < local_seconds - 65535) {
+                            variance = 65535;
                         } else {
-                            success = false;
+                            variance = std::abs(local_seconds - received_seconds);
                         }
+                        std::lock_guard<std::mutex> lk(m_sn_timestamp_mutex);
+                        // Records the variance into the record of our performance (m_sn_times)
+                        service_nodes::timesync_entry entry{
+                                variance <= service_nodes::THRESHOLD_SECONDS_OUT_OF_SYNC};
+                        m_sn_times.add(entry);
+
+                        // Counts the number of times we have been out of sync
+                        if (m_sn_times.failures() >
+                            (m_sn_times.size() * service_nodes::MAXIMUM_EXTERNAL_OUT_OF_SYNC /
+                             100)) {
+                            log::warning(logcat, "service node time might be out of sync");
+                            // If we are out of sync record the other service node as in sync
+                            service_node_list.record_timesync_status(pubkey, true);
+                        } else {
+                            service_node_list.record_timesync_status(
+                                    pubkey,
+                                    variance <= service_nodes::THRESHOLD_SECONDS_OUT_OF_SYNC);
+                        }
+                    } else {
+                        success = false;
                     }
-                    service_node_list.record_timestamp_participation(pubkey, success);
-                });
-    }
-    return true;
+                }
+                service_node_list.record_timestamp_participation(pubkey, success);
+            });
 }
 //-----------------------------------------------------------------------------------------------
 bool core::is_key_image_spent(const crypto::key_image& key_image) const {
