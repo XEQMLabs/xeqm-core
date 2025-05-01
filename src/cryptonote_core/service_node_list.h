@@ -666,7 +666,8 @@ class service_node_list {
     void for_each_service_node_info_and_proof(It begin, End end, Func f) const {
         static const proof_info empty_proof{};
         std::lock_guard lock{m_sn_mutex};
-        for (auto sni_end = m_state.service_nodes_infos.end(); begin != end; ++begin) {
+        auto sni_end = m_state.service_nodes_infos.end();
+        for (; begin != end; ++begin) {
             auto it = m_state.service_nodes_infos.find(*begin);
             if (it != sni_end) {
                 auto pit = proofs.find(it->first);
