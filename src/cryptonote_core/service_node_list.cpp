@@ -1281,7 +1281,6 @@ bool service_node_list::state_t::process_state_change_tx(
 
             if (sn_list && !sn_list->m_rescanning) {
                 auto& proof = sn_list->proofs[key];
-                proof.timestamp = proof.effective_timestamp = 0;
                 proof.store(key, sn_list->blockchain);
             }
             return true;
