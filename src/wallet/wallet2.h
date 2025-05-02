@@ -1876,7 +1876,7 @@ class wallet2 {
             uint32_t priority = 0,
             uint32_t account_index = 0,
             std::set<uint32_t> subaddr_indices = {},
-            nlohmann::json* response = {});
+            nlohmann::json* record = nullptr);
 
     // ONS renewal (for lokinet registrations, not for session/wallet)
     std::vector<pending_tx> ons_create_renewal_tx(
@@ -1886,7 +1886,7 @@ class wallet2 {
             uint32_t priority = 0,
             uint32_t account_index = 0,
             std::set<uint32_t> subaddr_indices = {},
-            nlohmann::json* response = {});
+            nlohmann::json* record = nullptr);
 
     // Generate just the signature required for putting into ons_update_mapping command in the
     // wallet

@@ -9778,6 +9778,8 @@ static bool try_generate_ons_signature(
     return true;
 }
 
+// The `record`, if provided, will be set to (json) null if the record was not found, and a json
+// object with "type", etc. keys for the name if found.
 static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
         wallet2 const& wallet,
         ons::mapping_type type,
@@ -9790,7 +9792,7 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
         ons::ons_tx_type txtype,
         uint32_t account_index,
         std::string* reason,
-        nlohmann::json* response) {
+        nlohmann::json* record = nullptr) {
     ons_prepared_args result = {};
     if (priority == tools::tx_priority_blink) {
         if (reason)
@@ -9822,15 +9824,31 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
                                 wallet.nettype(), *backup_owner, result.backup_owner, reason))
         return {};
 
-    auto [success, response_] = wallet.ons_info(
-            {{"name_hash", oxenc::to_base64(tools::view_guts(result.name_hash))},
-             {"type", ons::db_mapping_type(type)}});
+    auto name_hash = oxenc::to_base64(tools::view_guts(result.name_hash));
+    auto [success, response] =
+            wallet.ons_info({{"name_hash", name_hash}, {"type", ons::db_mapping_type(type)}});
 
-    if (!response)
-        response = &response_;
-    else
-        *response = std::move(response_);
-    if (!success) {
+    bool bad_resp = false;
+    nlohmann::json tmp;
+    if (!success || !response.is_object())
+        bad_resp = true;
+    else if (auto it = response.find(name_hash); it == response.end() || !it->is_array())
+        bad_resp = true;
+    else {
+        if (it->empty()) {
+            if (record)
+                *record = nullptr;
+            else
+                record = &tmp;
+        } else {
+            if (record)
+                *record = std::move(it->front());
+            else
+                record = &it->front();
+        }
+    }
+
+    if (bad_resp) {
         if (reason)
             *reason =
                     "Failed to query previous owner for ONS entry: communication with daemon "
@@ -9838,8 +9856,10 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
         return result;
     }
 
-    if (response->size()) {
-        auto txid = response->front()["txid"].get<std::string_view>();
+    const auto& rec = *record;
+
+    if (!rec.is_null()) {
+        auto txid = rec["txid"].get<std::string_view>();
         if (!tools::try_load_from_hex_guts(txid, result.prev_txid)) {
             if (reason)
                 *reason =
@@ -9850,7 +9870,7 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
     }
 
     if (txtype == ons::ons_tx_type::update && make_signature) {
-        if (response->empty()) {
+        if (record->is_null()) {
             if (reason)
                 *reason =
                         "Signature requested when preparing ONS TX but record to update does "
@@ -9860,8 +9880,8 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
 
         cryptonote::address_parse_info curr_owner_parsed = {};
         cryptonote::address_parse_info curr_backup_owner_parsed = {};
-        auto rowner = response->front()["owner"].get<std::string>();
-        std::string rbackup_owner = response->front().value("backup_owner", "");
+        auto rowner = rec["owner"].get<std::string>();
+        std::string rbackup_owner = rec.value("backup_owner", "");
         bool curr_owner = cryptonote::get_account_address_from_str(
                 curr_owner_parsed, wallet.nettype(), rowner);
         bool curr_backup_owner = rbackup_owner.size() &&
@@ -9882,7 +9902,7 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
             }
         }
     } else if (txtype == ons::ons_tx_type::renew) {
-        if (response->empty()) {
+        if (rec.is_null()) {
             if (reason)
                 *reason = "Renewal requested but record to renew does not exist or has expired";
             return result;
@@ -9903,7 +9923,6 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_buy_mapping_tx(
         uint32_t priority,
         uint32_t account_index,
         std::set<uint32_t> subaddr_indices) {
-    nlohmann::json response;
     constexpr bool make_signature = false;
     ons_prepared_args prepared_args = prepare_tx_extra_oxen_name_system_values(
             *this,
@@ -9916,8 +9935,7 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_buy_mapping_tx(
             make_signature,
             ons::ons_tx_type::buy,
             account_index,
-            reason,
-            &response);
+            reason);
     if (!owner)
         prepared_args.owner =
                 ons::make_monero_owner(get_subaddress({account_index, 0}), account_index != 0);
@@ -9978,7 +9996,7 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_renewal_tx(
         uint32_t priority,
         uint32_t account_index,
         std::set<uint32_t> subaddr_indices,
-        nlohmann::json* response) {
+        nlohmann::json* record) {
     constexpr bool make_signature = false;
     ons_prepared_args prepared_args = prepare_tx_extra_oxen_name_system_values(
             *this,
@@ -9992,7 +10010,7 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_renewal_tx(
             ons::ons_tx_type::renew,
             account_index,
             reason,
-            response);
+            record);
 
     if (!prepared_args)
         return {};
@@ -10034,7 +10052,7 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_update_mapping_tx(
         uint32_t priority,
         uint32_t account_index,
         std::set<uint32_t> subaddr_indices,
-        nlohmann::json* response) {
+        nlohmann::json* record) {
     if (!value && !owner && !backup_owner) {
         if (reason)
             *reason =
@@ -10056,7 +10074,7 @@ std::vector<wallet2::pending_tx> wallet2::ons_create_update_mapping_tx(
             ons::ons_tx_type::update,
             account_index,
             reason,
-            response);
+            record);
     if (!prepared_args)
         return {};
 
@@ -10135,7 +10153,6 @@ bool wallet2::ons_make_update_mapping_signature(
         ons::generic_signature& signature,
         uint32_t account_index,
         std::string* reason) {
-    nlohmann::json response;
     constexpr bool make_signature = true;
     ons_prepared_args prepared_args = prepare_tx_extra_oxen_name_system_values(
             *this,
@@ -10148,8 +10165,7 @@ bool wallet2::ons_make_update_mapping_signature(
             make_signature,
             ons::ons_tx_type::update,
             account_index,
-            reason,
-            &response);
+            reason);
     if (!prepared_args)
         return false;
 

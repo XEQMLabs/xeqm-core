@@ -3721,6 +3721,11 @@ void core_rpc_server::invoke(TEST_TRIGGER_UPTIME_PROOF& test_trigger_uptime_proo
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
+
+    if (!context.admin)
+        check_quantity_limit(
+                info.request.name_hash.size(), ONS_INFO::MAX_REQUEST_ENTRIES, "name_hash");
+
     auto binary_format = info.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
 
     auto height = m_core.blockchain.get_current_blockchain_height();
@@ -3729,14 +3734,6 @@ void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
         req_height = height;
 
     auto& db = m_core.blockchain.name_system_db();
-
-    // This also takes 32 raw bytes, but that is undocumented (because it is painful to pass
-    // through json).
-    auto name_hash = ons::name_hash_input_to_base64(info.request.name_hash);
-    if (!name_hash)
-        throw rpc_error{
-                ERROR_WRONG_PARAM,
-                "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
 
     std::unordered_set<ons::mapping_type> type_filter;
     if (info.request.type) {
@@ -3749,26 +3746,40 @@ void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
                             *info.request.type)};
     }
 
-    auto result = json::array();
-    for (const auto& record : db.get_mappings(*name_hash, req_height, type_filter)) {
-        auto& elem = result.emplace_back();
-        elem["type"] = record.type;
-        elem["name_hash"] = record.name_hash;
-        elem["owner"] = record.owner.to_string(nettype());
-        if (record.backup_owner)
-            elem["backup_owner"] = record.backup_owner.to_string(nettype());
+    auto& result = (info.response["result"] = json::object());
 
-        json_binary_proxy elem_hex{elem, binary_format};
-        elem_hex["encrypted_value"] = record.encrypted_value.to_view();
-        if (record.expiration_height) {
-            elem["expiration_height"] = *record.expiration_height;
-            elem["expired"] = *record.expiration_height < height;
+    for (const auto& name_in : info.request.name_hash) {
+        auto& name_res = result[name_in];
+        if (name_res.is_array())
+            continue;  // Duplicate that we've already looked up
+        name_res = json::array();
+
+        // This also takes 32 raw bytes, but that is undocumented (because it is painful to pass
+        // through json).
+        auto name_hash = ons::name_hash_input_to_base64(name_in);
+        if (!name_hash)
+            throw rpc_error{
+                    ERROR_WRONG_PARAM,
+                    "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
+
+        for (const auto& record : db.get_mappings(*name_hash, req_height, type_filter)) {
+            auto& elem = name_res.emplace_back();
+            elem["type"] = record.type;
+            elem["owner"] = record.owner.to_string(nettype());
+            if (record.backup_owner)
+                elem["backup_owner"] = record.backup_owner.to_string(nettype());
+
+            json_binary_proxy elem_hex{elem, binary_format};
+            elem_hex["encrypted_value"] = record.encrypted_value.to_view();
+            if (record.expiration_height) {
+                elem["expiration_height"] = *record.expiration_height;
+                elem["expired"] = *record.expiration_height < height;
+            }
+            elem["update_height"] = record.update_height;
+            elem_hex["txid"] = record.txid;
         }
-        elem["update_height"] = record.update_height;
-        elem_hex["txid"] = record.txid;
     }
 
-    info.response["result"] = std::move(result);
     info.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
