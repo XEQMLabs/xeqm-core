@@ -9860,25 +9860,24 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
 
         cryptonote::address_parse_info curr_owner_parsed = {};
         cryptonote::address_parse_info curr_backup_owner_parsed = {};
-        auto& rowner = response->front()["owner"];
-        std::string* rbackup_owner = response->front().value("backup_owner", nullptr);
+        auto rowner = response->front()["owner"].get<std::string>();
+        std::string rbackup_owner = response->front().value("backup_owner", "");
         bool curr_owner = cryptonote::get_account_address_from_str(
-                curr_owner_parsed, wallet.nettype(), rowner.get<std::string_view>());
-        bool curr_backup_owner =
-                rbackup_owner &&
-                cryptonote::get_account_address_from_str(
-                        curr_backup_owner_parsed, wallet.nettype(), *rbackup_owner);
+                curr_owner_parsed, wallet.nettype(), rowner);
+        bool curr_backup_owner = rbackup_owner.size() &&
+                                 cryptonote::get_account_address_from_str(
+                                         curr_backup_owner_parsed, wallet.nettype(), rbackup_owner);
         if (!try_generate_ons_signature(wallet, rowner, owner, backup_owner, result)) {
-            if (!rbackup_owner ||
-                !try_generate_ons_signature(wallet, *rbackup_owner, owner, backup_owner, result)) {
-                if (reason) {
+            if (rbackup_owner.empty() ||
+                !try_generate_ons_signature(wallet, rbackup_owner, owner, backup_owner, result)) {
+                if (reason)
                     *reason =
                             "Signature requested when preparing ONS TX, but this wallet is not "
-                            "the owner of the record owner=" +
-                            rowner.get<std::string>();
-                    if (rbackup_owner)
-                        *reason += ", backup_owner=" + *rbackup_owner;
-                }
+                            "the owner of the record (owner: {}{})"_format(
+                                    rowner,
+                                    rbackup_owner.empty()
+                                            ? ""
+                                            : ", backup_owner: {}"_format(rbackup_owner));
                 return result;
             }
         }

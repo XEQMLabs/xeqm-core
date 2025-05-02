@@ -6973,8 +6973,8 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
         std::cout << std::endl;
 
         if (backup_owner.size()) {
-            std::cout << "Old Backup Owner: {}"_format(response[0].value("backup_owner", ""));
-            std::cout << "New Backup Owner: {}"_format(backup_owner);
+            std::cout << "Old Backup Owner: {}\nNew Backup Owner: {}"_format(
+                    response[0].value("backup_owner", ""), backup_owner);
         } else {
             std::cout << "Backup Owner:     {} (unchanged)"_format(
                     response[0].value("backup_owner", ""));
