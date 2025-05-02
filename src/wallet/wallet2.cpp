@@ -102,7 +102,7 @@ extern "C" {
 
 // Uncomment to enable scanning of the genesis block (which is only useful for the actual
 // testnet/devnet governance wallets)
-// #define SCAN_GENESIS_BLOCK
+#define SCAN_GENESIS_BLOCK
 
 using namespace crypto;
 using namespace cryptonote;
@@ -6552,14 +6552,14 @@ void wallet2::load(
 
     if (m_blockchain.empty()) {
         m_blockchain.push_back(genesis_hash);
-        m_last_block_reward = cryptonote::get_outs_money_amount(genesis.miner_tx);
+        m_last_block_reward = cryptonote::get_outs_money_amount(*genesis.miner_tx);
         m_cached_height = m_blockchain.size();
-#ifdef SCAN_GENESIS_BLOCK
-        std::vector<uint64_t> o_indices(genesis.miner_tx.vout.size());
+    #ifdef SCAN_GENESIS_BLOCK
+        std::vector<uint64_t> o_indices(genesis.miner_tx->vout.size());
         std::iota(o_indices.begin(), o_indices.end(), 0);
         process_new_transaction(
-                get_transaction_hash(genesis.miner_tx),
-                genesis.miner_tx,
+                get_transaction_hash(*genesis.miner_tx),
+                *genesis.miner_tx,
                 o_indices,
                 0,
                 genesis.major_version,
@@ -6570,7 +6570,7 @@ void wallet2::load(
                 false,
                 {},
                 nullptr);
-#endif
+    #endif
     } else {
         check_genesis(genesis_hash);
     }

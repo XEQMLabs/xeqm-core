@@ -13,27 +13,39 @@ inline constexpr network_config config{
         .NETWORK_TYPE = network_type::TESTNET,
         .DEFAULT_CONFIG_SUBDIR = "testnet"sv,
         .HEIGHT_ESTIMATE_HEIGHT = 0,  // Reset for new chain
-        .HEIGHT_ESTIMATE_TIMESTAMP = 1710140000,
+        .HEIGHT_ESTIMATE_TIMESTAMP = 0,  // Start from beginning
         .PUBLIC_ADDRESS_BASE58_PREFIX = 0x1c1eb4,
-        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x1c1eb4,
-        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1c1eb4,
+        .PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x179eb4,
+        .PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x0f1eb4,
         .P2P_DEFAULT_PORT = 38156,
         .RPC_DEFAULT_PORT = 38157,
         .QNET_DEFAULT_PORT = 38159,
         .NETWORK_ID = {{
-                0x54, 0x45, 0x53, 0x54, // "TEST"
-                0x45, 0x51, 0x55, 0x49, // "EQUI"
-                0x4c, 0x49, 0x42, 0x52, // "LIBR"
-                0x49, 0x41, 0x4e, 0x54, // "IANT"
+                0x54,
+                0x45,
+                0x53,
+                0x54,  // "TEST"
+                0x45,
+                0x51,
+                0x55,
+                0x49,  // "EQUI"
+                0x4c,
+                0x49,
+                0x42,
+                0x52,  // "LIBR"
+                0x49,
+                0x41,
+                0x4e,
+                0x54,  // "IANT"
         }},
         .P2P_SEED_NODES = seeds,
         .GENESIS_TX =
-                "011e01ff00018080c9db97f4fb2702a183e39cd219d7c08703bb74ed5db5e13da301e56f6c1d0fa59bb1d8abd4ff842101c955c9b530a9d80d80e87d83b038948723d99099579ca7ddfdf49550f576a1cd"sv,
+                "020001ff00018080c9db97f4fb27027d2dc319c4d24e0556304a13dceff7c1d9ee7fda6abdbe9d1c0ab7fba4c186534201bd33dbd5d9708f53328405365f005bcfaa94710a1801fce0ccda19884748ac0c72000000000000000000000000000000000000000000000000000000000000000000"sv,
         .GENESIS_NONCE = 12345,
-        .GOVERNANCE_REWARD_INTERVAL = 2000min,
+        .GOVERNANCE_REWARD_INTERVAL = 2min,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
-                        "XEQTFqMuebu297Y6W7BusrByocVUDm5hpU1jCuSpDGHxC29c1yPL5uZTkHSK9tzj4XZPaL6NRMgjSRzbKFwjU5626CwXwDmDoD",  // HF10
+                        "XEQTLbzLkS2DvFhyBUG4t64wZH9sesMwK31yisBMVcEgDy6TbMduXvFFBo4Zdck87xc8VaAPhdhFdfHvdd2LFpcWAJQp8AnZss",  // HF10
                 },
         .UPTIME_PROOF_TOLERANCE = mainnet::config.UPTIME_PROOF_TOLERANCE,
         .UPTIME_PROOF_STARTUP_DELAY = mainnet::config.UPTIME_PROOF_STARTUP_DELAY,
@@ -42,9 +54,7 @@ inline constexpr network_config config{
         .UPTIME_PROOF_FREQUENCY = 10min,
         .UPTIME_PROOF_VALIDITY = 21min,
         .MAX_DEACTIVATE_PER_BLOCK = 1,
-        .HAVE_STORAGE_SERVER = true,
-        .HAVE_SESSION_ROUTER = true,
-        .HAVE_LOKINET = false,
+        .HAVE_STORAGE_AND_LOKINET = false,  // Disable storage & lokinet
         .TARGET_BLOCK_TIME = mainnet::config.TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
