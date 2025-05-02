@@ -833,33 +833,34 @@ static bool check_condition(
 
 bool validate_ons_name(mapping_type type, std::string name, std::string* reason) {
     bool const is_lokinet = is_lokinet_type(type);
-    size_t max_name_len = 0;
+    size_t min_name_len = 1, max_name_len = 0;
 
-    if (is_lokinet)
+    if (is_lokinet) {
+        min_name_len = "a.loki"sv.size();
         max_name_len = name.find('-') != std::string::npos ? LOKINET_DOMAIN_NAME_MAX
                                                            : LOKINET_DOMAIN_NAME_MAX_NOHYPHEN;
-    else if (type == mapping_type::session)
+    } else if (type == mapping_type::session)
         max_name_len = ons::SESSION_DISPLAY_NAME_MAX;
     else if (type == mapping_type::wallet)
         max_name_len = ons::WALLET_NAME_MAX;
     else {
         if (reason)
-            *reason =
-                    "ONS type={} specifies unhandled mapping type in name validation"_format(type);
+            *reason = "ONS type '{}' is not supported"_format(type);
         return false;
     }
 
     // NOTE: Validate name length
     name = tools::lowercase_ascii_string(name);
     if (check_condition(
-                (name.empty() || name.size() > max_name_len),
+                name.size() < min_name_len || name.size() > max_name_len,
                 reason,
-                "ONS type={} specifies mapping from name->value where the name's length={} is 0 or "
-                "exceeds the maximum length={}, given name={}",
+                "ONS {0} name '{1}' (length={2}) is invalid: {0} names must be between {3} and {4} "
+                "characters long",
                 type,
+                name,
                 name.size(),
-                max_name_len,
-                name))
+                min_name_len,
+                max_name_len))
         return false;
 
     std::string_view name_view{name};  // Will chop this down as we validate each part
@@ -883,34 +884,22 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
             if (check_condition(
                         name == reserved,
                         reason,
-                        "ONS type={} specifies mapping from name->value using protocol reserved "
-                        "name={}",
+                        "ONS {} name '{}' is a reserved name that cannot be registered",
                         type,
                         name))
                 return false;
-
-        auto constexpr SHORTEST_DOMAIN = "a.loki"sv;
-        if (check_condition(
-                    name.size() < SHORTEST_DOMAIN.size(),
-                    reason,
-                    "ONS type={} specifies mapping from name->value where the name is shorter than "
-                    "the shortest possible name={}, given name={}",
-                    type,
-                    SHORTEST_DOMAIN,
-                    name))
-            return false;
 
         // Must end with .loki
         auto constexpr SUFFIX = ".loki"sv;
         if (check_condition(
                     !name_view.ends_with(SUFFIX),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name does not end "
-                    "with the domain .loki, name={}",
+                    "ONS {0} name '{1}' is invalid: {0} names must end with '.loki'",
                     type,
                     name))
             return false;
 
+        assert(name_view.size() > SUFFIX.size());  // Implied by min_name_len check
         name_view.remove_suffix(SUFFIX.size());
 
         // All domains containing '--' as 3rd/4th letter are reserved except for xn-- punycode
@@ -919,7 +908,9 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
                     name_view.size() >= 4 && name_view.substr(2, 2) == "--"sv &&
                             !name_view.starts_with("xn--"sv),
                     reason,
-                    "ONS type={} specifies reserved name `?\?--*.loki': {}",
+                    // This \? looks stupid, but is to suppress a trigraph warning
+                    "ONS {} name '{}' is invalid: names matching '?\?--*' are reserved (other than "
+                    "punycode xn--*)",
                     type,
                     name))
             return false;
@@ -928,8 +919,7 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         if (check_condition(
                     !char_is_alphanum(name_view.front()),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name does not start "
-                    "with an alphanumeric character, name={}",
+                    "ONS {} name '{}' is invalid: names must start with a-z or 0-9",
                     type,
                     name))
             return false;
@@ -941,10 +931,9 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
             if (check_condition(
                         !char_is_alphanum(name_view.back()),
                         reason,
-                        "ONS type={} specifies mapping from name->value where the character "
-                        "preceding the .loki is not alphanumeric, char={}, name={}",
+                        "ONS {} name '{}' is invalid: the name before '.loki' must end with a-z or "
+                        "0-9",
                         type,
-                        name_view.back(),
                         name))
                 return false;
             name_view.remove_suffix(1);
@@ -954,8 +943,7 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         if (check_condition(
                     !std::all_of(name_view.begin(), name_view.end(), char_is_alphanum_or<'-'>),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the domain name contains "
-                    "more than the permitted alphanumeric or hyphen characters, name={}",
+                    "ONS {} name '{}' is invalid: names may only contain a-z, 0-9, and '-'",
                     type,
                     name))
             return false;
@@ -965,40 +953,25 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         // hyphens or underscores) in between and must end with a (alphanumeric or underscore)
         // ^[a-z0-9_]([a-z0-9-_]*[a-z0-9_])?$
 
-        // Must start with (alphanumeric or underscore)
-        if (check_condition(
-                    !char_is_alphanum_or<'_'>(name_view.front()),
-                    reason,
-                    "ONS type={} specifies mapping from name->value where the name does not start "
-                    "with an alphanumeric or underscore character, name={}",
-                    type,
-                    name))
-            return false;
-        name_view.remove_prefix(1);
-
-        if (!name_view.empty()) {
-            // Must NOT end with a hyphen '-'
-            if (check_condition(
-                        !char_is_alphanum_or<'_'>(name_view.back()),
-                        reason,
-                        "ONS type={} specifies mapping from name->value where the last character "
-                        "is a hyphen '-' which is disallowed, name={}",
-                        type,
-                        name))
-                return false;
-            name_view.remove_suffix(1);
-        }
-
         // Inbetween start and preceding suffix, (alphanumeric, hyphen or underscore) characters
         // permitted
         if (check_condition(
                     !std::all_of(name_view.begin(), name_view.end(), char_is_alphanum_or<'-', '_'>),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name contains more "
-                    "than the permitted alphanumeric, underscore or hyphen characters, name={}",
+                    "Invalid ONS {} name '{}': only a-z, 0-9, _, and - are permitted",
                     type,
                     name))
             return false;
+
+        // Must start with (alphanumeric or underscore)
+        if (check_condition(
+                    name_view.front() == '-' || name_view.back() == '-',
+                    reason,
+                    "Invalid ONS {} name '{}': names may not begin or end with a hyphen ('-')",
+                    type,
+                    name))
+            return false;
+
     } else {
         log::error(logcat, "Type not implemented");
         return false;
