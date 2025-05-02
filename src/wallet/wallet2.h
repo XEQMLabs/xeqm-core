@@ -2194,7 +2194,7 @@ class wallet2 {
     std::optional<epee::wipeable_string> on_device_passphrase_request(bool& on_device);
     void on_device_progress(const hw::device_progress& event);
 
-    std::string get_rpc_status(const std::string& s) const;
+    std::string get_rpc_status(std::string_view s) const;
 
     bool should_expand(const cryptonote::subaddress_index& index) const;
 
