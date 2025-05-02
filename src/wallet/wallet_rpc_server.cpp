@@ -3126,7 +3126,7 @@ SET_LOG_CATEGORIES::response wallet_rpc_server::invoke(SET_LOG_CATEGORIES::reque
 //------------------------------------------------------------------------------------------------------------------------------
 GET_VERSION::response wallet_rpc_server::invoke(GET_VERSION::request&& req) {
     GET_VERSION::response res{};
-    res.version = WALLET_RPC_VERSION;
+    res.version = RPC_VERSION_CODE;
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -3456,21 +3456,35 @@ ONS_KNOWN_NAMES::response wallet_rpc_server::invoke(ONS_KNOWN_NAMES::request&& r
 
     auto nettype = m_wallet->nettype();
     nlohmann::json req_params{{"include_expired", req.include_expired}};
+    auto& name_hash = (req_params["name_hash"] = nlohmann::json::array());
+    name_hash.get_ref<nlohmann::json::array_t&>().reserve(
+            std::min(rpc::ONS_INFO::MAX_REQUEST_ENTRIES, res.known_names.size()));
 
-    std::unordered_set<std::string_view> seen;
+    // Tracks seen name hashes, and maps them to actual record names:
+    std::unordered_map<std::string, std::string_view> seen;
 
-    // Query oxend for the full record info
-    for (const auto& [name, details] : m_wallet->get_ons_cache()) {
-        if (auto [it, ins] = seen.emplace(details.hashed_name); !ins)
-            continue;  // Don't lookup duplicate hash entries
+    const auto cache = m_wallet->get_ons_cache();
+    for (auto it = cache.begin(); it != cache.end();) {
+        name_hash.clear();
+        // Fill up to the next request limit:
+        for (; it != cache.end() && name_hash.size() < rpc::ONS_INFO::MAX_REQUEST_ENTRIES; ++it) {
+            const auto& [hashed_name, details] = *it;
+            if (!seen.emplace(hashed_name, details.name).second)
+                continue;  // Don't lookup duplicate entries
+            name_hash.push_back(hashed_name);
+        }
 
-        req_params["name_hash"] = details.hashed_name;
+        auto [success, records] = m_wallet->ons_info(req_params);
+        if (!success)
+            // Something deeper in wallet2 should have already logged an error
+            throw wallet_rpc_error{
+                    error_code::UNKNOWN_ERROR, "Error looking up ONS records via daemon"};
 
-        if (auto [success, records] = m_wallet->ons_info(req_params); success) {
-            for (const auto& rec : records) {
+        for (const auto& [nhash, recs] : records.items()) {
+            for (const auto& rec : recs) {
                 auto& res_e = res.known_names.emplace_back();
-                res_e.name = details.name;
-                res_e.hashed = details.hashed_name;
+                res_e.hashed = nhash;
+                res_e.name = seen[nhash];
                 auto type = ons::parse_ons_type(rec["type"].get<uint16_t>());
                 if (type)
                     res_e.type = ons::mapping_type_str(*type);

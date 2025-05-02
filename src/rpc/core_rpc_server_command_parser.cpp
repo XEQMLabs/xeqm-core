@@ -449,15 +449,19 @@ void parse_request(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_input in) {
 }
 
 void parse_request(ONS_INFO& info, rpc_input in) {
-    std::vector<uint16_t> types;
+    std::variant<std::string, std::vector<std::string>> name_hashes;
     get_values(
             in,
             "include_expired",
             info.request.include_expired,
             "name_hash",
-            required{info.request.name_hash},
+            required{name_hashes},
             "type",
             info.request.type);
+    if (auto* single = std::get_if<0>(&name_hashes))
+        info.request.name_hash.push_back(std::move(*single));
+    else
+        info.request.name_hash = std::move(std::get<1>(name_hashes));
 }
 
 void parse_request(GET_QUORUM_STATE& qs, rpc_input in) {

@@ -2882,20 +2882,24 @@ struct ONS_RESOLVE : PUBLIC {
 ///
 /// Inputs:
 ///
-/// - `name_hash` -- A hashed name to look up.  See ons_resolve for details on how to properly
-///   construct this hash.  The value can be provided as either hex or base64.
-/// - `type` -- Optional record type to look up, where 0 = session, 1 = wallet, 2 = lokinet.  If
-///   omitted (or null) then all matching name_hash entries, regardless of type, will be returned.
-///   When specified, the return will consist of 0 or 1 entries.
+/// - `name_hash` -- A single hashed name to look up.  Either this or `name_hashes` must be
+///   specified (but not both).  See ons_resolve for details on how to properly construct these
+///   hashed name values.  The value(s) can be provided as either hex or base64.
+/// - `name_hashes` -- An array of hashed names to look up multiple names at once.
+/// - `type` -- Optional record type to restrict lookups, where 0 = session, 1 = wallet, 2 =
+///   lokinet.  If omitted (or null) then all matching name_hash entries, regardless of type, will
+///   be returned, otherwise only records of the given type are returned.
 /// - `include_expired` -- Optional bool; if provided and true then expired records will be
 ///   included, otherwise they will not be.
 ///
 /// Outputs:
 ///
 /// - `status` -- Generic RPC error code. "OK" is the success value.
-/// - `result` -- Array of found records; each one is a dict containing keys:
+/// - `result` -- Object of results, with one key per unique input name_hash.  The key is a
+///   name_hash that was looked up (in the same hex or base64 encoding that was provided), and each
+///   value is an array of match results (which will be empty if there was no match), returned as
+///   objects containing keys:
 ///   - `type` -- the record type value (0 - session, 1 - wallet, 2 - lokinet)
-///   - `name_hash` -- the name_hash value, base64 encoded (even if hex was input).
 ///   - `owner` -- the record owner, which is usually an Oxen wallet address
 ///   - `backup_owner` -- a second owner; omitted if there is no backup owner.
 ///   - `encrypted_value` -- the encrypted ONS record.  (See `ons_resolve`)
@@ -2903,15 +2907,16 @@ struct ONS_RESOLVE : PUBLIC {
 ///     non-expiring records.
 ///   - `expired` -- true if this record is expired (i.e. we are past `expiration_height`), false
 ///     otherwise.  Omitted for non-expiring records.
-///   - `update_height` -- the height at which this record was last modified (or created, if
-///     unmodified).
-///   - `txid` -- the transaction id that last updated (or created, if unmodified) this ONS record.
+///   - `update_height` -- the height at which this record was last modified, renewed, or created.
+///   - `txid` -- the transaction id that last modified, renewed, or created this ONS record.
 ///
 struct ONS_INFO : PUBLIC {
     static constexpr auto names() { return NAMES("ons_info"); }
 
+    static constexpr size_t MAX_REQUEST_ENTRIES = 256;
+
     struct request_parameters {
-        std::string name_hash;
+        std::vector<std::string> name_hash;
         std::optional<uint16_t> type;
         bool include_expired = false;
     } request;

@@ -6813,7 +6813,7 @@ bool simple_wallet::ons_renew_mapping(std::vector<std::string> args) {
     SCOPED_WALLET_UNLOCK();
     std::string reason;
     std::vector<tools::wallet2::pending_tx> ptx_vector;
-    nlohmann::json response;
+    nlohmann::json record;
     try {
         ptx_vector = m_wallet->ons_create_renewal_tx(
                 type,
@@ -6822,7 +6822,7 @@ bool simple_wallet::ons_renew_mapping(std::vector<std::string> args) {
                 priority,
                 m_current_subaddress_account,
                 subaddr_indices,
-                &response);
+                &record);
         if (ptx_vector.empty()) {
             fail_msg_writer() << reason;
             return true;
@@ -6851,7 +6851,7 @@ bool simple_wallet::ons_renew_mapping(std::vector<std::string> args) {
                      get_config(m_wallet->nettype()).BLOCKS_PER_DAY();
         std::cout << "Renewal years: {} ({} blocks)\n"_format(years, blocks);
         std::cout << "New expiry:    Block {}\n"_format(
-                response[0]["expiration_height"].get<uint64_t>() + blocks);
+                record["expiration_height"].get<uint64_t>() + blocks);
         std::cout << std::flush;
 
         if (!confirm_and_send_tx(dsts, ptx_vector, false /*blink*/))
@@ -6899,7 +6899,7 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
     SCOPED_WALLET_UNLOCK();
     std::string reason;
     std::vector<tools::wallet2::pending_tx> ptx_vector;
-    nlohmann::json response;
+    nlohmann::json record;
     try {
         ptx_vector = m_wallet->ons_create_update_mapping_tx(
                 type,
@@ -6912,13 +6912,13 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
                 priority,
                 m_current_subaddress_account,
                 subaddr_indices,
-                &response);
+                &record);
         if (ptx_vector.empty()) {
             fail_msg_writer() << reason;
             return true;
         }
 
-        auto enc_hex = response[0]["encrypted_value"].get<std::string>();
+        auto enc_hex = record["encrypted_value"].get<std::string>();
         if (!oxenc::is_hex(enc_hex) || enc_hex.size() > 2 * ons::mapping_value::BUFFER_SIZE) {
             log::error(logcat, "invalid ONS data returned from oxend");
             fail_msg_writer() << tr("invalid ONS data returned from oxend");
@@ -6963,21 +6963,20 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
         }
 
         if (owner.size()) {
-            std::cout << "Old Owner:        {}"_format(
-                    response[0]["owner"].get<std::string_view>());
+            std::cout << "Old Owner:        {}"_format(record["owner"].get<std::string_view>());
             std::cout << "New Owner:        {}"_format(owner);
         } else {
             std::cout << "Owner:            {} (unchanged)"_format(
-                    response[0]["owner"].get<std::string_view>());
+                    record["owner"].get<std::string_view>());
         }
         std::cout << std::endl;
 
         if (backup_owner.size()) {
             std::cout << "Old Backup Owner: {}\nNew Backup Owner: {}"_format(
-                    response[0].value("backup_owner", ""), backup_owner);
+                    record.value("backup_owner", ""), backup_owner);
         } else {
             std::cout << "Backup Owner:     {} (unchanged)"_format(
-                    response[0].value("backup_owner", ""));
+                    record.value("backup_owner", ""));
         }
         std::cout << std::endl;
         if (!confirm_and_send_tx(dsts, ptx_vector, false /*blink*/))

@@ -403,13 +403,18 @@ std::pair<bool, nlohmann::json> NodeRPCProxy::ons_info(nlohmann::json const& req
 
     try {
         auto res = m_http_client.json_rpc("ons_info", request);
-        if (!res.contains("result") || !res.contains("status"))
-            throw std::runtime_error("Missing result or status"_format(res.dump()));
-        if (res["status"] != "OK")
-            throw std::runtime_error("Response status was not OK"_format(res.dump()));
+        auto st_it = res.find("status");
+        auto res_it = res.find("result");
+        if (st_it == res.end() || res_it == res.end() || !st_it->is_string() ||
+            !res_it->is_object()) {
+            log::error(logcat, "Did not find expected result or status in:\n{}", res.dump());
+            throw std::runtime_error{"Missing result or status"};
+        }
+        if (auto status = st_it->get<std::string_view>(); status != "OK")
+            throw std::runtime_error{"Received error status '{}'"_format(status)};
         resolved = res["result"];
     } catch (const std::exception& e) {
-        log::error(logcat, "Failed to get ONS name->owners: {}", e.what());
+        log::error(logcat, "Failed to get ONS info: {}", e.what());
         return result;
     }
     success = true;
