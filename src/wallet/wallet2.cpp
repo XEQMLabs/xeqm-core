@@ -132,6 +132,8 @@ namespace {
 
     constexpr float SECOND_OUTPUT_RELATEDNESS_THRESHOLD = 0.0f;
 
+    constexpr auto NO_DAEMON_STATUS = "No daemon status provided!"sv;
+
     constexpr std::string_view KEY_IMAGE_EXPORT_FILE_MAGIC = "Loki key image export\002"sv;
     constexpr std::string_view MULTISIG_EXPORT_FILE_MAGIC = "Loki multisig export\001"sv;
     constexpr std::string_view OUTPUT_EXPORT_FILE_MAGIC = "Loki output export\003"sv;
@@ -1070,10 +1072,11 @@ namespace {
         std::string bd;
 
         // easy case if we have the whole tx
-        if (entry.contains("as_hex") || (entry.contains("prunable") && entry.contains("pruned"))) {
+        if (auto hex_it = entry.find("as_hex");
+            hex_it != entry.end() || (entry.contains("prunable") && entry.contains("pruned"))) {
             std::string hex_blob;
-            if (entry["as_hex"])
-                hex_blob = entry["as_hex"].get<std::string>();
+            if (hex_it != entry.end())
+                hex_blob = hex_it->get<std::string>();
             else
                 hex_blob =
                         entry["pruned"].get<std::string>() + entry["prunable"].get<std::string>();
@@ -1084,9 +1087,9 @@ namespace {
                     cryptonote::parse_and_validate_tx_from_blob(bd, tx), false, "Invalid tx data");
             tx_hash = cryptonote::get_transaction_hash(tx);
             // if the hash was given, check it matches
+            auto tx_hash = entry.value("tx_hash", ""sv);
             CHECK_AND_ASSERT_MES(
-                    entry["tx_hash"].empty() ||
-                            tools::hex_guts(tx_hash) == entry["tx_hash"].get<std::string_view>(),
+                    tx_hash.empty() || tools::hex_guts(tx_hash) == tx_hash,
                     false,
                     "Response claims a different hash than the data yields");
             return true;
@@ -6357,7 +6360,8 @@ bool wallet2::check_connection(rpc::version_t* version, bool* ssl, bool throw_on
     if (!m_rpc_version) {
         try {
             auto res = m_http_client.json_rpc("get_version", {});
-            if (res["status"] != rpc::STATUS_OK)
+            auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
+            if (status != rpc::STATUS_OK)
                 return false;
             m_rpc_version = res["version"];
         } catch (...) {
@@ -6605,7 +6609,8 @@ void wallet2::trim_hashchain() {
         nlohmann::json req_params{{"height", m_blockchain.size() - 1}};
         try {
             auto res = m_http_client.json_rpc("get_block_header_by_height", req_params);
-            if (res["status"] == rpc::STATUS_OK) {
+            auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
+            if (status == rpc::STATUS_OK) {
                 crypto::hash hash;
                 tools::load_from_hex_guts(
                         res["block_header"]["hash"].get<std::string_view>(), hash);
@@ -7402,14 +7407,13 @@ void wallet2::rescan_spent() {
 
         nlohmann::json req_params{{"key_images", key_images}};
         auto kispent_res = m_http_client.json_rpc("is_key_image_spent", req_params);
+        auto kispent_status = kispent_res.value<std::string_view>("status", NO_DAEMON_STATUS);
         THROW_WALLET_EXCEPTION_IF(
-                kispent_res["status"] == rpc::STATUS_BUSY,
-                error::daemon_busy,
-                "is_key_image_spent");
+                kispent_status == rpc::STATUS_BUSY, error::daemon_busy, "is_key_image_spent");
         THROW_WALLET_EXCEPTION_IF(
-                kispent_res["status"] != rpc::STATUS_OK,
+                kispent_status != rpc::STATUS_OK,
                 error::is_key_image_spent_error,
-                get_rpc_status(kispent_res["status"]));
+                get_rpc_status(kispent_status));
         THROW_WALLET_EXCEPTION_IF(
                 kispent_res["spent_status"].size() != n_outputs,
                 error::wallet_internal_error,
@@ -7816,30 +7820,30 @@ void wallet2::commit_tx(pending_tx& ptx, bool blink) {
         };
         auto daemon_send_resp =
                 m_http_client.json_rpc("send_raw_transaction", send_transaction_params);
+        auto status = daemon_send_resp.value<std::string_view>("status", NO_DAEMON_STATUS);
+
         THROW_WALLET_EXCEPTION_IF(
-                daemon_send_resp["status"] == rpc::STATUS_BUSY,
-                error::daemon_busy,
-                "sendrawtransaction");
+                status == rpc::STATUS_BUSY, error::daemon_busy, "sendrawtransaction");
         if (blink)
             THROW_WALLET_EXCEPTION_IF(
-                    daemon_send_resp["status"] != rpc::STATUS_OK,
+                    status != rpc::STATUS_OK,
                     error::tx_blink_rejected,
                     ptx.tx,
-                    get_rpc_status(daemon_send_resp["status"]),
+                    get_rpc_status(status),
                     daemon_send_resp.value<std::string>("reason", "Daemon provided no reason"s));
         else
             THROW_WALLET_EXCEPTION_IF(
-                    daemon_send_resp["status"] != rpc::STATUS_OK,
+                    status != rpc::STATUS_OK,
                     error::tx_rejected,
                     ptx.tx,
-                    get_rpc_status(daemon_send_resp["status"]),
+                    get_rpc_status(status),
                     daemon_send_resp.value<std::string>("reason", "Daemon provided no reason"s));
         // sanity checks
         for (size_t idx : ptx.selected_transfers) {
             THROW_WALLET_EXCEPTION_IF(
                     idx >= m_transfers.size(),
                     error::wallet_internal_error,
-                    "Bad output index in selected transfers: " + std::to_string(idx));
+                    "Bad output index in selected transfers: {}"_format(idx));
         }
     }
     crypto::hash txid;
@@ -10310,12 +10314,11 @@ void wallet2::get_outs(
                     {"unlocked", true},
                     {"recent_cutoff", time(nullptr) - RECENT_OUTPUT_ZONE}};
             res = m_http_client.json_rpc("get_output_histogram", req_params);
+            auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
             THROW_WALLET_EXCEPTION_IF(
-                    res["status"] == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
+                    status == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
             THROW_WALLET_EXCEPTION_IF(
-                    res["status"] != rpc::STATUS_OK,
-                    error::get_histogram_error,
-                    get_rpc_status(res["status"]));
+                    status != rpc::STATUS_OK, error::get_histogram_error, get_rpc_status(status));
         }
 
         // if we want to segregate fake outs pre or post fork, get distribution
@@ -13724,10 +13727,11 @@ std::vector<size_t> wallet2::select_available_outputs_from_histogram(
             {"unlocked", unlocked},
             {"recent_cutoff", 0}};
     auto res = m_http_client.json_rpc("get_output_histogram", req_params);
+    auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
+            status == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] != rpc::STATUS_OK, error::get_histogram_error, res["status"]);
+            status != rpc::STATUS_OK, error::get_histogram_error, get_rpc_status(status));
 
     std::set<uint64_t> mixable;
     for (const auto& i : res["histogram"]) {
@@ -13757,10 +13761,11 @@ uint64_t wallet2::get_num_rct_outputs() {
             {"unlocked", true},
             {"recent_cutoff", 0}};
     auto res = m_http_client.json_rpc("get_output_histogram", req_params);
+    auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
+            status == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] != rpc::STATUS_OK, error::get_histogram_error, res["status"]);
+            status != rpc::STATUS_OK, error::get_histogram_error, get_rpc_status(status));
     THROW_WALLET_EXCEPTION_IF(
             res["histogram"].size() != 1,
             error::get_histogram_error,
@@ -15203,10 +15208,11 @@ std::unordered_map<std::string, wallet2::ons_detail> wallet2::get_ons_cache() {
 void wallet2::refresh_batching_cache() {
     nlohmann::json req_params{{"addresses", std::vector<std::string>{}}};
     auto res = m_http_client.json_rpc(rpc::GET_ACCRUED_REWARDS::names()[0], req_params);
+    auto status = res.value<std::string_view>("status", NO_DAEMON_STATUS);
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
+            status == rpc::STATUS_BUSY, error::daemon_busy, "get_output_histogram");
     THROW_WALLET_EXCEPTION_IF(
-            res["status"] != rpc::STATUS_OK, error::get_accrued_rewards_error, res["status"]);
+            status != rpc::STATUS_OK, error::get_accrued_rewards_error, get_rpc_status(status));
 
     auto records = res["balances"].get<std::unordered_map<std::string, uint64_t>>();
     batching_records_cache.clear();
@@ -17021,10 +17027,8 @@ void wallet2::on_device_progress(const hw::device_progress& event) {
         m_callback->on_device_progress(event);
 }
 //----------------------------------------------------------------------------------------------------
-std::string wallet2::get_rpc_status(const std::string& s) const {
-    if (m_trusted_daemon)
-        return s;
-    return "<error>";
+std::string wallet2::get_rpc_status(std::string_view s) const {
+    return std::string{m_trusted_daemon ? s : "<error>"sv};
 }
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::hash_m_transfers(int64_t transfer_height, crypto::hash& hash) const {
