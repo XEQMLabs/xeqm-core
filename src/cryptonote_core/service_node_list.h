@@ -680,7 +680,7 @@ class service_node_list {
     void for_each_proof(Func f) const {
         std::lock_guard lock{m_sn_mutex};
         for (const auto& proof : proofs)
-          f(proof.second);
+            f(proof.second);
     };
 
     /// Loops through all registered service nodes and calls `f` with the pubkey and basic service
