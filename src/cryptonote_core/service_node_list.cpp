@@ -5402,7 +5402,7 @@ bool service_node_list::handle_uptime_proof(
         return false;
     }
 
-    for (auto const& min : MIN_UPTIME_PROOF_VERSIONS) {
+    for (auto const& min : MIN_UPTIME_PROOF_VERSIONS(blockchain.nettype())) {
         if (vers >= min.hardfork_revision) {
             if (proof->version < min.oxend) {
                 log::debug(
