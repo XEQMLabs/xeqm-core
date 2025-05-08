@@ -3255,6 +3255,35 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
                 &removable);
 }
 
+void core_rpc_server::invoke(GET_ALL_UPTIME_PROOFS& req, rpc_context) {
+    req.response["status"] = STATUS_OK;
+    req.response["proofs"] = json::array();
+
+    m_core.service_node_list.for_each_proof(
+            [&req, this](const service_nodes::proof_info& proof_info) {
+                const auto& proof = *proof_info.proof;
+                if (!m_core.service_node_list.is_funded_service_node(proof.pubkey)) {
+                    log::debug(logcat, "have proof for non-funded service node {}, ignoring", proof.pubkey);
+                    return;
+                }
+
+                if (proof.serialized_proof.empty()) {
+                    log::debug(logcat, "have yet to receive (and keep serialized) proof for {}", proof.pubkey_ed25519);
+                    return;
+                }
+                auto entry = json::object();
+                tools::json_binary_proxy entry_hex{entry, tools::json_binary_proxy::fmt::hex};
+                entry_hex["proof"] = proof.serialized_proof;
+                entry_hex["pubkey"] = proof.pubkey;
+                entry_hex["sig"] = proof.sig;
+                entry_hex["pubkey_ed25519"] = proof.pubkey_ed25519;
+                entry_hex["sig_ed25519"] = proof.sig_ed25519;
+                entry_hex["pubkey_bls"] = proof.pubkey_bls;
+                entry_hex["pop_bls"] = proof.pop_bls;
+                req.response["proofs"].push_back(std::move(entry));
+            });
+}
+
 // Sets the "registered" or "recently_removed" key to the SN info or recently removed info,
 // respectively, if the BLS pubkey was found.  Note that it is possible (if unusual) for the bls
 // pubkey to be found in both lists, and thus have both fields populated.
