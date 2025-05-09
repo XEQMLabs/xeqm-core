@@ -9,7 +9,7 @@
 #include "crypto/literals.h"
 #include "detail.h"
 
-namespace oxen::sent::localdev {
+namespace oxen::sesh::localdev {
 
 using namespace std::literals;
 using namespace crypto::literals;
@@ -177,4 +177,4 @@ const std::unordered_map<eth::address, std::uint64_t> transition_bonus{
 
 // clang-format on
 
-}  // namespace oxen::sent::localdev
+}  // namespace oxen::sesh::localdev

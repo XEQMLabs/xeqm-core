@@ -33,7 +33,7 @@
 #include <cryptonote_config.h>
 #include <cryptonote_core/blockchain.h>
 #include <cryptonote_core/cryptonote_tx_utils.h>
-#include <cryptonote_core/sent_transition/sent_transition.h>
+#include <cryptonote_core/sesh_transition/sesh_transition.h>
 #include <fmt/core.h>
 #include <sodium.h>
 #include <sqlite3.h>
@@ -581,7 +581,7 @@ std::pair<int, std::string> BlockchainSQLite::get_address_str(
     std::pair<int, std::string> result;
     auto& [offset, address_str] = result;
     if (auto* eth_addr = std::get_if<eth::address>(&addr)) {
-        offset = 0;  // ignored for SENT
+        offset = 0;  // ignored for SESH
         address_str = eth_address_to_sql_address(*eth_addr);
     } else {
         auto* oxen_addr = std::get_if<cryptonote::account_public_address>(&addr);
@@ -847,7 +847,7 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
     }
 
     // The block before HF21, addresses which have not registered an ETH address for the
-    // SENT transition will have their balances paid out, regardless of balance.
+    // SESH transition will have their balances paid out, regardless of balance.
     bool pre_hf21_final_payout = false;
     auto hf21_begins = cryptonote::hard_fork_begins(m_nettype, hf::hf21_eth);
     if (hf21_begins && block_height == *hf21_begins - 1) {
@@ -881,8 +881,8 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
     std::vector<cryptonote::batch_sn_payment> payments;
 
-    const auto& sent_addr_map =
-            *oxen::sent::get_transition_context(m_nettype, block_height).addresses;
+    const auto& sesh_addr_map =
+            *oxen::sesh::get_transition_context(m_nettype, block_height).addresses;
     for (const auto& pair : accrued_pairs) {
         const auto& address = pair.first;
         const auto& amount = pair.second;
@@ -891,7 +891,7 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
 
         if (pre_hf21_final_payout) {
             log::debug(logcat, "address {} has amount {}", address, amount);
-            if (sent_addr_map.contains(std::string{address}))  // Registered for transition
+            if (sesh_addr_map.contains(std::string{address}))  // Registered for transition
                 continue;
 
             if (truncated_db_amount > 0) {
@@ -1070,7 +1070,7 @@ void BlockchainSQLite::reward_handler(
     ZoneScoped;
     assert(block.major_version >= hf::hf19_reward_batching);
 
-    // From here on we calculate everything in milli-atomic OXEN/SENT (i.e. thousanths of an atomic
+    // From here on we calculate everything in milli-atomic OXEN/SESH (i.e. thousanths of an atomic
     // unit) so that our integer math has reduced loss from integer division.
     if (block.reward > std::numeric_limits<uint64_t>::max() / BATCH_REWARD_FACTOR)
         throw oxen::traced<std::logic_error>{"Reward distribution amount is too large"};

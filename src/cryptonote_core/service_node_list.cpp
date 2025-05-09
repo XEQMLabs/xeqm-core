@@ -73,12 +73,12 @@
 #include "pulse.h"
 #include "ringct/rctSigs.h"
 #include "ringct/rctTypes.h"
-#include "sent_transition/sent_transition.h"
 #include "serialization/deque.h"
 #include "serialization/string.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_rules.h"
 #include "service_node_swarm.h"
+#include "sesh_transition/sesh_transition.h"
 #include "uptime_proof.h"
 
 using cryptonote::hf;
@@ -771,7 +771,7 @@ void validate_registration(
     ZoneScoped;
     if (hf_version == feature::ETH_TRANSITION)
         throw invalid_registration{
-                "New registrations are disabled during OXEN->SENT transition period"};
+                "New registrations are disabled during OXEN->SESH transition period"};
     if (reg.uses_portions) {
         if (hf_version >= hf::hf19_reward_batching)
             throw invalid_registration{"Portion-based registrations are not permitted in HF19+"};
@@ -2022,7 +2022,7 @@ void service_node_list::state_t::process_new_ethereum_tx(
     else if (tx.type == cryptonote::txtype::ethereum_staking_requirement_updated)
         log::info(
                 globallogcat,
-                "Service node staking requirement tx ({}) from ethereum changing to {} SENT"
+                "Service node staking requirement tx ({}) from ethereum changing to {} SESH"
                 " @ height: {}; awaiting confirmations",
                 cryptonote::print_money(val),
                 cryptonote::get_transaction_hash(tx),
@@ -3914,15 +3914,15 @@ block_add_result service_node_list::state_t::update_from_block(
         print_sns();
         auto& sqlite_db = *sqlite_db_ptr;
 
-        oxen::sent::transition_context context =
-                oxen::sent::get_transition_context(nettype, height);
-        oxen::sent::transition(context, *this, sqlite_db, nettype, result, block.tx_hashes.size());
+        oxen::sesh::transition_context context =
+                oxen::sesh::get_transition_context(nettype, height);
+        oxen::sesh::transition(context, *this, sqlite_db, nettype, result, block.tx_hashes.size());
         print_sns();
     }
 
     //
     // Remove expired blacklisted key images
-    // Starting at hf21, blacklist represents permanent stakes converted to SENT
+    // Starting at hf21, blacklist represents permanent stakes converted to SESH
     // and do not get removed.
     //
     TracyCZoneN(expire_blacklisted_key_images, "Expire blacklisted key images", true);
@@ -4874,7 +4874,7 @@ void service_node_list::validate_miner_tx(const cryptonote::miner_tx_info& info)
     //
     // Arbitrum (HF21+):
     // NULL | Blocks never have miner_txes at all.  Rewards are still accumulated in the batching
-    //        DB, but they now represent SENT values and are redeemed by getting a signed reward
+    //        DB, but they now represent SESH values and are redeemed by getting a signed reward
     //        balance to submit to the smart contract (and then pay out from there).
     //
     // NOTE: See cryptonote_tx_utils.cpp construct_miner_tx(...) for payment details.
@@ -6998,9 +6998,9 @@ service_node_list::hf21_transition_result service_node_list::hf21_dry_run(
     }
 
     block_add_result add_result = {};
-    oxen::sent::transition_context context =
-            oxen::sent::get_transition_context(nettype, state_copy.height);
-    oxen::sent::transition(context, state_copy, db_copy, nettype, add_result, /*block_tx_count=*/0);
+    oxen::sesh::transition_context context =
+            oxen::sesh::get_transition_context(nettype, state_copy.height);
+    oxen::sesh::transition(context, state_copy, db_copy, nettype, add_result, /*block_tx_count=*/0);
 
     service_node_list::hf21_transition_result result = {};
     result.sns_after = std::move(state_copy.service_nodes_infos);

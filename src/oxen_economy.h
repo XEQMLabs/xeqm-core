@@ -46,7 +46,7 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 //
 // -------------------------------------------------------------------------------------------------
 
-// Fixed (pre-SENT) OXEN staking requirement since HF16 (before that it was height dependent, see
+// Fixed (pre-SESH) OXEN staking requirement since HF16 (before that it was height dependent, see
 // service_node_rules.cpp):
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 15'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
@@ -56,12 +56,12 @@ inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// SENT staking requirement starting at HF20
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT = 25'000 * COIN;
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT_TESTNET = 20'000 * COIN;
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT_LOCALDEV = 20'000 * COIN;
+// SESH staking requirement starting at HF20
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 25'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 20'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 20'000 * COIN;
 
-// Initial SENT reward for the first few blocks of HF21 (before there are L2_REWARD_CONSENSUS_BLOCKS
+// Initial SESH reward for the first few blocks of HF21 (before there are L2_REWARD_CONSENSUS_BLOCKS
 // blocks to achieve reward consensus).  This value is based on a 40M initial reward pool with 15.1%
 // annual simple payout rate (= 14% compounding rate).
 inline constexpr uint64_t ETH_BLS_INITIAL_REWARD = 40000000'000000000 * 151 / 1000 / 365 / 720;

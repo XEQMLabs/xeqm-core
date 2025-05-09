@@ -1896,11 +1896,11 @@ bool tx_memory_pool::fill_block_template(
                                                 : reward_parts.base_miner;
         max_total_weight = 2 * median_weight - COINBASE_BLOB_RESERVED_SIZE;
     } else {  // HF21+
-        // Before SENT, there was the "full reward" limit (300kB) and then a hard limit of double
+        // Before SESH, there was the "full reward" limit (300kB) and then a hard limit of double
         // that (600kB), but over 300kB a quadratic penalty applied that reduced the miner (or pulse
         // leader) tx fee reward.
         //
-        // Under SENT we don't have any Oxen rewards to subtract *from* so all OXEN tx fees just get
+        // Under SESH we don't have any Oxen rewards to subtract *from* so all OXEN tx fees just get
         // burned and the 300kB block weight soft limit (before HF21) just becomes a hard limit.
         max_total_weight = BLOCK_GRANTED_FULL_REWARD_ZONE_V5 - COINBASE_BLOB_RESERVED_SIZE;
     }
@@ -1951,7 +1951,7 @@ bool tx_memory_pool::fill_block_template(
 
         block_reward_parts next_reward_parts = {};
         if (version < feature::ETH_BLS) {
-            // We don't check any of this under SENT because we simply have a hard limit that we
+            // We don't check any of this under SESH because we simply have a hard limit that we
             // can't exceed (see comment above).
 
             // NOTE: Calculate the next block reward for the block producer

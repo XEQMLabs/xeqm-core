@@ -519,7 +519,7 @@ struct service_node_keys {
     crypto::x25519_secret_key key_x25519;
     crypto::x25519_public_key pub_x25519;
 
-    /// BLS keypair of this service node, used for SENT registrations and interacting with the SENT
+    /// BLS keypair of this service node, used for SESH registrations and interacting with the SESH
     /// staking contract.
     eth::bls_secret_key key_bls;
     eth::bls_public_key pub_bls;
