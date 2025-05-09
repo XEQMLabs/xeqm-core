@@ -96,6 +96,7 @@ using namespace crypto;
 using namespace cryptonote;
 
 static auto logcat = log::Cat("blockchain");
+static auto logverify = log::Cat("verify");
 
 DISABLE_VS_WARNINGS(4267)
 
@@ -218,15 +219,11 @@ bool Blockchain::scan_outputkeys_for_indexes(
                     outputs,
                     true);
             if (absolute_offsets.size() != outputs.size()) {
-                log::error(
-                        log::Cat("verify"),
-                        "Output does not exist! amount = {}",
-                        tx_in_to_key.amount);
+                log::error(logverify, "Output does not exist! amount = {}", tx_in_to_key.amount);
                 return false;
             }
         } catch (...) {
-            log::error(
-                    log::Cat("verify"), "Output does not exist! amount = {}", tx_in_to_key.amount);
+            log::error(logverify, "Output does not exist! amount = {}", tx_in_to_key.amount);
             return false;
         }
     } else {
@@ -249,16 +246,11 @@ bool Blockchain::scan_outputkeys_for_indexes(
                         true);
                 if (add_offsets.size() != add_outputs.size()) {
                     log::error(
-                            log::Cat("verify"),
-                            "Output does not exist! amount = {}",
-                            tx_in_to_key.amount);
+                            logverify, "Output does not exist! amount = {}", tx_in_to_key.amount);
                     return false;
                 }
             } catch (...) {
-                log::error(
-                        log::Cat("verify"),
-                        "Output does not exist! amount = {}",
-                        tx_in_to_key.amount);
+                log::error(logverify, "Output does not exist! amount = {}", tx_in_to_key.amount);
                 return false;
             }
             outputs.insert(outputs.end(), add_outputs.begin(), add_outputs.end());
@@ -282,7 +274,7 @@ bool Blockchain::scan_outputkeys_for_indexes(
                             output_index.pubkey,
                             output_index.commitment)) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Failed to handle_output for output no = {}, with absolute offset {}",
                             count,
                             i);
@@ -290,7 +282,7 @@ bool Blockchain::scan_outputkeys_for_indexes(
                 }
             } catch (...) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Output does not exist! amount = {}, absolute_offset = {}",
                         tx_in_to_key.amount,
                         i);
@@ -307,10 +299,10 @@ bool Blockchain::scan_outputkeys_for_indexes(
             }
 
         } catch (const OUTPUT_DNE& e) {
-            log::error(log::Cat("verify"), "Output does not exist: {}", e.what());
+            log::error(logverify, "Output does not exist: {}", e.what());
             return false;
         } catch (const TX_DNE& e) {
-            log::error(log::Cat("verify"), "Transaction does not exist: {}", e.what());
+            log::error(logverify, "Transaction does not exist: {}", e.what());
             return false;
         }
     }
@@ -1647,7 +1639,7 @@ bool Blockchain::prevalidate_block_rewards(const block& b, uint64_t height, hf h
         txversion max_version = transaction::get_min_version_for_hf(hf_version);
         if (miner_tx.version < min_version || miner_tx.version > max_version) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Coinbase invalid version: {} for hardfork: {} min/max version: {}/{}",
                     miner_tx.version,
                     static_cast<int>(hf_version),
@@ -1692,7 +1684,7 @@ bool Blockchain::validate_block_rewards(
     if (b.major_version >= feature::ETH_BLS) {
         if (b.miner_tx) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Invalid block: HF {} blocks must not have a miner tx",
                     static_cast<int>(b.major_version));
             return false;
@@ -1710,7 +1702,7 @@ bool Blockchain::validate_block_rewards(
 
         if (b.l2_reward > max_l2r || b.l2_reward < min_l2r) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "block has invalid l2_reward {} not in [{}, {}]",
                     print_money(b.l2_reward),
                     print_money(min_l2r),
@@ -1722,7 +1714,7 @@ bool Blockchain::validate_block_rewards(
         // height, which is the minimum of the last 15 blocks.
         if (auto expected_reward = eth_consensus_reward(height); b.reward != expected_reward) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "block reward for height {} is incorrect; block has {} but expected {}",
                     height,
                     print_money(b.reward),
@@ -1735,7 +1727,7 @@ bool Blockchain::validate_block_rewards(
 
     if (!b.miner_tx) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Invalid block: HF {} blocks must have a miner tx",
                 static_cast<int>(b.major_version));
         return false;
@@ -1744,7 +1736,7 @@ bool Blockchain::validate_block_rewards(
     // validate reward
     uint64_t const money_in_use = get_outs_money_amount(b.miner_tx);
     if (b.miner_tx && b.miner_tx->vout.size() == 0 && b.major_version < hf::hf19_reward_batching) {
-        log::error(log::Cat("verify"), "miner tx has no outputs");
+        log::error(logverify, "miner tx has no outputs");
         return false;
     }
 
@@ -1761,7 +1753,7 @@ bool Blockchain::validate_block_rewards(
     block_reward_context.fee = fee;
     block_reward_context.height = height;
     if (!calc_batched_governance_reward(height, block_reward_context.batched_governance)) {
-        log::error(log::Cat("verify"), "Failed to calculate batched governance reward");
+        log::error(logverify, "Failed to calculate batched governance reward");
         return false;
     }
 
@@ -1802,7 +1794,7 @@ bool Blockchain::validate_block_rewards(
         version < hf::hf19_reward_batching) {
         if (version >= hf::hf10_bulletproofs && reward_parts.governance_paid == 0) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Governance reward should not be 0 after hardfork v10 if this height has a "
                     "governance output because it is the batched payout height");
             return false;
@@ -1810,7 +1802,7 @@ bool Blockchain::validate_block_rewards(
 
         if (b.miner_tx->vout.back().amount != reward_parts.governance_paid) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Governance reward amount incorrect.  Should be: {}, is: {}",
                     print_money(reward_parts.governance_paid),
                     print_money(b.miner_tx->vout.back().amount));
@@ -1823,7 +1815,7 @@ bool Blockchain::validate_block_rewards(
                     b.miner_tx->vout.size() - 1,
                     std::get<txout_to_key>(b.miner_tx->vout.back().target).key,
                     m_nettype)) {
-            log::error(log::Cat("verify"), "Governance reward public key incorrect.");
+            log::error(logverify, "Governance reward public key incorrect.");
             return false;
         }
     }
@@ -1847,7 +1839,7 @@ bool Blockchain::validate_block_rewards(
 
     if (money_in_use > max_money_in_use) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "coinbase transaction spends too much money ({}). Maximum block reward is {} (= {} "
                 "base + {} fees)",
                 print_money(money_in_use),
@@ -1865,7 +1857,7 @@ bool Blockchain::validate_block_rewards(
     } else {  // HF19-20
         if (b.reward != reward_parts.miner_fee + reward_parts.service_node_total) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "block reward for batching is incorrect: {} != {} ({} SN + {} tx fees)",
                     print_money(b.reward),
                     print_money(reward_parts.miner_fee + reward_parts.service_node_total),
@@ -2478,7 +2470,7 @@ bool Blockchain::handle_alternative_block(
     if (!(parent_in_main || parent_in_alt)) {
         bvc.m_marked_as_orphaned = true;
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Block recognized as orphaned and rejected, id = {}, height {}, parent in alt {}, "
                 "parent in main {} (parent {}, current top {}, chain height {})",
                 id,
@@ -2518,7 +2510,7 @@ bool Blockchain::handle_alternative_block(
     // (not earlier than the median of the last X blocks in the built alt chain)
     if (!check_block_timestamp(std::move(timestamps), b)) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Block with id: {} for alternative chain, has invalid timestamp: {}",
                 id,
                 b.timestamp);
@@ -2582,7 +2574,7 @@ bool Blockchain::handle_alternative_block(
                 cryptonote::transaction tx;
                 if (!cryptonote::parse_and_validate_tx_base_from_blob(blob, tx)) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Block with id: {} (as alternative) refers to unparsable transaction "
                             "hash {}.",
                             id,
@@ -2654,7 +2646,7 @@ bool Blockchain::handle_alternative_block(
             std::string blob;
             if (!tx_pool.get_transaction(missed_tx, blob)) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Alternative block references unknown TX, rejected alt block {} {}",
                         blk_height,
                         id);
@@ -2664,7 +2656,7 @@ bool Blockchain::handle_alternative_block(
             transaction tx;
             if (!parse_and_validate_tx_from_blob(blob, tx)) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Failed to parse block blob from tx pool when querying the missed "
                         "transactions in block {} {}",
                         blk_height,
@@ -3902,9 +3894,7 @@ bool Blockchain::get_tx_outputs_gindexs(
     uint64_t tx_index;
     if (!m_db->tx_exists(tx_id, tx_index)) {
         log::error(
-                log::Cat("verify"),
-                "get_tx_outputs_gindexs failed to find transaction with id = {}",
-                tx_id);
+                logverify, "get_tx_outputs_gindexs failed to find transaction with id = {}", tx_id);
         return false;
     }
     indexs = m_db->get_tx_amount_output_indices(tx_index, n_txes);
@@ -3920,9 +3910,7 @@ bool Blockchain::get_tx_outputs_gindexs(
     uint64_t tx_index;
     if (!m_db->tx_exists(tx_id, tx_index)) {
         log::error(
-                log::Cat("verify"),
-                "get_tx_outputs_gindexs failed to find transaction with id = {}",
-                tx_id);
+                logverify, "get_tx_outputs_gindexs failed to find transaction with id = {}", tx_id);
         return false;
     }
     std::vector<std::vector<uint64_t>> indices = m_db->get_tx_amount_output_indices(tx_index, 1);
@@ -4045,7 +4033,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
     if (hf_version < hf::hf10_bulletproofs) {
         const bool bulletproof = rct::is_rct_bulletproof(tx.rct_signatures.type);
         if (bulletproof || !tx.rct_signatures.p.bulletproofs.empty()) {
-            log::error(log::Cat("verify"), "Bulletproofs are not allowed before v10");
+            log::error(logverify, "Bulletproofs are not allowed before v10");
             tvc.m_invalid_output = true;
             return false;
         }
@@ -4055,7 +4043,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
         // here:
         if (auto hf10_height = hard_fork_begins(m_nettype, hf::hf10_bulletproofs);
             hf10_height && height > *hf10_height) {
-            log::error(log::Cat("verify"), "Borromean range proofs are not allowed after v10");
+            log::error(logverify, "Borromean range proofs are not allowed after v10");
             tvc.m_invalid_output = true;
             return false;
         }
@@ -4064,7 +4052,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
     if (hf_version < feature::SMALLER_BP) {
         if (tx.rct_signatures.type == rct::RCTType::Bulletproof2) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Ringct type {} is not allowed before v{}",
                     (unsigned)rct::RCTType::Bulletproof2,
                     static_cast<int>(feature::SMALLER_BP));
@@ -4077,7 +4065,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
         if (tx.version >= txversion::v4_tx_types && tx.is_transfer()) {
             if (tx.rct_signatures.type == rct::RCTType::Bulletproof) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Ringct type {} is not allowed after v{}",
                         (unsigned)rct::RCTType::Bulletproof,
                         static_cast<int>(feature::SMALLER_BP));
@@ -4092,7 +4080,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
         if (tx.version >= txversion::v4_tx_types && tx.is_transfer()) {
             if (tx.rct_signatures.type == rct::RCTType::CLSAG) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Ringct type {} is not allowed before v{}",
                         (unsigned)rct::RCTType::CLSAG,
                         static_cast<int>(feature::CLSAG));
@@ -4110,7 +4098,7 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
         (hf_version > feature::CLSAG ||
          height >= 10 + *hard_fork_begins(m_nettype, feature::CLSAG))) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Ringct type {} is not allowed from v{}",
                 (unsigned)tx.rct_signatures.type,
                 static_cast<int>(feature::CLSAG));
@@ -4244,7 +4232,7 @@ bool Blockchain::check_tx_inputs(
         if (tvc.m_invalid_version || tvc.m_invalid_type) {
             if (tvc.m_invalid_version)
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "TX Invalid version: {} for hardfork: {} min/max version: {}/{}",
                         tx.version,
                         (int)hf_version,
@@ -4252,7 +4240,7 @@ bool Blockchain::check_tx_inputs(
                         max_version);
             if (tvc.m_invalid_type)
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "TX Invalid type: {} for hardfork: {} max type: {}",
                         tx.type,
                         (int)hf_version,
@@ -4273,7 +4261,7 @@ bool Blockchain::check_tx_inputs(
         if (tx.type != txtype::oxen_name_system && !std::holds_alternative<txin_gen>(tx.vin[0]) &&
             hf_version >= feature::MIN_2_OUTPUTS && tx.vout.size() < 2) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Tx {} has fewer than two outputs, which is not allowed as of hardfork {}",
                     get_transaction_hash(tx),
                     static_cast<int>(feature::MIN_2_OUTPUTS));
@@ -4309,7 +4297,7 @@ bool Blockchain::check_tx_inputs(
                 // Mixin Check, from hard fork 7, we require mixin at least 9, always.
                 if (in_to_key.key_offsets.size() - 1 != cryptonote::TX_OUTPUT_DECOYS) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Tx {} has incorrect ring size: {} expected: {}",
                             get_transaction_hash(tx),
                             in_to_key.key_offsets.size() - 1,
@@ -4322,7 +4310,7 @@ bool Blockchain::check_tx_inputs(
                 {
                     if (last_key_image &&
                         memcmp(&in_to_key.k_image, last_key_image, sizeof(*last_key_image)) >= 0) {
-                        log::error(log::Cat("verify"), "transaction has unsorted inputs");
+                        log::error(logverify, "transaction has unsorted inputs");
                         tvc.m_verifivation_failed = true;
                         return false;
                     }
@@ -4331,7 +4319,7 @@ bool Blockchain::check_tx_inputs(
 
                 if (have_tx_keyimg_as_spent(in_to_key.k_image)) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Key image already spent in blockchain: {}",
                             in_to_key.k_image);
                     if (key_image_conflicts)
@@ -4350,7 +4338,7 @@ bool Blockchain::check_tx_inputs(
                             pubkeys[sig_index],
                             pmax_used_block_height)) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Failed to check ring signature for tx {} vin key with k_image: {} "
                             "sig_index: {}",
                             get_transaction_hash(tx),
@@ -4360,7 +4348,7 @@ bool Blockchain::check_tx_inputs(
                                                  // Blockchain::handle_block_to_main_chain()
                     {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "  *pmax_used_block_height: {}",
                                 *pmax_used_block_height);
                     }
@@ -4379,7 +4367,7 @@ bool Blockchain::check_tx_inputs(
                         entry.key_image)  // Check if key image is on the blacklist
                     {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Key image: {} is blacklisted by the service node network",
                                 entry.key_image);
                         tvc.m_key_image_blacklisted = true;
@@ -4391,7 +4379,7 @@ bool Blockchain::check_tx_inputs(
                     uint64_t unlock_height = 0;
                     if (service_node_list.is_key_image_locked(in_to_key.k_image, &unlock_height)) {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Key image: {} is locked in a stake until height: {}",
                                 in_to_key.k_image,
                                 unlock_height);
@@ -4410,7 +4398,7 @@ bool Blockchain::check_tx_inputs(
         }
 
         if (!expand_transaction_2(tx, tx_prefix_hash, pubkeys)) {
-            log::error(log::Cat("verify"), "Failed to expand rct signatures!");
+            log::error(logverify, "Failed to expand rct signatures!");
             return false;
         }
 
@@ -4422,7 +4410,7 @@ bool Blockchain::check_tx_inputs(
             case rct::RCTType::Null: {
                 // we only accept no signatures for coinbase txes
                 if (!tx.is_miner_tx()) {
-                    log::error(log::Cat("verify"), "Null rct signature on non-coinbase tx");
+                    log::error(logverify, "Null rct signature on non-coinbase tx");
                     return false;
                 }
                 break;
@@ -4435,7 +4423,7 @@ bool Blockchain::check_tx_inputs(
                 {
                     if (pubkeys.size() != rv.mixRing.size()) {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Failed to check ringct signatures: mismatched pubkeys/mixRing "
                                 "size");
                         return false;
@@ -4443,7 +4431,7 @@ bool Blockchain::check_tx_inputs(
                     for (size_t i = 0; i < pubkeys.size(); ++i) {
                         if (pubkeys[i].size() != rv.mixRing[i].size()) {
                             log::error(
-                                    log::Cat("verify"),
+                                    logverify,
                                     "Failed to check ringct signatures: mismatched pubkeys/mixRing "
                                     "size");
                             return false;
@@ -4454,7 +4442,7 @@ bool Blockchain::check_tx_inputs(
                         for (size_t m = 0; m < pubkeys[n].size(); ++m) {
                             if (pubkeys[n][m].dest != rct::rct2pk(rv.mixRing[n][m].dest)) {
                                 log::error(
-                                        log::Cat("verify"),
+                                        logverify,
                                         "Failed to check ringct signatures: mismatched pubkey at "
                                         "vin {}, index {}",
                                         n,
@@ -4463,7 +4451,7 @@ bool Blockchain::check_tx_inputs(
                             }
                             if (pubkeys[n][m].mask != rct::rct2pk(rv.mixRing[n][m].mask)) {
                                 log::error(
-                                        log::Cat("verify"),
+                                        logverify,
                                         "Failed to check ringct signatures: mismatched commitment "
                                         "at vin {}, index {}",
                                         n,
@@ -4478,7 +4466,7 @@ bool Blockchain::check_tx_inputs(
                         rv.type == rct::RCTType::CLSAG ? rv.p.CLSAGs.size() : rv.p.MGs.size();
                 if (n_sigs != tx.vin.size()) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Failed to check ringct signatures: mismatched MGs/vin sizes");
                     return false;
                 }
@@ -4494,14 +4482,14 @@ bool Blockchain::check_tx_inputs(
                                        32);
                     if (error) {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Failed to check ringct signatures: mismatched key image");
                         return false;
                     }
                 }
 
                 if (!rct::verRctNonSemanticsSimple(rv)) {
-                    log::error(log::Cat("verify"), "Failed to check ringct signatures!");
+                    log::error(logverify, "Failed to check ringct signatures!");
                     return false;
                 }
                 break;
@@ -4516,7 +4504,7 @@ bool Blockchain::check_tx_inputs(
                         size_matches &= pubkeys.size() == rv.mixRing[i].size();
                     if (!size_matches) {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Failed to check ringct signatures: mismatched pubkeys/mixRing "
                                 "size");
                         return false;
@@ -4526,7 +4514,7 @@ bool Blockchain::check_tx_inputs(
                         for (size_t m = 0; m < pubkeys[n].size(); ++m) {
                             if (pubkeys[n][m].dest != rct::rct2pk(rv.mixRing[m][n].dest)) {
                                 log::error(
-                                        log::Cat("verify"),
+                                        logverify,
                                         "Failed to check ringct signatures: mismatched pubkey at "
                                         "vin {}, index {}",
                                         n,
@@ -4535,7 +4523,7 @@ bool Blockchain::check_tx_inputs(
                             }
                             if (pubkeys[n][m].mask != rct::rct2pk(rv.mixRing[m][n].mask)) {
                                 log::error(
-                                        log::Cat("verify"),
+                                        logverify,
                                         "Failed to check ringct signatures: mismatched commitment "
                                         "at vin {}, index {}",
                                         n,
@@ -4547,34 +4535,32 @@ bool Blockchain::check_tx_inputs(
                 }
 
                 if (rv.p.MGs.size() != 1) {
-                    log::error(
-                            log::Cat("verify"), "Failed to check ringct signatures: Bad MGs size");
+                    log::error(logverify, "Failed to check ringct signatures: Bad MGs size");
                     return false;
                 }
                 if (rv.p.MGs.empty() || rv.p.MGs[0].II.size() != tx.vin.size()) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Failed to check ringct signatures: mismatched II/vin sizes");
                     return false;
                 }
                 for (size_t n = 0; n < tx.vin.size(); ++n) {
                     if (memcmp(&std::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.MGs[0].II[n], 32)) {
                         log::error(
-                                log::Cat("verify"),
+                                logverify,
                                 "Failed to check ringct signatures: mismatched II/vin sizes");
                         return false;
                     }
                 }
 
                 if (!rct::verRct(rv, false)) {
-                    log::error(log::Cat("verify"), "Failed to check ringct signatures!");
+                    log::error(logverify, "Failed to check ringct signatures!");
                     return false;
                 }
                 break;
             }
             default:
-                log::error(
-                        log::Cat("verify"), "{}: Unsupported rct type: {}", __func__, (int)rv.type);
+                log::error(logverify, "{}: Unsupported rct type: {}", __func__, (int)rv.type);
                 return false;
         }
 
@@ -4582,8 +4568,7 @@ bool Blockchain::check_tx_inputs(
         if (rct::is_rct_bulletproof(rv.type) && hf_version < hf::hf10_bulletproofs) {
             for (const rct::Bulletproof& proof : rv.p.bulletproofs) {
                 if (proof.V.size() > 1 && !hack::test_suite_permissive_txes) {
-                    log::error(
-                            log::Cat("verify"), "Multi output bulletproofs are invalid before v10");
+                    log::error(logverify, "Multi output bulletproofs are invalid before v10");
                     return false;
                 }
             }
@@ -4594,7 +4579,7 @@ bool Blockchain::check_tx_inputs(
             std::string fail_reason;
             if (!m_ons_db.validate_ons_tx(
                         hf_version, get_current_blockchain_height(), tx, data, &fail_reason)) {
-                log::error(log::Cat("verify"), "Failed to validate ONS TX reason: {}", fail_reason);
+                log::error(logverify, "Failed to validate ONS TX reason: {}", fail_reason);
                 tvc.m_verbose_error = std::move(fail_reason);
                 return false;
             }
@@ -4611,25 +4596,19 @@ bool Blockchain::check_tx_inputs(
         if (tx.rct_signatures.txnFee != 0) {
             tvc.m_invalid_input = true;
             tvc.m_verifivation_failed = true;
-            log::error(log::Cat("verify"), "TX type: {} should have 0 fee!", tx.type);
+            log::error(logverify, "TX type: {} should have 0 fee!", tx.type);
             return false;
         }
 
         if (is_l2_event_tx(tx.type)) {
             if (!eth::validate_event_tx(tx.type, hf_version, tx, &tvc.m_verbose_error)) {
-                log::error(
-                        log::Cat("verify"),
-                        "Failed to validate {} TX: {}",
-                        tx.type,
-                        tvc.m_verbose_error);
+                log::error(logverify, "Failed to validate {} TX: {}", tx.type, tvc.m_verbose_error);
                 return false;
             }
         } else if (tx.type == txtype::state_change) {
             tx_extra_service_node_state_change state_change;
             if (!get_service_node_state_change_from_tx_extra(tx.extra, state_change, hf_version)) {
-                log::error(
-                        log::Cat("verify"),
-                        "TX did not have the state change metadata in the tx_extra");
+                log::error(logverify, "TX did not have the state change metadata in the tx_extra");
                 return false;
             }
 
@@ -4637,8 +4616,7 @@ bool Blockchain::check_tx_inputs(
                     service_nodes::quorum_type::obligations, state_change.block_height);
             if (!quorum) {
                 log::error(
-                        log::Cat("verify"),
-                        "could not get obligations quorum for recent state change tx");
+                        logverify, "could not get obligations quorum for recent state change tx");
                 return false;
             }
 
@@ -4648,7 +4626,7 @@ bool Blockchain::check_tx_inputs(
                 // less serious ones like state change heights slightly outside of allowed bounds:
                 // tvc.m_verifivation_failed = true;
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "tx: {}, state change tx could not be completely verified reason: {}",
                         get_transaction_hash(tx),
                         print_vote_verification_context(tvc.m_vote_ctx));
@@ -4666,7 +4644,7 @@ bool Blockchain::check_tx_inputs(
                             {state_change_service_node_pubkey});
             if (service_node_array.empty()) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Service Node no longer exists on the network, state change can be "
                         "ignored");
                 return hf_version < hf::hf12_checkpointing;  // NOTE: Used to be allowed pre HF12.
@@ -4676,7 +4654,7 @@ bool Blockchain::check_tx_inputs(
             if (!service_node_info.can_transition_to_state(
                         hf_version, state_change.block_height, state_change.state)) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "State change trying to vote Service Node into the same state is invalid "
                         "(expired, already applied, or impossible)");
                 tvc.m_double_spend = true;
@@ -4694,7 +4672,7 @@ bool Blockchain::check_tx_inputs(
             if (!service_node_list.is_key_image_locked(
                         unlock.key_image, &unlock_height, &contribution)) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Requested key image: {} to unlock is not locked",
                         unlock.key_image);
                 tvc.m_invalid_input = true;
@@ -4720,7 +4698,7 @@ bool Blockchain::check_tx_inputs(
             }
         } else {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Unhandled tx type: {} rejecting tx: {}",
                     tx.type,
                     get_transaction_hash(tx));
@@ -4890,7 +4868,7 @@ bool Blockchain::check_fee(
 
     if (fee < needed_fee) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "transaction fee is not enough: {}, minimum fee: {}",
                 print_money(fee),
                 print_money(needed_fee));
@@ -4901,7 +4879,7 @@ bool Blockchain::check_fee(
         uint64_t need_burned = opts.burn_fixed + base_miner_fee * opts.burn_percent / 100;
         if (burned < need_burned) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "transaction burned fee is not enough: {}, minimum fee: {}",
                     print_money(burned),
                     print_money(need_burned));
@@ -4998,7 +4976,7 @@ bool Blockchain::check_tx_input(
             // check tx unlock time
             if (!m_bch.is_output_spendtime_unlocked(unlock_time)) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "One of outputs for one of inputs has wrong tx.unlock_time = {}",
                         unlock_time);
                 return false;
@@ -5020,7 +4998,7 @@ bool Blockchain::check_tx_input(
     outputs_visitor vi(output_keys, *this);
     if (!scan_outputkeys_for_indexes(txin, vi, tx_prefix_hash, pmax_related_block_height)) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Failed to get output keys for tx with amount = {} and count indixes {}",
                 print_money(txin.amount),
                 txin.key_offsets.size());
@@ -5029,7 +5007,7 @@ bool Blockchain::check_tx_input(
 
     if (txin.key_offsets.size() != output_keys.size()) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Output keys for tx with amount = {} and count indexes {} returned wrong keys "
                 "count {}",
                 txin.amount,
@@ -5056,7 +5034,7 @@ bool Blockchain::check_block_timestamp(
 
     if (b.timestamp < median_ts) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Timestamp of block with id: {}, {}, less than median of last {} blocks, {}",
                 get_block_hash(b),
                 b.timestamp,
@@ -5080,7 +5058,7 @@ bool Blockchain::check_block_timestamp(const block& b, uint64_t& median_ts) cons
     uint64_t cryptonote_block_future_time_limit = old::BLOCK_FUTURE_TIME_LIMIT_V2;
     if (b.timestamp > get_adjusted_time() + cryptonote_block_future_time_limit) {
         log::error(
-                log::Cat("verify"),
+                logverify,
                 "Timestamp of block with id: {}, {}, bigger than adjusted time + 2 hours",
                 get_block_hash(b),
                 b.timestamp);
@@ -5202,7 +5180,7 @@ Blockchain::block_pow_verified Blockchain::verify_block_pow(
             if (expected_hash) {
                 if (blk_hash != expected_hash) {
                     log::error(
-                            log::Cat("verify"),
+                            logverify,
                             "Block with id is INVALID: {}, expected {}",
                             blk_hash,
                             expected_hash);
@@ -5213,7 +5191,7 @@ Blockchain::block_pow_verified Blockchain::verify_block_pow(
                 result.per_block_checkpointed = true;
             } else {
                 log::info(
-                        log::Cat("verify"),
+                        logverify,
                         "No pre-validated hash at height {}, verifying fully",
                         chain_height);
             }
@@ -5261,7 +5239,7 @@ bool Blockchain::basic_block_checks(cryptonote::block const& blk, bool alt_block
     if (alt_block) {
         if (blk.get_height() == 0) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Block with id: {} (as alternative), but miner tx says height is 0.",
                     blk_hash);
             return false;
@@ -5269,7 +5247,7 @@ bool Blockchain::basic_block_checks(cryptonote::block const& blk, bool alt_block
 
         if (!m_checkpoints.is_alternative_block_allowed(chain_height, blk_height, nullptr)) {
             log::error(
-                    log::Cat("verify"),
+                    logverify,
                     "Block with id: {} can't be accepted for alternative chain, block height: {}, "
                     "chain height: {}",
                     blk_hash,
@@ -5581,7 +5559,7 @@ bool Blockchain::handle_block_to_main_chain(
                         tx_index,
                         m_blocks_txs_check.size());
                 for (const auto& h : m_blocks_txs_check)
-                    log::error(log::Cat("verify"), "  {}", h);
+                    log::error(logverify, "  {}", h);
                 return false;
             }
         }
@@ -5592,14 +5570,14 @@ bool Blockchain::handle_block_to_main_chain(
             if (tx_index >= m_blocks_txs_check.size() ||
                 memcmp(&m_blocks_txs_check[tx_index++], &tx_id, sizeof(tx_id)) != 0) {
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Block with id: {} has at least one transaction (id: {}) with wrong "
                         "inputs.",
                         id,
                         tx_id);
                 add_block_as_invalid(bl);
                 log::error(
-                        log::Cat("verify"),
+                        logverify,
                         "Block with id {} added as invalid because of wrong inputs in transactions",
                         id);
                 return false;
@@ -6488,7 +6466,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
 
         for (const auto& tx_blob : entry.txs) {
             if (tx_index >= txes.size()) {
-                log::error(log::Cat("verify"), "tx_index is out of sync");
+                log::error(logverify, "tx_index is out of sync");
                 m_scan_table.clear();
                 return false;
             }
@@ -6497,24 +6475,20 @@ bool Blockchain::prepare_handle_incoming_blocks(
             ++tx_index;
 
             if (!parse_and_validate_tx_base_from_blob(tx_blob, tx)) {
-                log::error(log::Cat("verify"), "Could not parse tx from incoming blocks");
+                log::error(logverify, "Could not parse tx from incoming blocks");
                 m_scan_table.clear();
                 return false;
             }
             cryptonote::get_transaction_prefix_hash(tx, tx_prefix_hash);
 
-            auto its = m_scan_table.find(tx_prefix_hash);
-            if (its != m_scan_table.end()) {
-                log::error(log::Cat("verify"), "Duplicate tx found from incoming blocks.");
+            auto [its, ins] = m_scan_table.emplace(
+                    tx_prefix_hash,
+                    std::unordered_map<crypto::key_image, std::vector<output_data_t>>{});
+            if (!ins) {
+                log::error(logverify, "Duplicate tx found from incoming blocks.");
                 m_scan_table.clear();
                 return false;
             }
-
-            m_scan_table.emplace(
-                    tx_prefix_hash,
-                    std::unordered_map<crypto::key_image, std::vector<output_data_t>>());
-            its = m_scan_table.find(tx_prefix_hash);
-            assert(its != m_scan_table.end());
 
             // check all tx.vin(s)
             if (!tx.is_miner_tx()) {
@@ -6524,9 +6498,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
                     // check for duplicate
                     auto it = its->second.find(in_to_key.k_image);
                     if (it != its->second.end()) {
-                        log::error(
-                                log::Cat("verify"),
-                                "Duplicate key_image found from incoming blocks.");
+                        log::error(logverify, "Duplicate key_image found from incoming blocks.");
                         m_scan_table.clear();
                         return false;
                     }
@@ -6551,7 +6523,7 @@ bool Blockchain::prepare_handle_incoming_blocks(
         constexpr uint64_t amount{0};
         m_db->get_output_key(epee::span<const uint64_t>(&amount, 1), offsets, txs, true);
     } catch (const std::exception& e) {
-        log::error(log::Cat("verify"), "EXCEPTION: {}", e.what());
+        log::error(logverify, "EXCEPTION: {}", e.what());
     } catch (...) {
     }
 
@@ -6563,17 +6535,15 @@ bool Blockchain::prepare_handle_incoming_blocks(
 
         for (const auto& tx_blob : entry.txs) {
             if (tx_index >= txes.size()) {
-                log::error(log::Cat("verify"), "tx_index is out of sync");
+                log::error(logverify, "tx_index is out of sync");
                 m_scan_table.clear();
                 return false;
             }
-            const transaction& tx = txes[tx_index].first;
-            const crypto::hash& tx_prefix_hash = txes[tx_index].second;
-            ++tx_index;
+            const auto& [tx, tx_prefix_hash] = txes[tx_index++];
 
             auto its = m_scan_table.find(tx_prefix_hash);
             if (its == m_scan_table.end()) {
-                log::error(log::Cat("verify"), "Tx not found on scan table from incoming blocks.");
+                log::error(logverify, "Tx not found on scan table from incoming blocks.");
                 m_scan_table.clear();
                 return false;
             }
