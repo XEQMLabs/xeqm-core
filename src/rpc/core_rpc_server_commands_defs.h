@@ -2180,7 +2180,7 @@ struct GET_SERVICE_NODE_STATUS : NO_ARGS {
 ///   communicating service nodes that have been removed from the contract.  Once confirmed, these
 ///   also remove and unlock contributors' stakes.  Each element contains fields:
 ///   - `bls_pubkey` -- BLS pubkey of the node removed from the smart contract
-///   - `returned_amount` -- amount of SENT that is returned to contributors.  For normal unlocks
+///   - `returned_amount` -- amount of SESH that is returned to contributors.  For normal unlocks
 ///     (i.e. nodes that completed an unlock without getting deregistered) this is the full service
 ///     node stake; for deregistrations this will have a small penalty removed (which is incurred by
 ///     the operator in the returned stakes).
@@ -2200,9 +2200,9 @@ struct GET_SERVICE_NODE_STATUS : NO_ARGS {
 ///   the rare event that the staking requirement in the contract is changing; it is rare to see
 ///   this non-empty at all, and rarer still to see multiple events in it.  Each element contains
 ///   fields:
-///   - `new_staking_requirement` -- the new staking requirement, in atomic SENT.
+///   - `new_staking_requirement` -- the new staking requirement, in atomic SESH.
 ///   - `current_staking_requirement` -- the current oxen chain staking requirement (at the time of
-///     the rpc call), in atomic SENT.
+///     the rpc call), in atomic SESH.
 ///   - common fields (see below)
 ///
 /// - SN info fields, included for events including a BLS public key (basically everything except
@@ -2254,8 +2254,8 @@ struct GET_PENDING_EVENTS : PUBLIC {
 /// RPC: blockchain/get_accrued_rewards
 ///
 /// Retrieve the current "balance" of accrued service node rewards for the given addresses.  Before
-/// SENT, the returned balances are accumulated OXEN amounts to go into the next reward payout;
-/// after SENT these are the lifetime earnings of the given address.
+/// SESH, the returned balances are accumulated OXEN amounts to go into the next reward payout;
+/// after SESH these are the lifetime earnings of the given address.
 ///
 /// Inputs:
 ///  - `addresses` -- a set of addresses about which to query.  If omitted/empty then all addresses

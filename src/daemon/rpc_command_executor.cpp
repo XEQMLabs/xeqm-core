@@ -2376,7 +2376,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
         return false;
     } else if (hf_version == cryptonote::feature::ETH_TRANSITION) {
         tools::fail_msg_writer(
-                "Error: New SN registrations are disabled during OXEN->SENT transition");
+                "Error: New SN registrations are disabled during OXEN->SESH transition");
         return false;
     } else if (hf_version >= cryptonote::feature::ETH_BLS) {
         tools::fail_msg_writer(

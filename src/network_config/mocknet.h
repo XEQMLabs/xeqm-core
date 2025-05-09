@@ -12,7 +12,7 @@ namespace eth {
 struct address;
 };
 
-namespace oxen::sent {
+namespace oxen::sesh {
 struct transition_context;
 };
 
@@ -36,7 +36,7 @@ void mocknet_replace_quorum_with_mock_nodes(
 void mocknet_inject_nodes(uint8_t nettype, void* snl_state_ptr, uint8_t hf_version);
 void mocknet_push_mock_pulse_block(cryptonote::core& core);
 bool mocknet_is_mock_ethereum_address(const eth::address& addr);
-void mocknet_get_transition_context(oxen::sent::transition_context& context);
+void mocknet_get_transition_context(oxen::sesh::transition_context& context);
 #else
 #define mocknet_add_cli_arg(...)
 #define mocknet_read_cli_for_mocknet_arg(...) true
