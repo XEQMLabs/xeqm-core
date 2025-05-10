@@ -113,24 +113,27 @@ def print_migration():
 """#include <oxenc/hex.h>
 
 #include <cstdint>
-#include <string>
+#include <string_view>
 #include <unordered_map>
 
-#include "common/guts.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
+#include "crypto/literals.h"
 #include "detail.h"
 
 namespace oxen::sent::mainnet {
 
 using namespace std::literals;
+using namespace crypto::literals;
 
-const std::unordered_map<std::string, eth::address> addresses{
+// clang-format off
+
+const std::unordered_map<std::string_view, eth::address> addresses{
 """)
         print("Printing C++ for oxen -> eth mapping\n")
-        for addr in addresses:
-            if len(addresses[addr]):
-                to_write = f"{{\"{addr}\"s, tools::make_from_hex_guts<eth::address>(\"{addresses[addr]}\"s)}},\n"
+        for addr, eth in sorted(addresses.items()):
+            if len(eth):
+                to_write = f'    {{"{addr}"sv, "{eth}"_eth}},\n'
                 print(to_write, end="")
                 f.write(to_write)
         print("")
@@ -141,8 +144,8 @@ const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_
 """)
 
         print("Printing C++ for monero key -> ed25519 key mapping\n")
-        for monero_key in edkey_map:
-            to_write = f"{{tools::make_from_hex_guts<crypto::public_key>(\"{monero_key}\"s), tools::make_from_hex_guts<crypto::ed25519_public_key>(\"{edkey_map[monero_key]}\"s)}},\n"
+        for monero_key, ed_key in sorted(edkey_map.items()):
+            to_write = f'    {{"{monero_key}"_pk, "{ed_key}"_edpk}},\n'
             print(to_write, end="")
             f.write(to_write)
         print("")
@@ -153,8 +156,8 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
 """)
 
         print("Printing C++ for ed -> bls mapping\n")
-        for edkey in bls_map:
-            to_write = f"{{tools::make_from_hex_guts<crypto::ed25519_public_key>(\"{edkey}\"s), tools::make_from_hex_guts<eth::bls_public_key>(\"{bls_map[edkey]}\"s)}},"
+        for edkey, blskey in sorted(bls_map.items()):
+            to_write = f'    {{"{edkey}"_edpk, "{blskey}"_blspk}},\n'
             print(to_write, end="")
             f.write(to_write)
         print("")
@@ -164,15 +167,18 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
         f.write("\nconst std::unordered_map<eth::address, std::uint64_t> transition_bonus{\n")
 
         print("Printing C++ for transition bonus\n")
-        for addr in transition_bonus:
-            to_write = f"{{tools::make_from_hex_guts<eth::address>(\"{addr}\"s), {transition_bonus[addr]}}},"
+        for addr, amt in sorted(transition_bonus.items(), key=lambda x: str.lower(x[0])):
+            to_write = f'    {{"{addr}"_eth, {amt}}},\n'
             print(to_write, end="")
             f.write(to_write)
         print("")
         f.write(
 """};
 
-}  // namespace oxen::sent::mainnet""")
+// clang-format-on
+
+}  // namespace oxen::sent::mainnet
+""")
 
     print("Printing python for seeding contract\n")
     from pprint import pformat

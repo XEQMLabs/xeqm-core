@@ -45,10 +45,10 @@ transition_context get_transition_context(network_type net, uint64_t top_block_h
             result.transition_bonus = &devnet::transition_bonus;
             break;
 
-        case network_type::STAGENET:  /*FALLTHRU*/
-        case network_type::LOCALDEV:  /*FALLTHRU*/
-        case network_type::FAKECHAIN: /*FALLTHRU*/
-        case network_type::UNDEFINED: /*FALLTHRU*/
+        case network_type::STAGENET: [[fallthrough]];
+        case network_type::LOCALDEV: [[fallthrough]];
+        case network_type::FAKECHAIN: [[fallthrough]];
+        case network_type::UNDEFINED: [[fallthrough]];
         case network_type::MAINNET:
             result.addresses = &mainnet::addresses;
             result.proper_ed_keys = &mainnet::proper_ed_keys;
@@ -407,7 +407,7 @@ void transition(
         service_nodes::block_add_result& add_result,
         uint32_t block_tx_count) {
 
-    auto address_info_from_str = [](network_type network, const std::string& addr) {
+    auto address_info_from_str = [](network_type network, std::string_view addr) {
         cryptonote::address_parse_info api;
         if (!get_account_address_from_str(api, network, addr) || api.has_payment_id ||
             api.is_subaddress)

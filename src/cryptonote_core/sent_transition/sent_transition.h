@@ -11,7 +11,7 @@ namespace oxen::sent {
 
 using cryptonote::network_type;
 
-using addrmap_t = std::unordered_map<std::string, eth::address>;
+using addrmap_t = std::unordered_map<std::string_view, eth::address>;
 using conv_ratio_t = std::pair<std::uint64_t, std::uint64_t>;
 using bonus_map_t = std::unordered_map<eth::address, std::uint64_t>;
 using proper_ed_keys_t = std::unordered_map<crypto::public_key, crypto::ed25519_public_key>;
