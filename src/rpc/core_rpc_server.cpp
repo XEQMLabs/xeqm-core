@@ -3225,7 +3225,7 @@ void core_rpc_server::invoke(HF21_DRY_RUN& req, rpc_context) {
     for (size_t i = 0; i < rewards_before_pair.first.size(); i++) {
         const auto& addr = rewards_before_pair.first[i];
         const auto& amt = rewards_before_pair.second[i];
-        rewards_before[addr] = amt.to_coin();
+        rewards_before[addr] = amt.amount.to_coin();
     }
     for (size_t i = 0; i < transition_result.rewards_after.first.size(); i++) {
         const auto& addr = transition_result.rewards_after.first[i];
@@ -3883,47 +3883,85 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
+static nlohmann::json wallet_info_to_json(
+        std::string address, const BlockchainSQLite::wallet_info& wallet_info) {
+    nlohmann::json result = {
+            {"found", wallet_info.found},
+            {"address", address},
+            {"amount", wallet_info.amount.to_coin()},
+            {"lifetime_locked_stakes", wallet_info.lifetime_locked_stakes.to_coin()},
+            {"lifetime_unlocked_stakes", wallet_info.lifetime_unlocked_stakes.to_coin()},
+            {"lifetime_rewards", wallet_info.lifetime_rewards.to_coin()},
+            {"lifetime_liquidated_stakes", wallet_info.lifetime_liquidated_stakes.to_coin()},
+            {"locked_stakes", wallet_info.locked_stakes.to_coin()},
+            {"timelocked_stakes", wallet_info.timelocked_stakes.to_coin()},
+    };
+    return result;
+}
+
 void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
     auto& balances = rpc.response["balances"];
-    balances = json::object();
+    balances = json::array();
 
     const auto& req = rpc.request;
     auto net = nettype();
     BlockchainSQLite& sql_db = m_core.blockchain.sqlite_db();
 
+    nlohmann::json::array_t& array = balances.get_ref<nlohmann::json::array_t&>();
+    uint64_t height = 0;
     if (req.addresses.size() > 0) {
+        array.reserve(req.addresses.size());
         for (const auto& address : req.addresses) {
-            cryptonote::reward_money amount = {};
-            if (eth::address eth_address{};
-                tools::try_load_from_hex_guts<eth::address>(address, eth_address)) {
-                std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(eth_address);
-            } else if (address_parse_info parse_info{};
-                       get_account_address_from_str(parse_info, net, address)) {
-                std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(parse_info.address);
+            BlockchainSQLite::wallet_info wallet_info = {};
+            if (eth::address eth{}; tools::try_load_from_hex_guts<eth::address>(address, eth)) {
+                wallet_info = sql_db.get_accrued_rewards(eth);
+            } else if (address_parse_info oxen{};
+                       get_account_address_from_str(oxen, net, address)) {
+                wallet_info = sql_db.get_accrued_rewards(oxen.address);
             }
-            balances[address] = amount.to_coin();
+            array.push_back(wallet_info_to_json(address, wallet_info));
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
     } else {
-        auto [addresses, amounts] = sql_db.get_all_accrued_rewards();
+        auto [addresses, wallets] = sql_db.get_all_accrued_rewards();
+        array.reserve(addresses.size());
         for (size_t i = 0; i < addresses.size(); i++) {
-            balances[addresses[i]] = amounts[i].to_coin();
+            const std::string& address = addresses[i];
+            const BlockchainSQLite::wallet_info& wallet_info = wallets[i];
+            array.push_back(wallet_info_to_json(address, wallet_info));
+
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
     }
 
     if (rpc.request.oxen10_compat) {
-        // Oxen 10.x wallets expect `"addresses": [...], "amounts": [...]` because old Monero
+        // Oxen 10.x wallets expect `"addresses": [...], "amounts": [...]`
         // serialization didn't support dicts, so rewrite it if this came through the old endpoint
         // name to maintain compatibility.
         auto& addrs = rpc.response["addresses"];
         auto& amts = rpc.response["amounts"];
-        for (auto& [addr, amt] : balances.items()) {
-            addrs.emplace_back(std::move(addr));
-            amts.emplace_back(std::move(amt));
+        for (auto& it : array) {
+            nlohmann::json::iterator address = it.find("address");
+            nlohmann::json::iterator amount = it.find("amount");
+            if (address == it.end() || amount == it.end()) {
+                assert(address != it.end());
+                assert(amount != it.end());
+            } else {
+                assert(address->is_string());
+                assert(amount->is_number_unsigned());
+                addrs.emplace_back(address->get<std::string>());
+                amts.emplace_back(amount->get<uint64_t>());
+            }
         }
         rpc.response.erase("balances");
+    } else {
+        rpc.response["height"] = height;
     }
 
     rpc.response["status"] = STATUS_OK;
 }
-
 }  // namespace cryptonote::rpc

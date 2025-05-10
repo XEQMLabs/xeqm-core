@@ -133,7 +133,10 @@ static void dump_transition_outcome_csv(
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
                         fmt::localtime(now),
-                        cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                        cryptonote::print_money(
+                                context.staking_requirement,
+                                cryptonote::strip_zeros::yes,
+                                decimal_places),
                         cryptonote::print_money(context.conv_ratio.second),
                         cryptonote::print_money(context.conv_ratio.first))};
         file.print("height,{}\n", snl_state.height);
@@ -326,7 +329,10 @@ static void dump_transition_outcome_csv(
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
                         fmt::localtime(now),
-                        cryptonote::print_money(context.staking_requirement, decimal_places, true),
+                        cryptonote::print_money(
+                                context.staking_requirement,
+                                cryptonote::strip_zeros::yes,
+                                decimal_places),
                         cryptonote::print_money(context.conv_ratio.second),
                         cryptonote::print_money(context.conv_ratio.first),
                         int(transition_pct))};
@@ -405,7 +411,9 @@ void transition(
         const transition_context& context,
         service_nodes::service_node_list::state_t& snl_state,
         cryptonote::BlockchainSQLite& sql,
-        network_type net) {
+        network_type net,
+        service_nodes::block_add_result& add_result,
+        uint32_t block_tx_count) {
 
     auto address_info_from_str = [](network_type network, const std::string& addr) {
         cryptonote::address_parse_info api;
@@ -449,7 +457,6 @@ void transition(
     // batching db.  (If there is SENT left over at the end we'll put it back in, but under the
     // converted SENT address).
 
-    cryptonote::block_payments converted_rewards;
     auto [accrued_addr, accrued_value] = sql.get_all_accrued_rewards();
     assert(accrued_addr.size() == accrued_value.size());
     for (size_t i = 0; i < accrued_addr.size(); i++) {
@@ -464,14 +471,13 @@ void transition(
             continue;
 
         const auto& eth_addr = it->second;
-        unallocated[eth_addr] += oxen_to_sent(val);
+        unallocated[eth_addr] += oxen_to_sent(val.amount);
         log::debug(
                 logcat,
                 "oxen -> sent ({} -> {}) accrued unpaid oxen rewards: {}",
                 addr,
                 eth_addr,
-                val);
-        converted_rewards[oxen_addr] = val;
+                val.amount);
     }
 
     for (const auto& [eth, amount] : unallocated) {
@@ -784,8 +790,18 @@ void transition(
     }
 
     // Any yet-unallocated SENT balance goes in the rewards db to be claimed
-    // All OXEN rewards are wiped first
-    sql.set_rewards_hf21(unallocated);
+    // All OXEN rewards are wiped first, any unconverted are dropped (but were paid out last block
+    // anyway).
+    {
+        sql.db.exec("DELETE FROM batched_payments_accrued");
+        cryptonote::block_payments rewards_payments;
+        for (const auto& [eth_addr, amt] : unallocated) {
+            cryptonote::sql_payment payment = {};
+            payment.amount = cryptonote::reward_money::coin_amount(amt);
+            rewards_payments[eth_addr] = payment;
+        }
+        sql.add_sn_rewards(cryptonote::hf::hf21_eth, rewards_payments, /*rewards_payment=*/true);
+    }
 
     // First, clear the old key image blacklist so we don't leave unconverted stakes locked
     // any longer than necessary (and can re-use the blacklist for perma-locks)
@@ -811,9 +827,41 @@ void transition(
                 final_allocation_before_distrib,
                 unallocated);
 
+    // When we collect stake metadata (like the individual contributions of a user, we store them
+    // into the database and have a unique clause on the (block, tx, contribution index) which
+    // prevents duplicates from being submitted.
+    //
+    // These are typically extracted from an individual smart contract event witnessed on Arbitrum
+    // and they get inserted into a TX. For HF21 we initially bootstrap the amount of locked tokens
+    // by a user by their participation in the $OXEN->$SESH migration. These locked amounts don't
+    // have a transaction associated with them. The DB is written to directly, so to encode these
+    // stakes we set a synthetic TX index which is guaranteed to not conflict with any other TXs in
+    // the block itself.
+    uint32_t synthetic_tx_index = static_cast<uint32_t>(block_tx_count);
+
     snl_state.service_nodes_infos.clear();
-    for (auto& it : post_transition_sns)
+    for (auto& it : post_transition_sns) {
+        // Record the stake metadata to the `block_add_result`. The SQL DB will process these when
+        // it's update set is triggered
+        for (size_t contrib_index = 0; contrib_index < it.sn_info->contributors.size();
+             contrib_index++) {
+            const auto& contrib = it.sn_info->contributors[contrib_index];
+            assert(!it.zombie && "Contributors should only be populated on non-zombie nodes");
+            assert(contrib.ethereum_address);
+            assert(contrib.address == cryptonote::account_public_address{});
+            auto& s = add_result.locked_stakes.emplace_back();
+            s.sn = crypto::ed25519_public_key{it.pkey};
+            s.addr = contrib.ethereum_address;
+            s.amount = cryptonote::reward_money::coin_amount(contrib.amount);
+            s.liquidation = cryptonote::reward_money{};
+            s.block_height = static_cast<uint32_t>(snl_state.height);
+            s.tx_index = synthetic_tx_index++;
+            s.contributor_index = static_cast<uint32_t>(contrib_index);
+        }
+
+        // Update the SNL with the new SN details
         snl_state.service_nodes_infos[it.pkey] = std::move(it.sn_info);
+    }
 }
 
 }  // namespace oxen::sent

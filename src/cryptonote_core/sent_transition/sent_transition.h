@@ -1,12 +1,9 @@
 #pragma once
 
-#include <limits>
-#include <string_view>
 #include <unordered_map>
 
 #include "blockchain_db/sqlite/db_sqlite.h"
 #include "crypto/eth.h"
-#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core/service_node_list.h"
 
@@ -74,6 +71,8 @@ void transition(
         const transition_context& context,
         service_nodes::service_node_list::state_t& sns,
         cryptonote::BlockchainSQLite& sql,
-        network_type net);
+        network_type net,
+        service_nodes::block_add_result& add_result,
+        uint32_t block_tx_count);
 
 }  // namespace oxen::sent

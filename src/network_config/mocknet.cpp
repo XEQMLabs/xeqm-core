@@ -59,7 +59,7 @@ struct mocknet_key {
 };
 
 const eth::address MOCK_ETH_ADDRESS = tools::make_from_hex_guts<eth::address>(
-        "485973e8dfFA8Abd3AB91292bFCE25896C687bA5"sv, false);
+        "4444444444444444444444444444444444444444"sv, false);
 
 // NOTE: Ed25519 public key is stuffed in the last 32 bytes of the secret key
 // but it's useful to have the pubkey separated to visually grok instantly for
@@ -239,10 +239,14 @@ void mocknet_inject_nodes(uint8_t nettype_u8, void* snl_state_ptr, uint8_t hf_ve
         {
             service_nodes::service_node_info::contributor_t contributor = {};
             contributor.amount = state->get_staking_requirement(nettype);
-
-            service_nodes::service_node_info::contribution_t contribution = {};
-            contribution.amount = contributor.amount;
-            contributor.locked_contributions.push_back(contribution);
+            if (hf_version >= static_cast<uint8_t>(cryptonote::feature::ETH_BLS)) {
+                contributor.ethereum_address = MOCK_ETH_ADDRESS;
+                contributor.ethereum_beneficiary = MOCK_ETH_ADDRESS;
+            } else {
+                service_nodes::service_node_info::contribution_t contribution = {};
+                contribution.amount = contributor.amount;
+                contributor.locked_contributions.push_back(contribution);
+            }
 
             info->contributors.push_back(contributor);
         }
@@ -454,6 +458,11 @@ void mocknet_push_mock_pulse_block(cryptonote::core& core) {
 
         // NOTE: Construct the addresses and the shares of the bonus tokens here!
     }
+}
+
+bool mocknet_is_mock_ethereum_address(const eth::address& addr) {
+    bool result = addr == MOCK_ETH_ADDRESS;
+    return result;
 }
 
 void mocknet_get_transition_context(oxen::sent::transition_context& context) {
