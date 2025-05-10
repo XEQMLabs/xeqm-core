@@ -1,118 +1,67 @@
 #include <oxenc/hex.h>
 
 #include <cstdint>
-#include <string>
+#include <string_view>
 #include <unordered_map>
 
-#include "common/guts.h"
 #include "crypto/crypto.h"
 #include "crypto/eth.h"
+#include "crypto/literals.h"
 #include "detail.h"
 
 namespace oxen::sent::localdev {
 
 using namespace std::literals;
+using namespace crypto::literals;
 
-const std::unordered_map<std::string, eth::address> addresses{
-        {"dV3ZgwAnkfmWc8YpCXPPRv3t245qpyLURJxnUbEHQT1xbTpaBLoPGFgf7XQMAPMFq4SFkPmWjyEa2YBzwSCAQa642e5Kcsypc"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV2Rd8Tz8PB6G3A3tGyhH2ZKp4PqFV2R15hNjGBPuSq2BjMaJurSwQYQSyD2tK7bPqYgri9JDC3aK6VyMS7h3zce1Rqc5wAEb"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV2CdxciqiR3thA2mzL3zv889pjTL8SpR7AxCe9ufpnrHCYw5qFfgiMMuLyCiRBCG8fUn6MQGzeZCWEqnUVaP8ii1MSWdaL73"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV3NwzJKuE2a3qVeU8zKjdSLrDjb8A8WraJqS9QequnqHQqDGYRXkNr14k6WZqB3zP6Jn31fNSMopTPTVcB6rqVd1mLZbheg3"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV2Wi24fQVYhNUTRHK3kWHUgAXsbWsH2aV5UFSY9HA9X9gy3RNzYKvSWqsqo8dBgmDSD9dCRbNAq7iuW7DyuYwYz1HmGkzUYo"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV3mT32WJtVF5BJdZGJyWSXwPypDe6FHr9hTbnuNBL1eaqAxV4Fhoa3HfJn5jVhAtGCAWcnZRBmk1LML2zQmipZd1r2SAnpSr"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV2iy1Vvw4PZVY4dzJcGxWe9FpKRmJPvBSKUnU4UwiUJ8JGFQCqedtwJ1MBjApt67361XFR7CdwDp2HPUXFhy5ok2dgDLXAnD"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV3P5VFBT3CE3ZfoJ7K6fWRF79ayXbMNfNFzNebouyY3b3e1cyLdTbHJLj1JGPyuu3YFu31gBWT9NfyeJ1UwxFfR26LWQCXGs"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
+// clang-format off
+
+const std::unordered_map<std::string_view, eth::address> addresses{
+        {"dV3ZgwAnkfmWc8YpCXPPRv3t245qpyLURJxnUbEHQT1xbTpaBLoPGFgf7XQMAPMFq4SFkPmWjyEa2YBzwSCAQa642e5Kcsypc"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV2Rd8Tz8PB6G3A3tGyhH2ZKp4PqFV2R15hNjGBPuSq2BjMaJurSwQYQSyD2tK7bPqYgri9JDC3aK6VyMS7h3zce1Rqc5wAEb"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV2CdxciqiR3thA2mzL3zv889pjTL8SpR7AxCe9ufpnrHCYw5qFfgiMMuLyCiRBCG8fUn6MQGzeZCWEqnUVaP8ii1MSWdaL73"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV3NwzJKuE2a3qVeU8zKjdSLrDjb8A8WraJqS9QequnqHQqDGYRXkNr14k6WZqB3zP6Jn31fNSMopTPTVcB6rqVd1mLZbheg3"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV2Wi24fQVYhNUTRHK3kWHUgAXsbWsH2aV5UFSY9HA9X9gy3RNzYKvSWqsqo8dBgmDSD9dCRbNAq7iuW7DyuYwYz1HmGkzUYo"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV3mT32WJtVF5BJdZGJyWSXwPypDe6FHr9hTbnuNBL1eaqAxV4Fhoa3HfJn5jVhAtGCAWcnZRBmk1LML2zQmipZd1r2SAnpSr"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV2iy1Vvw4PZVY4dzJcGxWe9FpKRmJPvBSKUnU4UwiUJ8JGFQCqedtwJ1MBjApt67361XFR7CdwDp2HPUXFhy5ok2dgDLXAnD"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV3P5VFBT3CE3ZfoJ7K6fWRF79ayXbMNfNFzNebouyY3b3e1cyLdTbHJLj1JGPyuu3YFu31gBWT9NfyeJ1UwxFfR26LWQCXGs"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
         /* commented out for testing block-before-hf21 payout, but leaving here just to note that
         this
          * is one of the staking wallets in the static-startup local-devnet setup
-        {"dV2zbppA4YQaDxLyFX19CudHBPyZThzcHLRADpqKLTzpWx6ngtduEk6WXmsxsoEG1p99GzHkqF5oug4g2veWJ47S1mGeDkN9f"s,
-                tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
+        {"dV2zbppA4YQaDxLyFX19CudHBPyZThzcHLRADpqKLTzpWx6ngtduEk6WXmsxsoEG1p99GzHkqF5oug4g2veWJ47S1mGeDkN9f"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
         */
-        {"dV3corcZMiUJWigoy8yrSGcLYUMQL5qauJwznmxMfeWTAnQMH44C6kqfetXD6dpohCChPnY4tAqBCHGciJjQjipc38AGptqJT"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV1xdJpAVHj4gcp58UFrYaT6KGDG6HLTHBsWbvBvHZ4KTdjcfhjphyf4DWLSmV92AiFP3gqSwwx8Y1C3jVLixcaV1ngahEAih"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
-        {"dV1rcFr6grybrz5V4kPh6BC1FcgYXSoaBaQsaBTK4mY4JkrUzuq2jdC4L18MkgkHzRjWzBg6WyhB7LFPCGu1Kj1f2bPZTuFfq"s,
-         tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s)},
+        {"dV3corcZMiUJWigoy8yrSGcLYUMQL5qauJwznmxMfeWTAnQMH44C6kqfetXD6dpohCChPnY4tAqBCHGciJjQjipc38AGptqJT"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV1xdJpAVHj4gcp58UFrYaT6KGDG6HLTHBsWbvBvHZ4KTdjcfhjphyf4DWLSmV92AiFP3gqSwwx8Y1C3jVLixcaV1ngahEAih"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
+        {"dV1rcFr6grybrz5V4kPh6BC1FcgYXSoaBaQsaBTK4mY4JkrUzuq2jdC4L18MkgkHzRjWzBg6WyhB7LFPCGu1Kj1f2bPZTuFfq"sv, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth},
 };
 
 const std::unordered_map<crypto::public_key, crypto::ed25519_public_key> proper_ed_keys{};
 const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_keys{
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "eb87bc542c036ffb4167f950e229fc48009960a7ee6547f27e81c882a3e9e624"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "0552e55bdecf1effdcdf3c2a3907d12da083b9ce05ce795adf0d9d0c1ec8167a20640b793eb5810999f389d4069dd668b650e0ac2d636a35870db07e35a0da88"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "fcef63a41b837066ca3348d9ca9583fa6d105c1e853f63eb19403f8c1132aec7"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "2012b63f81df7fecdcb8f9abe70825b35cac985781cf26f419d23c82181a52ef08a8a524bc9acff0933d35ffc1677a37e398d8458b99b602aee566c4a81c8a79"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "4233a563748f37cdad6b0bff64bdfb7cca8520b0e52c60bdc487f76795c3f6a5"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "212d793ffd416c20458350c7827dbae551b1c5e1388668082308bee95c0e1404016bb5110e46b463e1eb61fe7ae88f5489907a71c3a950d370a5b8d8a63b0fff"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "e6b3f9ddf6f4646a16c52309da7092aef2728de8296ec5f82a9d8f61fc1985ba"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "2ad19c51493553d6e0ab87ac384b10b42fe94b76d1e31fe8667104eeca05228e0fe9a621766977bf627b330f45cfb4ee1b9ef429b0a2dcf2468df1f89860d8ba"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "58f6bc7a87cba310e14138ce5ca73472c4b8ff2e762ee8aebc1264bd20b077b0"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "302c7cf9f10a82b842a4ec4a33491e3c2b7991f30212c2855307e2abc7394ecf03d6b8e86376718bbe7779c6a3b2409729d3e1a0a0d3330bf509ca86ae51d6c7"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "5436c13d55076b160e8840381cf597a6a36b0db09b3782d575a0759ec5d44f90"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "0e19dd7504c2ac59cc56feb0c0e604105ec3ec6af3cd734ce134658ed73dbba32964837b2414b56c286814a96c0bd01a39411f17ffb6d98dee7c836133aacc1c"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "17c0988c25165b9e0fb227cb3b81c9e530d2d7113585251782235b15a260b63c"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "1ab996803ab1f20d375f708ebb86fab164d071646fe1f34cb1c6f813a28c40b91e1eef20aa3060291edc85fe795d189c1f1b048ffa495338a9584fce9bbe63b7"s)},
+        {"eb87bc542c036ffb4167f950e229fc48009960a7ee6547f27e81c882a3e9e624"_edpk, "0552e55bdecf1effdcdf3c2a3907d12da083b9ce05ce795adf0d9d0c1ec8167a20640b793eb5810999f389d4069dd668b650e0ac2d636a35870db07e35a0da88"_blspk},
+        {"fcef63a41b837066ca3348d9ca9583fa6d105c1e853f63eb19403f8c1132aec7"_edpk, "2012b63f81df7fecdcb8f9abe70825b35cac985781cf26f419d23c82181a52ef08a8a524bc9acff0933d35ffc1677a37e398d8458b99b602aee566c4a81c8a79"_blspk},
+        {"4233a563748f37cdad6b0bff64bdfb7cca8520b0e52c60bdc487f76795c3f6a5"_edpk, "212d793ffd416c20458350c7827dbae551b1c5e1388668082308bee95c0e1404016bb5110e46b463e1eb61fe7ae88f5489907a71c3a950d370a5b8d8a63b0fff"_blspk},
+        {"e6b3f9ddf6f4646a16c52309da7092aef2728de8296ec5f82a9d8f61fc1985ba"_edpk, "2ad19c51493553d6e0ab87ac384b10b42fe94b76d1e31fe8667104eeca05228e0fe9a621766977bf627b330f45cfb4ee1b9ef429b0a2dcf2468df1f89860d8ba"_blspk},
+        {"58f6bc7a87cba310e14138ce5ca73472c4b8ff2e762ee8aebc1264bd20b077b0"_edpk, "302c7cf9f10a82b842a4ec4a33491e3c2b7991f30212c2855307e2abc7394ecf03d6b8e86376718bbe7779c6a3b2409729d3e1a0a0d3330bf509ca86ae51d6c7"_blspk},
+        {"5436c13d55076b160e8840381cf597a6a36b0db09b3782d575a0759ec5d44f90"_edpk, "0e19dd7504c2ac59cc56feb0c0e604105ec3ec6af3cd734ce134658ed73dbba32964837b2414b56c286814a96c0bd01a39411f17ffb6d98dee7c836133aacc1c"_blspk},
+        {"17c0988c25165b9e0fb227cb3b81c9e530d2d7113585251782235b15a260b63c"_edpk, "1ab996803ab1f20d375f708ebb86fab164d071646fe1f34cb1c6f813a28c40b91e1eef20aa3060291edc85fe795d189c1f1b048ffa495338a9584fce9bbe63b7"_blspk},
 
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "1b9d2a6fa0ac84f86bfabe95f291c17f4662dbbd1e91f4f7c5ea606c1f78c006"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "1c10193d274f489dd5f8d7bbf2e67f1afdb12cd30997974eeadbd081e352d92922b03da2289d8b346aa257c9d4c429581e8dec5f1ceb6d36b416231c623b3d46"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "c5dc55b6a87249e3cab17ee64801de9f6923159cb9c688c7c6614e4a5c2678be"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "1e4ab84357d6418943b3c60d4c1aed8e027d03e54205fd72e0fcb2a0d1c3b049059f5d1739f240b880532f4ad9dab5b38c3e20618ee6337e2560a7737d05cdee"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "043ec86c4c30e881f03158500f23058651f42cd1a1520f618e83fb631b94d58e"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "19c19f6571eb72b4c95a4429b4aac446b5b45ae17ccb3e44eac52934d170908714c9d69be1a4c69a205e85a1192c758bf5311df2fe4d6a6d187364b1a2bd1abe"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "602dceac3af2f25e07bf07d04ff0ad4d1b69e7f7e574a4a34d5f1c4296d71475"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "28672f3186c133f9c68ffb211ee53b7c3e6813424d6210cc72053f18f7db4a960085382d80192032d535e14eaaef09edd7cdd2be81d8042cf895e836c92cc666"s)},
-        {tools::make_from_hex_guts<crypto::ed25519_public_key>(
-                 "7dbe4019361d7f3e4e5d563ce7ce39f41762f042ebe74583045b278b69834eaa"s),
-         tools::make_from_hex_guts<eth::bls_public_key>(
-                 "103ab6907d096c0619be78e46119b4d362d65c6e27a9308fd41cc039e4cd74640e655d859353799f74896fe29de484c577757e8d56df7ade3c0622901dcc8a59"s)},
-        //        {tools::make_from_hex_guts<crypto::ed25519_public_key>(""s),
-        //                tools::make_from_hex_guts<eth::bls_public_key>(""s)},
-
+        {"1b9d2a6fa0ac84f86bfabe95f291c17f4662dbbd1e91f4f7c5ea606c1f78c006"_edpk, "1c10193d274f489dd5f8d7bbf2e67f1afdb12cd30997974eeadbd081e352d92922b03da2289d8b346aa257c9d4c429581e8dec5f1ceb6d36b416231c623b3d46"_blspk},
+        {"c5dc55b6a87249e3cab17ee64801de9f6923159cb9c688c7c6614e4a5c2678be"_edpk, "1e4ab84357d6418943b3c60d4c1aed8e027d03e54205fd72e0fcb2a0d1c3b049059f5d1739f240b880532f4ad9dab5b38c3e20618ee6337e2560a7737d05cdee"_blspk},
+        {"043ec86c4c30e881f03158500f23058651f42cd1a1520f618e83fb631b94d58e"_edpk, "19c19f6571eb72b4c95a4429b4aac446b5b45ae17ccb3e44eac52934d170908714c9d69be1a4c69a205e85a1192c758bf5311df2fe4d6a6d187364b1a2bd1abe"_blspk},
+        {"602dceac3af2f25e07bf07d04ff0ad4d1b69e7f7e574a4a34d5f1c4296d71475"_edpk, "28672f3186c133f9c68ffb211ee53b7c3e6813424d6210cc72053f18f7db4a960085382d80192032d535e14eaaef09edd7cdd2be81d8042cf895e836c92cc666"_blspk},
+        {"7dbe4019361d7f3e4e5d563ce7ce39f41762f042ebe74583045b278b69834eaa"_edpk, "103ab6907d096c0619be78e46119b4d362d65c6e27a9308fd41cc039e4cd74640e655d859353799f74896fe29de484c577757e8d56df7ade3c0622901dcc8a59"_blspk},
 };
 
 const std::pair<std::uint64_t, std::uint64_t> conv_ratio{
         180, 1};  // worse than 200:1, so bonus required to transition
 
 const std::unordered_map<eth::address, std::uint64_t> transition_bonus{
-
-        {tools::make_from_hex_guts<eth::address>("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"s),
-         12345123450},
-        /*
-                {"0xB0CefD61ddB88176Fb972955341adC6c1d05230e"s, 292553191489},
-                {"0xB7649B5A5DfABAA0713ACFB3040945035b0bBD9e"s, 388297872340},
-                {"0xb82Cd271CE0E498e4203AC4db801698Bd720f6AF"s, 319148936170},
-        */
-
+    {"0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"_eth, 12345123450},
+    /*
+    {"0xB0CefD61ddB88176Fb972955341adC6c1d05230e"_eth, 292553191489},
+    {"0xB7649B5A5DfABAA0713ACFB3040945035b0bBD9e"_eth, 388297872340},
+    {"0xb82Cd271CE0E498e4203AC4db801698Bd720f6AF"_eth, 319148936170},
+    */
 };  // Actual bonus total: 999.999999999 of target 1000.000000000
 
 /*
@@ -225,5 +174,7 @@ const std::unordered_map<eth::address, std::uint64_t> transition_bonus{
 "295b6b8851e331b2ef973af9ef1b2989ab25b9508d95b9fc48a3b6946b62156b0d8b18be4b067cf7931790fd57d4532efcb3c4d81d0dd32ca862ce90784bf996"
 }
  */
+
+// clang-format on
 
 }  // namespace oxen::sent::localdev
