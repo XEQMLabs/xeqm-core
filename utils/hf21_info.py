@@ -174,10 +174,14 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
 
 }  // namespace oxen::sent::mainnet""")
 
-    print("Printing python for seeding contract\n")
-    from pprint import pp
-    pp(seed_list)
     print("Wrote cpp code to hf21_transition_data.cpp as well as printing")
+    print("Printing python for seeding contract\n")
+    from pprint import pformat
+    s = pformat(seed_list)
+    print(s)
+    with open("contract_seed_info.py", "w") as f:
+        f.write(s)
+    print("Wrote contract seed info to contract_seed_info.py as well as printing")
 
 def write_proofs_file():
     proofs = json_rpc('get_all_uptime_proofs').json()
