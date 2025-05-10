@@ -23,8 +23,8 @@ def json_rpc(method, params=None, timeout=50):
 def get_service_nodes():
     return json_rpc('get_service_nodes').json()
 
-conversion_ratio = 0.67  # dummy value
-conversion_ratio_parts = [2, 3]  # dummy value
+conversion_ratio = 0.54  # dummy value
+conversion_ratio_parts = [54, 100]  # dummy value
 staking_requirement = 25000000000000
 
 # added for testnet to get all contributor addresses to put in the
@@ -174,18 +174,18 @@ const std::unordered_map<crypto::ed25519_public_key, eth::bls_public_key> bls_ke
 
 }  // namespace oxen::sent::mainnet""")
 
-    print("Wrote cpp code to hf21_transition_data.cpp as well as printing")
     print("Printing python for seeding contract\n")
     from pprint import pformat
     s = pformat(seed_list)
     print(s)
     with open("contract_seed_info.py", "w") as f:
         f.write(s)
+    print("Wrote cpp code to hf21_transition_data.cpp as well as printing")
     print("Wrote contract seed info to contract_seed_info.py as well as printing")
 
 def write_proofs_file():
     proofs = json_rpc('get_all_uptime_proofs').json()
-    with open("uptime_proofs.txt", "w") as f:
+    with open("bls_proofs.txt", "w") as f:
         f.write("{} {} {} {} {} {} {}".format(
                 "proof",
                 "pubkey",
@@ -203,6 +203,7 @@ def write_proofs_file():
                     proof["sig_ed25519"],
                     proof["pubkey_bls"],
                     proof["pop_bls"]))
+    print("Wrote bls proof of possession table to bls_proofs.txt")
 
 print_migration()
 write_proofs_file()
