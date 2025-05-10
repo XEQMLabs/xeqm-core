@@ -55,6 +55,10 @@ NETWORK must be mainnet, stagenet, devnet, etc.
 MSG is the message that was allegedly signed, either with auto-detected hex or plaintext (but can be
 prefixed with 0x or _ to force hex or plaintext interpretation).
 
+HF21 transition BLS proof-of-possession verification:
+
+    {0} --verify-bls-proofs-file /path/to/oxen-core/contrib/hf21_bls_proofs.txt
+
 )",
             prog);
 
