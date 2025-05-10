@@ -4261,6 +4261,14 @@ bool Blockchain::check_tx_inputs(
         }
     }
 
+    if (hf_version >= hf::hf21_eth &&
+        tools::equals_any(tx.type, txtype::stake, txtype::key_image_unlock)) {
+
+        log::error(logcat, "Staking and unlock transactions are invalid in HF21+");
+        tvc.m_invalid_type = true;
+        return false;
+    }
+
     if (tx.is_transfer()) {
         if (tx.type != txtype::oxen_name_system && !std::holds_alternative<txin_gen>(tx.vin[0]) &&
             hf_version >= feature::MIN_2_OUTPUTS && tx.vout.size() < 2) {
