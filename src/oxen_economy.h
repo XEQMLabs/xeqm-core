@@ -123,15 +123,21 @@ constexpr bool is_lokinet_type(mapping_type t) {
 // days per registration "year" to allow for some blockchain time drift + leap years.
 constexpr uint64_t REGISTRATION_YEAR_DAYS = 368;
 
-constexpr uint64_t burn_needed(cryptonote::hf hf_version, mapping_type type) {
+constexpr uint64_t burn_needed(
+        cryptonote::hf hf_version, cryptonote::network_type nettype, mapping_type type) {
     uint64_t result = 0;
+
+    // TESTNET has HF21 ONS regs at the lower fee, so add this hack to make it still sync:
+    // FIXME: remove this when rebooting testnet!
+    const bool is_testnet_hf21 =
+            hf_version == cryptonote::hf::hf21_eth && nettype == cryptonote::network_type::TESTNET;
 
     // The base amount for session/wallet/lokinet-1year:
     const uint64_t basic_fee =
-            (hf_version >= cryptonote::hf::hf21_eth     ? 100 * oxen::COIN
-             : hf_version >= cryptonote::hf::hf18       ? 7 * oxen::COIN
-             : hf_version >= cryptonote::hf::hf16_pulse ? 15 * oxen::COIN
-                                                        : 20 * oxen::COIN);
+            oxen::COIN * (hf_version >= cryptonote::hf::hf21_eth && !is_testnet_hf21 ? 100
+                          : hf_version >= cryptonote::hf::hf18                       ? 7
+                          : hf_version >= cryptonote::hf::hf16_pulse                 ? 15
+                                                                                     : 20);
     switch (type) {
         case mapping_type::update_record_internal: result = 0; break;
 

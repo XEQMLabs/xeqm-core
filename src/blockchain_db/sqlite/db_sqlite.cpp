@@ -864,6 +864,10 @@ std::vector<cryptonote::batch_sn_payment> BlockchainSQLite::get_sn_payments(uint
                             id.end(),
                             get_config(network_type::TESTNET).NETWORK_ID.begin()),
                     "If rebooting testnet, remove this workaround code!");
+
+            // TODO: When removing this also remove the workaround in src/oxen_economy.h's
+            // burn_needed() function!
+
             pre_hf21_final_payout = false;
         }
     }
