@@ -16,7 +16,14 @@
 
 namespace oxen::sesh {
 
-inline auto logcat = oxen::log::Cat("sesh_transition");
+namespace {
+    auto logcat = oxen::log::Cat("sesh_transition");
+
+    static const addrmap_t empty_addrmap;
+    const proper_ed_keys_t empty_ed_keys;
+    const bls_keys_t empty_bls_keys;
+    const bonus_map_t empty_transition_bonus;
+}  // namespace
 
 transition_context get_transition_context(network_type net, uint64_t top_block_height) {
     transition_context result = {};
@@ -45,16 +52,24 @@ transition_context get_transition_context(network_type net, uint64_t top_block_h
             result.transition_bonus = &devnet::transition_bonus;
             break;
 
-        case network_type::STAGENET: [[fallthrough]];
-        case network_type::LOCALDEV: [[fallthrough]];
-        case network_type::FAKECHAIN: [[fallthrough]];
-        case network_type::UNDEFINED: [[fallthrough]];
         case network_type::MAINNET:
             result.addresses = &mainnet::addresses;
             result.proper_ed_keys = &mainnet::proper_ed_keys;
             result.bls_keys = &mainnet::bls_keys;
             result.conv_ratio = mainnet::conv_ratio;
             result.transition_bonus = &mainnet::transition_bonus;
+            break;
+
+        case network_type::STAGENET: [[fallthrough]];
+        case network_type::LOCALDEV: [[fallthrough]];
+        case network_type::FAKECHAIN: [[fallthrough]];
+        case network_type::UNDEFINED:
+
+            result.addresses = &empty_addrmap;
+            result.proper_ed_keys = &empty_ed_keys;
+            result.bls_keys = &empty_bls_keys;
+            result.conv_ratio = mainnet::conv_ratio;
+            result.transition_bonus = &empty_transition_bonus;
             break;
     }
 
@@ -407,14 +422,13 @@ void transition(
         service_nodes::block_add_result& add_result,
         uint32_t block_tx_count) {
 
-    auto address_info_from_str = [](network_type network, std::string_view addr) {
+    auto address_info_from_str = [net](std::string_view addr) {
         cryptonote::address_parse_info api;
-        if (!get_account_address_from_str(api, network, addr) || api.has_payment_id ||
+        if (!get_account_address_from_str(api, net, addr) || api.has_payment_id ||
             api.is_subaddress)
-            throw std::runtime_error{fmt::format(
+            throw std::runtime_error{
                     "Unable to perform SESH transition: batching database contains invalid, "
-                    "unparseable, or non-OXEN address '{}'",
-                    addr)};
+                    "unparseable, or non-OXEN address '{}'"_format(addr)};
         return api;
     };
     const auto& conv_ratio = context.conv_ratio;
@@ -423,7 +437,7 @@ void transition(
     log::debug(logcat, "oxen -> sesh addr map size: {}", unparsed_sesh_addrs.size());
     std::unordered_map<cryptonote::account_public_address, eth::address> sesh_addrs;
     for (const auto& [o, s] : unparsed_sesh_addrs) {
-        auto parsed_addr_info = address_info_from_str(net, o);
+        auto parsed_addr_info = address_info_from_str(o);
         sesh_addrs[parsed_addr_info.address] = s;
     }
 
@@ -455,7 +469,7 @@ void transition(
         auto& addr = accrued_addr[i];
         auto& val = accrued_value[i];
 
-        auto api = address_info_from_str(net, addr);
+        auto api = address_info_from_str(addr);
         const auto& oxen_addr = api.address;
 
         auto it = sesh_addrs.find(oxen_addr);
