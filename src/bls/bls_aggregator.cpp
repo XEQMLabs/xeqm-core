@@ -819,7 +819,7 @@ void bls_aggregator::rewards_request(
     // FIXME: make this async
     oxen::log::trace(
             logcat,
-            "Initiating rewards request of {} SENT for {} at height {}",
+            "Initiating rewards request of {} SESH for {} at height {}",
             wallet_info.amount,
             addr,
             height);
@@ -834,7 +834,7 @@ void bls_aggregator::rewards_request(
     // NOTE: Validate the arguments
     if (!addr) {
         throw oxen::traced<std::invalid_argument>(
-                "Aggregating a rewards request for the zero address for {} SENT at height {} is "
+                "Aggregating a rewards request for the zero address for {} SESH at height {} is "
                 "invalid. Request rejected"_format(
                         addr,
                         wallet_info.amount.to_coin(),
@@ -844,7 +844,7 @@ void bls_aggregator::rewards_request(
 
     if (wallet_info.amount.to_coin() == 0) {
         throw oxen::traced<std::invalid_argument>(
-                "Aggregating a rewards request for '{}' for 0 SENT at height {} is invalid because "
+                "Aggregating a rewards request for '{}' for 0 SESH at height {} is invalid because "
                 "no rewards are available. Request rejected."_format(addr, height));
     }
 

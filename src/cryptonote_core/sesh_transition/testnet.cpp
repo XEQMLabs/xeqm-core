@@ -9,7 +9,7 @@
 #include "crypto/literals.h"
 #include "detail.h"
 
-namespace oxen::sent::testnet {
+namespace oxen::sesh::testnet {
 
 using namespace std::literals;
 using namespace crypto::literals;
@@ -71,4 +71,4 @@ const std::unordered_map<eth::address, std::uint64_t> transition_bonus{
 
 // clang-format on
 
-}  // namespace oxen::sent::testnet
+}  // namespace oxen::sesh::testnet

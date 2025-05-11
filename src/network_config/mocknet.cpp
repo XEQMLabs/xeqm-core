@@ -12,10 +12,10 @@
 #include "crypto/eth.h"
 #include "cryptonote_basic/verification_context.h"
 #include "cryptonote_core/cryptonote_core.h"
-#include "cryptonote_core/sent_transition/sent_transition.h"
 #include "cryptonote_core/service_node_list.h"
 #include "cryptonote_core/service_node_quorum_cop.h"
 #include "cryptonote_core/service_node_rules.h"
+#include "cryptonote_core/sesh_transition/sesh_transition.h"
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
 #include "logging/oxen_logger.h"
 
@@ -45,9 +45,9 @@ struct mocknet_global_data {
     bool fork_enabled;
     uint64_t fork_at_height;  // The chain height to fork at from the current chain
     bool protocol_is_disabled;
-    oxen::sent::addrmap_t transition_addr_map;
-    oxen::sent::bonus_map_t transition_bonus_map;
-    oxen::sent::bls_keys_t transition_bls_keys;
+    oxen::sesh::addrmap_t transition_addr_map;
+    oxen::sesh::bonus_map_t transition_bonus_map;
+    oxen::sesh::bls_keys_t transition_bls_keys;
 };
 static mocknet_global_data globals;
 
@@ -465,7 +465,7 @@ bool mocknet_is_mock_ethereum_address(const eth::address& addr) {
     return result;
 }
 
-void mocknet_get_transition_context(oxen::sent::transition_context& context) {
+void mocknet_get_transition_context(oxen::sesh::transition_context& context) {
     context.conv_ratio = {1, 120};  // X SESH per Y OXEN
     context.addresses = &globals.transition_addr_map;
     context.bls_keys = &globals.transition_bls_keys;
