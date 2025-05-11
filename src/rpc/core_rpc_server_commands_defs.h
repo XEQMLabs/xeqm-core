@@ -664,8 +664,8 @@ struct GET_BLOCK_HASH : PUBLIC {
 ///
 /// Inputs:
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -724,8 +724,8 @@ struct GET_LAST_BLOCK_HEADER : PUBLIC {
 /// - `hash` -- The block's hash.
 /// - `hashes` -- Request multiple blocks via an array of hashes
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -755,8 +755,8 @@ struct GET_BLOCK_HEADER_BY_HASH : PUBLIC {
 /// - `height` -- A block height to look up; returned in `block_header`
 /// - `heights` -- Block heights to retrieve; returned in `block_headers`
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -809,7 +809,7 @@ struct GET_BLOCK : PUBLIC {
 
     struct request_parameters {
         std::string hash;
-        uint64_t height;
+        std::optional<uint64_t> height;
         bool fill_pow_hash;
     } request;
 };
@@ -1059,11 +1059,14 @@ struct GET_CONNECTIONS : NO_ARGS {
 ///
 /// Inputs:
 ///
-/// - `start_height` -- The starting block's height.
-/// - `end_height` -- The ending block's height.
+/// - `start_height` -- The starting block's height.  If negative then the value means relative to
+///   the current chain height (e.g. "start_height": -10, "end_height": -1 would request the last 10
+///   blocks).
+/// - `end_height` -- The ending block's height (inclusive).  Must be less than start_height + 1000.
+///   Negative values are relative to the current chain height.
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -1082,9 +1085,12 @@ struct GET_BLOCK_HEADERS_RANGE : PUBLIC {
         return NAMES("get_block_headers_range", "getblockheadersrange");
     }
 
+    // Used for this endpoint as well as the by_hash/by_height versions.
+    static constexpr int64_t MAX_COUNT = 1000;
+
     struct request_parameters {
-        uint64_t start_height;
-        uint64_t end_height;
+        int64_t start_height;
+        int64_t end_height;
         bool fill_pow_hash;
         bool get_tx_hashes;
     } request;
