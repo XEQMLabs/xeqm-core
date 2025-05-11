@@ -689,6 +689,13 @@ class service_node_list {
         }
     }
 
+    template <std::invocable<const proof_info&> Func>
+    void for_each_proof(Func f) const {
+        std::lock_guard lock{m_sn_mutex};
+        for (const auto& proof : proofs)
+            f(proof.second);
+    };
+
     /// Loops through all registered service nodes and calls `f` with the pubkey and basic service
     /// node info.  The SN lock is held while iterating, so the "something" should be quick.  If the
     /// callback returns bool then `true` means stop iterating (i.e. you'd found what you wanted),
