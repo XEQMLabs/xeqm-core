@@ -73,8 +73,8 @@ L2Tracker::L2Tracker(
             std::chrono::steady_clock::time_point last_update{};
             while (running) {
                 update_logs_wakeup.wait(false);
-                update_logs_wakeup = false;
-                if (running) {
+                bool wake = update_logs_wakeup.exchange(false);
+                if (wake && running) {
                     auto now = std::chrono::steady_clock::now();
                     auto delta = now - last_update;
                     if (delta < update_logs_cooldown) {
