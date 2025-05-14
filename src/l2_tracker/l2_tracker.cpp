@@ -66,23 +66,26 @@ L2Tracker::L2Tracker(
                               /*squelch*/ true,
                               update_thread_id);
                   }} {
-    if (update_cooldown != 0s) {
+    if (update_cooldown > 0s) {
         update_logs_cooldown = update_cooldown;
-        update_logs_thread = std::make_unique<std::thread>([this]() {
-            auto last_update = std::chrono::steady_clock::now();
+        update_logs_thread = std::thread{[this]() {
+            std::chrono::steady_clock::time_point last_update{};
             while (running) {
                 update_logs_wakeup.wait(false);
+                update_logs_wakeup = false;
                 if (running) {
                     auto now = std::chrono::steady_clock::now();
                     auto delta = now - last_update;
-                    if (delta < update_logs_cooldown)
+                    if (delta < update_logs_cooldown) {
                         std::this_thread::sleep_for(update_logs_cooldown - delta);
+                        if (!running)
+                            break;
+                    }
                     update_logs_internal();
                     last_update = std::chrono::steady_clock::now();
                 }
-                update_logs_wakeup = false;
             }
-        });
+        }};
     }
 }
 
@@ -460,7 +463,7 @@ void L2Tracker::update_rewards(std::optional<std::forward_list<uint64_t>> more) 
 
 void L2Tracker::update_logs() {
     // if no cooldown set, no update thread, just call it
-    if (!update_logs_thread)
+    if (!update_logs_thread.joinable())
         update_logs_internal();
     else {
         update_logs_wakeup = true;
