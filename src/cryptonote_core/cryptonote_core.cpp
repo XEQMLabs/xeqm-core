@@ -356,6 +356,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_max_logs);
     command_line::add_arg(desc, arg_l2_check_interval);
     command_line::add_arg(desc, arg_l2_check_threshold);
+    command_line::add_arg(desc, arg_l2_update_cooldown);
     command_line::add_arg(desc, arg_l2_skip_chainid);
     command_line::add_arg(desc, arg_l2_proxy);
     command_line::add_arg(desc, arg_l2_oxend);
