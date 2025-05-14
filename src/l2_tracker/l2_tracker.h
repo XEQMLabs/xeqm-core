@@ -200,7 +200,13 @@ class L2Tracker {
     // defines how many requests we make to the L2 provider: each (this period) we need to make one
     // request to get the current block height, and then at least one more to fetch any logs since
     // the previous block height we knew about.
-    explicit L2Tracker(cryptonote::core& core, std::chrono::milliseconds update_frequency = 10s);
+    // `update_cooldown` governs how frequently we will make repeated eth_getLogs calls, as some
+    // providers have rate limits which would otherwise be hit, default is no cooldown/delay
+    // between requests.
+    explicit L2Tracker(
+            cryptonote::core& core,
+            std::chrono::milliseconds update_frequency = 10s,
+            std::chrono::milliseconds update_cooldown = 0s);
 
     // Constructs an L2Tracker in L2 proxy mode, where we rely on one or more external oxends to
     // provide us with L2 state data.
@@ -368,6 +374,13 @@ class L2Tracker {
     // This is the meat of get_vote_for ServiceNodePurge, but is also used internally when deciding
     // whether to put things in the mempool.
     bool is_node_purgeable(const bls_public_key& bls_pubkey) const;
+
+    std::atomic<bool> running{true};
+    std::atomic<bool> update_logs_wakeup{false};
+    std::chrono::milliseconds update_logs_cooldown{0s};
+    std::unique_ptr<std::thread> update_logs_thread;
+
+    void update_logs_internal();
 };
 
 }  // namespace eth
