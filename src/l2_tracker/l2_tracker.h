@@ -378,7 +378,7 @@ class L2Tracker {
     std::atomic<bool> running{true};
     std::atomic<bool> update_logs_wakeup{false};
     std::chrono::milliseconds update_logs_cooldown{0s};
-    std::unique_ptr<std::thread> update_logs_thread;
+    std::thread update_logs_thread;
 
     void update_logs_internal();
 };
