@@ -4,6 +4,7 @@
 #include <oxenmq/oxenmq.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <ethyl/provider.hpp>
 #include <forward_list>
 #include <ranges>
@@ -375,8 +376,9 @@ class L2Tracker {
     // whether to put things in the mempool.
     bool is_node_purgeable(const bls_public_key& bls_pubkey) const;
 
-    std::atomic<bool> running{true};
-    std::atomic<bool> update_logs_wakeup{false};
+    std::mutex update_logs_mutex;
+    std::condition_variable update_logs_cv;
+    bool update_logs_running = true, update_logs_wakeup = false;
     std::chrono::milliseconds update_logs_cooldown{0s};
     std::thread update_logs_thread;
 

@@ -69,22 +69,29 @@ L2Tracker::L2Tracker(
                   }} {
     if (update_cooldown > 0s) {
         update_logs_cooldown = update_cooldown;
-        update_logs_thread = std::thread{[this]() {
+        update_logs_thread = std::thread{[this] {
             std::chrono::steady_clock::time_point last_update{};
-            while (running) {
-                update_logs_wakeup.wait(false);
-                bool wake = update_logs_wakeup.exchange(false);
-                if (wake && running) {
-                    auto now = std::chrono::steady_clock::now();
-                    auto delta = now - last_update;
-                    if (delta < update_logs_cooldown) {
-                        std::this_thread::sleep_for(update_logs_cooldown - delta);
-                        if (!running)
-                            break;
-                    }
-                    update_logs_internal();
-                    last_update = std::chrono::steady_clock::now();
+            std::unique_lock lock{update_logs_mutex};
+            while (update_logs_running) {
+                update_logs_cv.wait(lock, [this] { return update_logs_wakeup; });
+                if (!update_logs_running)
+                    break;
+                update_logs_wakeup = false;
+
+                auto now = std::chrono::steady_clock::now();
+                auto delta = now - last_update;
+
+                if (now < last_update + update_logs_cooldown) {
+                    update_logs_cv.wait_until(lock, last_update + update_logs_cooldown, [this] {
+                        return !update_logs_running;
+                    });
+                    if (!update_logs_running)
+                        break;
                 }
+                lock.unlock();
+                update_logs_internal();
+                last_update = std::chrono::steady_clock::now();
+                lock.lock();
             }
         }};
     }
@@ -130,9 +137,15 @@ L2Tracker::L2Tracker(
 }
 
 L2Tracker::~L2Tracker() {
-    running = false;
-    update_logs_wakeup = true;
-    update_logs_wakeup.notify_one();
+    if (update_logs_thread.joinable()) {
+        {
+            std::lock_guard lock{update_logs_mutex};
+            update_logs_running = false;
+            update_logs_wakeup = true;
+        }
+        update_logs_cv.notify_one();
+        update_logs_thread.join();
+    }
 }
 
 // For any given l2 height, we calculate the reward using the last height (inclusive) that was
@@ -467,8 +480,11 @@ void L2Tracker::update_logs() {
     if (!update_logs_thread.joinable())
         update_logs_internal();
     else {
-        update_logs_wakeup = true;
-        update_logs_wakeup.notify_one();
+        {
+            std::lock_guard lock{update_logs_mutex};
+            update_logs_wakeup = true;
+        }
+        update_logs_cv.notify_one();
     }
 }
 
