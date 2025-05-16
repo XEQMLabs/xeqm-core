@@ -253,10 +253,18 @@ local android_build_steps(android_abi, android_platform=21, jobs=6, cmake_extra=
   'cmake .. -DCMAKE_CXX_FLAGS=-fdiagnostics-color=always -DCMAKE_C_FLAGS=-fdiagnostics-color=always ' +
   '-DCMAKE_BUILD_TYPE=Release ' +
   '-DCMAKE_TOOLCHAIN_FILE=/usr/lib/android-ndk/build/cmake/android.toolchain.cmake ' +
-  '-DANDROID_PLATFORM=' + android_platform + ' -DANDROID_ABI=' + android_abi + ' ' +
-  cmake_options({ MONERO_SLOW_HASH: true, WARNINGS_AS_ERRORS: false, BUILD_TESTS: false, RANDOMX_ENABLE_JIT: false }) +
+  '-DANDROID_PLATFORM=' + android_platform + ' -DANDROID_ABI=' + android_abi + ' -DANDROID_STL=c++_shared ' +
+  cmake_options({
+    MONERO_SLOW_HASH: true,
+    WARNINGS_AS_ERRORS: false,
+    BUILD_TESTS: false,
+    RANDOMX_ENABLE_JIT: false,
+    CMAKE_POSITION_INDEPENDENT_CODE: true,
+    STATIC: true,
+    BUILD_STATIC_DEPS: true,
+  }) +
   '-DLOCAL_MIRROR=https://oxen.rocks/deps ' +
-  '-DBUILD_STATIC_DEPS=ON -DSTATIC=ON -G Ninja ' + cmake_extra,
+  '-G Ninja ' + cmake_extra,
   'ninja -j' + jobs + ' -v wallet_merged',
   'cd ..',
 ];
