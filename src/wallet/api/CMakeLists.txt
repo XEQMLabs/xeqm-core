@@ -121,6 +121,7 @@ if (STATIC AND BUILD_STATIC_DEPS)
             device
             epee
             l2_tracker
+            logging
             mnemonics
             multisig
             net
