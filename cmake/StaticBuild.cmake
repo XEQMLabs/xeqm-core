@@ -721,7 +721,7 @@ build_external(libidn2
 add_static_target(libidn2::libidn2 libidn2_external libidn2.a libunistring::libunistring)
 
 build_external(gmp
-    CONFIGURE_COMMAND ./configure ${sane_cross_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic
+    CONFIGURE_COMMAND ./configure ${sane_cross_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic=yes
         "CC=${deps_cc}" "CXX=${deps_cxx}" "CFLAGS=${deps_CFLAGS}${apple_cflags_arch}" "CXXFLAGS=${deps_CXXFLAGS}${apple_cxxflags_arch}"
         "LDFLAGS=-L${DEPS_DESTDIR}/lib${apple_ldflags_arch}" CC_FOR_BUILD=cc CPP_FOR_BUILD=cpp
     DEPENDS libidn2_external libtasn1_external
