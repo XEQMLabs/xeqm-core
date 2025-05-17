@@ -720,8 +720,12 @@ build_external(libidn2
     BUILD_BYPRODUCTS ${DEPS_DESTDIR}/lib/libidn2.a ${DEPS_DESTDIR}/include/idn2.h)
 add_static_target(libidn2::libidn2 libidn2_external libidn2.a libunistring::libunistring)
 
+set(gmp_config_extra)
+if(ANDROID AND ANDROID_ABI STREQUAL "armeabi-v7a")
+    list(APPEND gmp_config_extra "--disable-assembly")
+endif()
 build_external(gmp
-    CONFIGURE_COMMAND ./configure ${sane_cross_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic=yes
+    CONFIGURE_COMMAND ./configure ${sane_cross_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic=yes ${gmp_config_extra}
         "CC=${deps_cc}" "CXX=${deps_cxx}" "CFLAGS=${deps_CFLAGS}${apple_cflags_arch}" "CXXFLAGS=${deps_CXXFLAGS}${apple_cxxflags_arch}"
         "LDFLAGS=-L${DEPS_DESTDIR}/lib${apple_ldflags_arch}" CC_FOR_BUILD=cc CPP_FOR_BUILD=cpp
     DEPENDS libidn2_external libtasn1_external
