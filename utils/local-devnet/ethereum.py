@@ -530,4 +530,3 @@ class SNRewardsContract:
         index                              += 1;
 
         return result
-
