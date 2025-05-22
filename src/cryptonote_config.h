@@ -46,7 +46,7 @@ namespace cryptonote {
 inline constexpr uint64_t MAX_BLOCK_NUMBER = 500000000;
 inline constexpr size_t MAX_TX_SIZE = 1000000;
 inline constexpr uint64_t MAX_TX_PER_BLOCK = 0x10000000;
-inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 0;
+inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 30;
 inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 6;
 inline constexpr uint64_t TX_OUTPUT_DECOYS = 11;
 inline constexpr size_t TX_BULLETPROOF_MAX_OUTPUTS = 16;
