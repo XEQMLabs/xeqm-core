@@ -29,14 +29,24 @@ RUN set -ex && \
         automake \
         bzip2 \
         xsltproc \
-        gperf
+        gperf \
+	wget \
+	libgmp-dev \
+	libgmp3-dev \
+	libsystemd-dev
 
-WORKDIR /usr/local/src
+RUN cd /tmp \
+    && wget https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz \
+    && tar -xf gmp-6.3.0.tar.xz \
+    && cd gmp-6.3.0 \
+    && ./configure --enable-cxx \
+    && make -j$(nproc) \
+    && make install
 
 ARG OPENSSL_VERSION=1.1.1g
 ARG OPENSSL_HASH=ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46
 RUN set -ex \
-    && curl -s -O https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz \
+    && wget https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz \
     && echo "${OPENSSL_HASH}  openssl-${OPENSSL_VERSION}.tar.gz" | sha256sum -c \
     && tar xf openssl-${OPENSSL_VERSION}.tar.gz \
     && cd openssl-${OPENSSL_VERSION} \
@@ -48,7 +58,7 @@ ARG BOOST_VERSION=1_72_0
 ARG BOOST_VERSION_DOT=1.72.0
 ARG BOOST_HASH=59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa143417cc660722
 RUN set -ex \
-    && curl -s -L -o  boost_${BOOST_VERSION}.tar.bz2 https://dl.bintray.com/boostorg/release/${BOOST_VERSION_DOT}/source/boost_${BOOST_VERSION}.tar.bz2 \
+    && wget -O boost_${BOOST_VERSION}.tar.bz2 https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION_DOT}/boost_${BOOST_VERSION}.tar.bz2 \
     && echo "${BOOST_HASH}  boost_${BOOST_VERSION}.tar.bz2" | sha256sum -c \
     && tar xf boost_${BOOST_VERSION}.tar.bz2 \
     && cd boost_${BOOST_VERSION} \
