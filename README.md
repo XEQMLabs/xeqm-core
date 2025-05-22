@@ -2,8 +2,8 @@
 
 **NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS**
 
-Copyright (c) 2018-2022 The Equilibria Project.   
-Portions Copyright (c) 2014-2019 The Monero Project.   
+Copyright (c) 2018-2022 The Equilibria Project.
+Portions Copyright (c) 2014-2019 The Monero Project.
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 ## Development resources
@@ -210,7 +210,7 @@ application.
 
 ### On FreeBSD:
 
-The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`). 
+The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`).
 If you are running Equilibria in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
 
 ### On OpenBSD:
@@ -311,15 +311,15 @@ You can also build a docker package using:
     ```bash
     # Build using all available cores
     docker build -t oxen-daemon-image .
-    
+
     # or build using a specific number of cores (reduce RAM requirement)
     docker build --build-arg NPROC=1 -t oxen .
-    
+
     # either run in foreground
-    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
-    
+    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
+
     # or in background
-    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen 
+    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
     ```
 
 **END - WORK IN PROGRESS**
@@ -464,12 +464,14 @@ testing. This script requires that:
 - A development Ethereum environment and node is setup at `localhost:8545`
   (which is the default for port for these environments). Currently we only
   support Foundry's `anvil` testnet. (Hardhat's node does not support
-  `eth_getProof` calls).
+  `eth_getProof` calls). An easy way of getting started is to clone the
+  [eth-sn-contracts](https://github.com/oxen-io/eth-sn-contracts) repo and
+  running it with `make node`. Make sure `npx` is installed.
 
-- The smart contracts are deployed from `oxen-io/eth-sn-contracts` by invoking
-  the `deploy-local` Makefile target.
-
-Thereafter the script can be invoked to launch the local network.
+- Thereafter the script can be invoked to launch the local network. This
+  command is a standard way to get going (refer to additional flags
+  in `service_node_network.py`):
+  `python3 utils/local-devnet/service_node_network.py --eth-sn-contracts-dir ../eth-sn-contracts/ --oxen-bin-dir ./build/bin`
 
 # Known Issues
 
