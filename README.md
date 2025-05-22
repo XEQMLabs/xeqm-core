@@ -480,12 +480,14 @@ testing. This script requires that:
 - A development Ethereum environment and node is setup at `localhost:8545`
   (which is the default for port for these environments). Currently we only
   support Foundry's `anvil` testnet. (Hardhat's node does not support
-  `eth_getProof` calls).
+  `eth_getProof` calls). An easy way of getting started is to clone the
+  [eth-sn-contracts](https://github.com/oxen-io/eth-sn-contracts) repo and
+  running it with `make node`. Make sure `npx` is installed.
 
-- The smart contracts are deployed from `oxen-io/eth-sn-contracts` by invoking
-  the `deploy-local` Makefile target.
-
-Thereafter the script can be invoked to launch the local network.
+- Thereafter the script can be invoked to launch the local network. This
+  command is a standard way to get going (refer to additional flags
+  in `service_node_network.py`):
+  `python3 utils/local-devnet/service_node_network.py --eth-sn-contracts-dir ../eth-sn-contracts/ --oxen-bin-dir ./build/bin`
 
 # Known Issues
 
