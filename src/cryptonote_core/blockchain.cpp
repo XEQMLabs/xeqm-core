@@ -2123,6 +2123,18 @@ bool Blockchain::create_block_template_internal(
             return false;
         }
 
+        eth::L2Tracker::L2Heights l2_heights = m_l2_tracker->get_l2_heights();
+        if (l2_heights.synced < b.l2_height) {  // Haven't synced the logs for this height yet
+            log::error(
+                    logcat,
+                    "Block template uses L2 height {} which is not synced in the L2 tracker yet. "
+                    "The L2 tracker's current latest/synced height is {}/{}",
+                    b.l2_height,
+                    l2_heights.latest,
+                    l2_heights.synced);
+            return false;
+        }
+
         // Clamp the l2_reward value into the maximum allowed range by the chain (this means sudden
         // pool reward changes will only show up gradually in l2_reward, but prevents abuse by
         // faulty/compromised L2 providers or pulse quorums).
