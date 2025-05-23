@@ -2114,15 +2114,6 @@ bool Blockchain::create_block_template_internal(
     }
 
     if (hf_version >= cryptonote::feature::ETH_BLS) {
-        auto actual_reward = m_l2_tracker->get_reward_rate(b.l2_height);
-        if (!actual_reward) {
-            log::error(
-                    logcat,
-                    "L2 Tracker failed to retrieve the current block reward; unable to create a "
-                    "block");
-            return false;
-        }
-
         eth::L2Tracker::L2Heights l2_heights = m_l2_tracker->get_l2_heights();
         if (l2_heights.synced < b.l2_height) {  // Haven't synced the logs for this height yet
             log::error(
@@ -2132,6 +2123,15 @@ bool Blockchain::create_block_template_internal(
                     b.l2_height,
                     l2_heights.latest,
                     l2_heights.synced);
+            return false;
+        }
+
+        auto actual_reward = m_l2_tracker->get_reward_rate(b.l2_height);
+        if (!actual_reward) {
+            log::error(
+                    logcat,
+                    "L2 Tracker failed to retrieve the current block reward; unable to create a "
+                    "block");
             return false;
         }
 
