@@ -1180,8 +1180,7 @@ bool core::init_service_keys() {
     if (m_service_node) {
         keys.key = crypto::ed25519_to_monero_secret_key(keys.key_ed25519);
         if (!crypto::secret_key_to_public_key(keys.key, keys.pub))
-            throw oxen::traced<std::runtime_error>{
-                    "Failed to derive primary key from ed25519 key"};
+            throw oxen::traced<std::runtime_error>{"Failed to derive primary key from ed25519 key"};
         if (std::memcmp(keys.pub.data(), keys.pub_ed25519.data(), 32))
             throw oxen::traced<std::runtime_error>{
                     "Internal error: unexpected primary pubkey and ed25519 pubkey mismatch"};
