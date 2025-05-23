@@ -2673,6 +2673,29 @@ void core::do_uptime_proof_call() {
                                     : "startup");
                     return;
                 }
+
+                eth::L2Tracker::L2Heights l2_heights = l2_tracker().get_l2_heights();
+                assert(l2_heights.latest >= l2_heights.synced);
+                size_t allowed_height_delta = 10s / config::L2_BLOCK_TIME;
+                size_t min_height = l2_heights.latest - allowed_height_delta;
+
+                // Allow some block buffer because these are individual network requests which take
+                // time
+                if (l2_heights.synced < min_height) {
+                    log::error(
+                            globallogcat,
+                            fg(fmt::terminal_color::red) | fmt::emphasis::bold,
+                            "Failed to submit uptime proof: the L2 RPC provider has not synced the "
+                            "logs from Arbitrum to a sufficient height of {:L} to be considered "
+                            "synced. The L2's latest known/synced height is {:L}/{:L}. Check your "
+                            "L2 provider's dashboard for request health or the logs of "
+                            "your local Arbitrum node to ensure the getLogs requests are being "
+                            "handled successfully",
+                            min_height,
+                            l2_heights.latest,
+                            l2_heights.synced);
+                    return;
+                }
             }
 
             submit_uptime_proof();
