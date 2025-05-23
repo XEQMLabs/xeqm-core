@@ -2685,8 +2685,8 @@ void core::do_uptime_proof_call() {
                             globallogcat,
                             fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                             "Failed to submit uptime proof: the L2 RPC provider has not synced the "
-                            "logs from Arbitrum to a sufficient height of {:L} to be considered "
-                            "synced. The L2's latest known/synced height is {:L}/{:L}. Check your "
+                            "logs from Arbitrum to a sufficient height of {} to be considered "
+                            "synced. The L2's latest known/synced height is {}/{}. Check your "
                             "L2 provider's dashboard for request health or the logs of "
                             "your local Arbitrum node to ensure the getLogs requests are being "
                             "handled successfully",
