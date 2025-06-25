@@ -827,19 +827,33 @@ BlockchainSQLite::wallet_info::wallet_info(
             auto rederived =
                     lifetime_unlocked_stakes + lifetime_rewards - lifetime_liquidated_stakes;
             if (amount != rederived) {
-                log::error(
-                        logcat,
-                        "Internal error: SN contributor {} at height {} lifetime claimable "
-                        "mismatch:\n"
-                        "lifetime claimable {} != {} (= {} rewards + {} unlocked - {} liquidated)",
-                        log_addr{tools::make_from_guts<eth::address>(addr_bytes)},
-                        height,
-                        amount,
-                        rederived,
-                        lifetime_rewards,
-                        lifetime_unlocked_stakes,
-                        lifetime_liquidated_stakes);
-                assert(amount == rederived);
+                // clang-format off
+                // NOTE: The affected address that we patched up in the fixups in SNL received a
+                // payment before the fix could be applied so this assert would trigger. 2 blocks
+                // later at 1871520 is when their DB entry is sorted, so we add an exception here to
+                // skip it.
+                //
+                // [sqlite/db_sqlite.cpp:872] Internal error: SN contributor 0x7AaF70e681F17aae9284dC311431341CB7b64A43 at height 1871518 lifetime claimable mismatch:
+                // lifetime claimable 34.840001830887 != 18766.090001830887 (= 16.090001830887 rewards + 18750 unlocked - 0 liquidated)
+                // db_sqlite.cpp:873: wallet_info(...): Assertion `amount == rederived' failed.
+                // clang-format on
+                bool skip = db.nettype == network_type::MAINNET && db.height == 1871518;
+                if (!skip) {
+                    log::error(
+                            logcat,
+                            "Internal error: SN contributor {} at height {} lifetime claimable "
+                            "mismatch:\n"
+                            "lifetime claimable {} != {} (= {} rewards + {} unlocked - {} "
+                            "liquidated)",
+                            log_addr{tools::make_from_guts<eth::address>(addr_bytes)},
+                            height,
+                            amount,
+                            rederived,
+                            lifetime_rewards,
+                            lifetime_unlocked_stakes,
+                            lifetime_liquidated_stakes);
+                    assert(amount == rederived);
+                }
             }
 
             // NOTE: Delayed payments is only supported on ETH addresses
