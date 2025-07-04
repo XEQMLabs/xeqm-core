@@ -628,9 +628,13 @@ void BlockchainLMDB::do_resize(uint64_t bytes_required) {
     log::trace(logcat, "BlockchainLMDB::{}", __func__);
     std::lock_guard lock{*this};
 
-    bool batch_was_active = m_batch_active;
-    if (batch_was_active)
-        batch_stop();
+    assert(!m_batch_active &&
+           "Do resize is private and _only_ called at the start `batch_start` so m_batch_active "
+           "will always be false because `batch_start` returns early if it's active");
+    if (m_batch_active) {
+        log::error(logcat, "LMDB batch is unexpectedly active during resize, cancelling resize");
+        return;
+    }
 
     // NOTE: Check disk capacity
     uint64_t const add_size = std::max(MIN_GROW_SIZE, bytes_required);
@@ -676,8 +680,6 @@ void BlockchainLMDB::do_resize(uint64_t bytes_required) {
                 old_size_str, new_size_str, mdb_strerror(result))));
 
     log::info(logcat, "LMDB map size increased.  Old: {}, new: {}", old_size_str, new_size_str);
-    if (batch_was_active)
-        batch_start();
 }
 
 void BlockchainLMDB::add_block(
