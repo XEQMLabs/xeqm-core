@@ -3718,14 +3718,9 @@ void BlockchainLMDB::batch_stop() {
     check_open();
     log::trace(logcat, "batch transaction: committing...");
     auto time1 = std::chrono::steady_clock::now();
-    try {
-        m_write_txn->commit();
-        time_commit1 += std::chrono::steady_clock::now() - time1;
-        cleanup_batch();
-    } catch (const std::exception& e) {
-        cleanup_batch();
-        throw;
-    }
+    auto on_exit = oxen::defer([&] { cleanup_batch(); });
+    m_write_txn->commit();
+    time_commit1 += std::chrono::steady_clock::now() - time1;
     log::trace(logcat, "batch transaction: end");
 }
 
@@ -3740,15 +3735,8 @@ void BlockchainLMDB::batch_abort() {
     if (m_writer != boost::this_thread::get_id())
         throw1(DB_ERROR("batch transaction owned by other thread"));
     check_open();
-    // for destruction of batch transaction
-    m_write_txn = nullptr;
-    // explicitly call in case mdb_env_close() (BlockchainLMDB::close()) called before
-    // BlockchainLMDB destructor called.
+    auto on_exit = oxen::defer([&] { cleanup_batch(); });
     m_write_batch_txn->abort();
-    delete m_write_batch_txn;
-    m_write_batch_txn = nullptr;
-    m_batch_active = false;
-    memset(&m_wcursors, 0, sizeof(m_wcursors));
     log::trace(logcat, "batch transaction: aborted");
 }
 
