@@ -1045,10 +1045,20 @@ bool Blockchain::deinit() {
 // It starts a batch and calls private method pop_block_from_db().
 void Blockchain::pop_blocks(uint64_t nblocks) {
     ZoneScoped;
-    uint64_t i = 0;
     auto lock = tools::unique_locks(tx_pool, *this);
-    bool stop_batch = m_db->batch_start();
 
+    bool stop_batch = m_db->batch_start();
+    bool pop_error = false;
+    auto on_exit = oxen::defer([&] {
+        if (stop_batch) {
+            if (pop_error)
+                m_db->batch_abort();
+            else
+                m_db->batch_stop();
+        }
+    });
+
+    uint64_t i = 0;
     try {
         const uint64_t blockchain_height = m_db->height();
         if (blockchain_height > 0)
@@ -1075,14 +1085,11 @@ void Blockchain::pop_blocks(uint64_t nblocks) {
         }
     } catch (const std::exception& e) {
         log::error(logcat, "Error when popping blocks after processing {} blocks: {}", i, e.what());
-        if (stop_batch)
-            m_db->batch_abort();
+        pop_error = true;
         return;
     }
 
     exec_detach_hooks(*this, m_db->height(), m_blockchain_detached_hooks, /*by_pop_blocks=*/true);
-    if (stop_batch)
-        m_db->batch_stop();
 }
 //------------------------------------------------------------------
 // This function tells BlockchainDB to remove the top block from the
@@ -1386,10 +1393,13 @@ bool Blockchain::rollback_blockchain_switching(
 bool Blockchain::blink_rollback(uint64_t rollback_height) {
     auto lock = tools::unique_locks(tx_pool, *this);
     bool stop_batch = m_db->batch_start();
+    auto on_exit = oxen::defer([&] {
+        if (stop_batch)
+            m_db->batch_stop();
+    });
+
     log::debug(logcat, "Rolling back to height {}", rollback_height);
     bool ret = rollback_blockchain_switching({}, rollback_height);
-    if (stop_batch)
-        m_db->batch_stop();
     return ret;
 }
 //------------------------------------------------------------------
@@ -6072,6 +6082,10 @@ bool Blockchain::update_checkpoints_from_json_file(const fs::path& file_path) {
     {
         std::unique_lock lock{*this};
         bool stop_batch = m_db->batch_start();
+        auto on_exit = oxen::defer([&] {
+            if (stop_batch)
+                m_db->batch_stop();
+        });
 
         for (std::vector<height_to_hash>::const_iterator it = first_to_check;
              it != one_past_last_to_check;
@@ -6090,9 +6104,6 @@ bool Blockchain::update_checkpoints_from_json_file(const fs::path& file_path) {
                 result = false;
             }
         }
-
-        if (stop_batch)
-            m_db->batch_stop();
     }
 
     return result;
