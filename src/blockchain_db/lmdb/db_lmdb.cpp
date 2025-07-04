@@ -3696,31 +3696,6 @@ bool BlockchainLMDB::batch_start(uint64_t bytes_required) {
     return true;
 }
 
-void BlockchainLMDB::batch_commit() {
-    log::trace(logcat, "BlockchainLMDB::{}", __func__);
-    if (!m_batch_transactions)
-        throw0(DB_ERROR("batch transactions not enabled"));
-    if (!m_batch_active)
-        throw1(DB_ERROR("batch transaction not in progress"));
-    if (m_write_batch_txn == nullptr)
-        throw1(DB_ERROR("batch transaction not in progress"));
-    if (m_writer != boost::this_thread::get_id())
-        throw1(DB_ERROR("batch transaction owned by other thread"));
-
-    check_open();
-
-    log::trace(logcat, "batch transaction: committing...");
-    auto time1 = std::chrono::steady_clock::now();
-    m_write_txn->commit();
-    time_commit1 += std::chrono::steady_clock::now() - time1;
-    log::trace(logcat, "batch transaction: committed");
-
-    m_write_txn = nullptr;
-    delete m_write_batch_txn;
-    m_write_batch_txn = nullptr;
-    memset(&m_wcursors, 0, sizeof(m_wcursors));
-}
-
 void BlockchainLMDB::cleanup_batch() {
     // for destruction of batch transaction
     m_write_txn = nullptr;
