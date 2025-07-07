@@ -5547,7 +5547,11 @@ bool service_node_list::store(uint64_t state_height) {
         return true;
 
     // NOTE: Convert the runtime SNL data into a format suitable for serialization into the DB
-    std::lock_guard lock(m_sn_mutex);
+    // NOTE: Must lock blockchain to prevent other threads from opening a batch whilst we have a
+    // db_wtxn_guard open which breaks LMDB.
+    // TODO: db_wtxn_guard looks like it could be replaced with an RAII class that does
+    // batch_start and batch_stop, consider repurposing LockedTXN and or merging them all into one.
+    auto locks = tools::unique_locks(m_sn_mutex, blockchain);
 
     std::vector<std::string> archive_blob_list;
     std::vector<std::string> history_blob_list;
