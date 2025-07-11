@@ -652,6 +652,12 @@ void BlockchainSQLite::upgrade_schema() {
         --
         -- When pruning we floor to the closest interval to make the SQL table match the equivalent
         -- pruning math ('cull_height') in the SNL at 'process_block()'.
+        --
+        -- It's possible and expected to have conflicts when archiving delayed_payments. For example
+        -- on mainnet, we archive every 10k blocks and a deregistration delayed payment row lasts
+        -- for 21.6k blocks (30 days). If we archive a deregistration, on the next 10k interval,
+        -- it's possible the deregistration is still present in the table and will be attempted to
+        -- be re-archived. We ignore those conflicts as it's expected behaviour.
         DROP   TRIGGER IF EXISTS make_archive;
         CREATE TRIGGER           make_archive AFTER UPDATE ON batch_db_info
         FOR EACH ROW WHEN (NEW.height % {archive_interval}) = 0 AND NEW.height > OLD.height BEGIN
@@ -665,7 +671,7 @@ void BlockchainSQLite::upgrade_schema() {
                 WHERE height < (NEW.height - {archive_keep});
 
             -- Delayed payments
-            INSERT INTO delayed_payments_archive ({delayed_fields})
+            INSERT OR IGNORE INTO delayed_payments_archive ({delayed_fields})
                 SELECT {delayed_fields} FROM delayed_payments;
             DELETE FROM delayed_payments_archive WHERE height < (NEW.height - {archive_keep});
 
