@@ -981,13 +981,14 @@ bool Blockchain::init(
             uint64_t value;
             cryptonote::hf hf;
         } constexpr RECORDS[] = {
-                {1'870'000, 12'342'509'582'265'973, hf::hf21_eth},
-                {1'880'000, 12'576'153'824'838, hf::hf22_eth_fixup},
                 {1'890'000, 12'826'639'569'804, hf::hf22_eth_fixup},
+                {1'880'000, 12'576'153'824'838, hf::hf22_eth_fixup},
+                {1'870'000, 12'342'509'582'265'973, hf::hf21_eth},
         };
 
         int64_t version = m_sqlite_db->prepared_get<int64_t>("PRAGMA user_version");
-        if (version == 0 && m_sqlite_db->height >= RECORDS[0].height) {
+        uint64_t earliest_height = (std::end(RECORDS) - 1)->height;
+        if (version == 0 && m_sqlite_db->height >= earliest_height) {
             // This DB that has synced past the ETH transition and is still on V0 may be affected by
             // the delayed payments issue that incorrectly rejected rewards payments in blocks
             // sitting on the archiving interval (due to duplicate delayed payment rows to be
@@ -1047,7 +1048,7 @@ bool Blockchain::init(
                         *rewind_to_height - 1,
                         fmt::to_string(buf));
             } else {
-                rewind_to_height = (std::end(RECORDS) - 1)->height;
+                rewind_to_height = RECORDS[0].height;
                 log::info(
                         globallogcat,
                         "Re-orging to the closest snapshot from blk {} and recalculating "
