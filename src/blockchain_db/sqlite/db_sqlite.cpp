@@ -672,7 +672,7 @@ void BlockchainSQLite::upgrade_schema() {
 
             -- Delayed payments
             INSERT INTO delayed_payments_archive ({delayed_fields})
-                SELECT {delayed_fields} FROM delayed_payments
+                SELECT {delayed_fields} FROM delayed_payments WHERE true
                 ON CONFLICT (block_height, block_tx_index, contributor_index) DO NOTHING;
             DELETE FROM delayed_payments_archive WHERE height < (NEW.height - {archive_keep});
 
