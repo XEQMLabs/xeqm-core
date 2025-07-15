@@ -798,9 +798,8 @@ void BlockchainSQLite::blockchain_detached(
         prepared_exec(
                 "INSERT INTO delayed_payments ({delayed_fields})"
                 " SELECT {delayed_fields} FROM delayed_payments_{suffix}"
-                " WHERE ? >= height AND ? < payout_height"_format(
+                " WHERE ?1 >= height AND ?1 < payout_height"_format(
                         "delayed_fields"_a = DELAYED_PAYMENTS_COLS, "suffix"_a = suffix),
-                static_cast<int64_t>(new_height),
                 static_cast<int64_t>(new_height));
     }
 
