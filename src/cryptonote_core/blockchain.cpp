@@ -975,101 +975,18 @@ bool Blockchain::init(
         }
     }
 
-    if (nettype == cryptonote::network_type::MAINNET) {
-        struct fixup_record {
-            uint64_t height;
-            uint64_t value;
-            cryptonote::hf hf;
-        } constexpr RECORDS[] = {
-                {1'890'000, 12'826'639'569'804, hf::hf22_eth_fixup},
-                {1'880'000, 12'576'153'824'838, hf::hf22_eth_fixup},
-                {1'870'000, 12'342'509'582'265'973, hf::hf21_eth},
-        };
-
-        int64_t version = m_sqlite_db->prepared_get<int64_t>("PRAGMA user_version");
-        uint64_t earliest_height = (std::end(RECORDS) - 1)->height;
-        if (version == 0 && m_sqlite_db->height >= earliest_height) {
-            // This DB that has synced past the ETH transition and is still on V0 may be affected by
-            // the delayed payments issue that incorrectly rejected rewards payments in blocks
-            // sitting on the archiving interval (due to duplicate delayed payment rows to be
-            // archived) at 1'870'000 and/or 1'880'000
-            //
-            // We verify that here with known correct values on those heights for an arbitrary
-            // address.
-            //
-            // TODO: This is temporary code to migrate all the old DBs to V1 and to ensure everyone
-            // has the correct rewards value. Once a release has been put out with this code, we can
-            // immediately remove this from the codebase.
-            //
-            // The only thing that needs to move is the DB pragma to set the version to 1. This
-            // should be moved into the SQL DB constructor.
-            eth::address addr = tools::make_from_hex_guts<eth::address>(
-                    "0x26b0227617159797b9301a8EA6FB264f17d37Cb4"sv);
-
-            std::optional<uint64_t> rewind_to_height;
-            fmt::memory_buffer buf;
-            for (const auto& record : RECORDS) {
-                std::optional<int64_t> amount_db = m_sqlite_db->prepared_maybe_get<int64_t>(
-                        "SELECT amount FROM batched_payments_accrued_archive WHERE address = ? AND "
-                        "height = ?",
-                        db::blob_binder{addr},
-                        static_cast<int64_t>(record.height));
-
-                if (amount_db) {
-                    auto read = reward_money::from_db_amount(*amount_db, record.hf);
-                    auto expected =
-                            cryptonote::reward_money::from_db_amount(record.value, record.hf);
-                    if (read != expected) {
-                        fmt::format_to(
-                                std::back_inserter(buf),
-                                "{}  - Incorrect rewards in archive at blk {}, read: {}, "
-                                "expected: {}",
-                                buf.size() ? "\n" : "",
-                                record.height,
-                                cryptonote::print_money(read.to_coin()),
-                                cryptonote::print_money(expected.to_coin()));
-                        if (!rewind_to_height)
-                            rewind_to_height = record.height;
-                    }
-                }
-            }
-
-            // If there's no rewind height set, it means this node's DB is up to date. But inbetween
-            // this patch being released and it being run on a node, there could be many more 10k
-            // intervals that has elapsed since the hardcoded heights. At any one of those future
-            // 10k intervals the rewards value can potentially diverge so we enforce a rescan
-            // always. Again once you have a v1 database, that signifies you're running a version of
-            // the code that is not affected by this bug and so this code branch can be eliminated.
-            if (rewind_to_height) {
-                log::info(
-                        globallogcat,
-                        "Incorrect rewards detected in SQL DB will be fixed, re-orging to the "
-                        "closest snapshot from blk {} and recalculating\n{}",
-                        *rewind_to_height - 1,
-                        fmt::to_string(buf));
-            } else {
-                rewind_to_height = RECORDS[0].height;
-                log::info(
-                        globallogcat,
-                        "Re-orging to the closest snapshot from blk {} and recalculating "
-                        "rewards",
-                        *rewind_to_height - 1);
-            }
-
-            if (!exec_detach_hooks(
-                        *this,
-                        (*rewind_to_height - 1),
-                        m_blockchain_detached_hooks,
-                        /*by_pop_blocks*/ false,
-                        /*load_missing_blocks_into_oxen_subsystems*/ true,
-                        abort,
-                        /*use_threaded_load*/ true)) {
-                return false;
-            }
+    if (std::optional<uint64_t> rewind_to_height = m_sqlite_db->apply_fixups(); rewind_to_height) {
+        if (!exec_detach_hooks(
+                    *this,
+                    (*rewind_to_height - 1),
+                    m_blockchain_detached_hooks,
+                    /*by_pop_blocks*/ false,
+                    /*load_missing_blocks_into_oxen_subsystems*/ true,
+                    abort,
+                    /*use_threaded_load*/ true)) {
+            return false;
         }
-        m_sqlite_db->db.exec("PRAGMA user_version = 1");
     }
-
     return true;
 }
 //------------------------------------------------------------------
