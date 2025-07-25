@@ -152,7 +152,11 @@ int main(int argc, char const* argv[]) {
         std::optional<fs::path> load_config;
 
         auto net_type = command_line::get_network(vm);
-
+	Log::info(
+			globallogcat,
+			fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
+			"using network type {}",
+			net_type);
         if (command_line::is_arg_defaulted(vm, daemon_args::arg_config_file)) {
             // We are using the default config file, which will be in the data directory, as
             // determined *only* by the command-line arguments but *not* config file arguments,

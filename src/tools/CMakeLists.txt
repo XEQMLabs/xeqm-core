@@ -22,3 +22,4 @@ target_link_libraries(calculate_genesis_hash
         common
         cncrypto
         extra) 
+

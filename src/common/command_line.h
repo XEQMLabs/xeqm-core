@@ -236,6 +236,13 @@ std::tuple<typename ArgDescriptor::value_type...> get_args(
 extern const arg_flag arg_help;
 extern const arg_flag arg_version;
 
+// Network type arguments
+extern const arg_flag arg_stagenet;
+extern const arg_flag arg_testnet;
+extern const arg_flag arg_devnet;
+extern const arg_flag arg_regtest;
+extern const arg_flag arg_localdev;
+
 /// Returns the terminal width and height (in characters), if supported on this system and
 /// available.  Returns {0,0} if not available or could not be determined.
 std::pair<unsigned, unsigned> terminal_size();
