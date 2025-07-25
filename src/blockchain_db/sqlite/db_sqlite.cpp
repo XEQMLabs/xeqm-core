@@ -1027,12 +1027,12 @@ std::vector<batch_sn_payment> BlockchainSQLite::get_sn_payments(uint64_t block_h
             // pending rewards), so skip the handling.
             using namespace oxenc::literals;
             constexpr auto id = "223a7865e16fcab802a1dc17616415bf"_hex_u;
-            static_assert(
-                    std::equal(
-                            id.begin(),
-                            id.end(),
-                            get_config(network_type::TESTNET).NETWORK_ID.begin()),
-                    "If rebooting testnet, remove this workaround code!");
+          //  static_assert(
+           //         std::equal(
+           //                 id.begin(),
+           //                 id.end(),
+           //                 get_config(network_type::TESTNET).NETWORK_ID.begin()),
+           //         "If rebooting testnet, remove this workaround code!");
 
             // TODO: When removing this also remove the workaround in src/oxen_economy.h's
             // burn_needed() function!

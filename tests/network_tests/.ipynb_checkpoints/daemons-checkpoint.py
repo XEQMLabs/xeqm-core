@@ -126,7 +126,7 @@ class Daemon(RPCDaemon):
     base_args = ('--dev-allow-local-ips', '--fixed-difficulty=1', '--regtest', '--non-interactive')
 
     def __init__(self, *,
-            oxend='xeq-d',
+            oxend='oxend',
             listen_ip=None, p2p_port=None, rpc_port=None, zmq_port=None, qnet_port=None, ss_port=None,
             name=None,
             datadir=None,

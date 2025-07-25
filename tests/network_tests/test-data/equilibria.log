@@ -1,0 +1,35 @@
+[2025-07-25 08:29:04] [+0.008s] [global:info|daemon/main.cpp:338] [1m[36mEquilibria 'Landing' (v23.0.0-de4bc018f-dev)[0m
+[2025-07-25 08:29:04] [+0.008s] [daemon:info|daemon/main.cpp:369] Moving from main() into the daemonize now.
+[2025-07-25 08:29:04] [+0.011s] [daemon:info|daemon/daemon.cpp:126] [1m[34mInitializing daemon objects...[0m
+[2025-07-25 08:29:04] [+0.011s] [daemon:info|daemon/daemon.cpp:128] - cryptonote protocol
+[2025-07-25 08:29:04] [+0.011s] [daemon:info|daemon/daemon.cpp:132] - p2p
+[2025-07-25 08:29:04] [+0.013s] [net.p2p:error|p2p/net_node.inl:684] Error starting server: Failed to bind IPv4 (set to required)
+[2025-07-25 08:29:04] [+0.014s] [daemon:error|daemon/main.cpp:376] Exception in main! Failed to initialize p2p server.
+[2025-07-25 08:31:57] [+0.003s] [global:info|daemon/main.cpp:338] [1m[36mEquilibria 'Landing' (v23.0.0-de4bc018f-dev)[0m
+[2025-07-25 08:31:57] [+0.003s] [daemon:info|daemon/main.cpp:369] Moving from main() into the daemonize now.
+[2025-07-25 08:31:57] [+0.004s] [daemon:info|daemon/daemon.cpp:126] [1m[34mInitializing daemon objects...[0m
+[2025-07-25 08:31:57] [+0.004s] [daemon:info|daemon/daemon.cpp:128] - cryptonote protocol
+[2025-07-25 08:31:57] [+0.004s] [daemon:info|daemon/daemon.cpp:132] - p2p
+[2025-07-25 08:31:57] [+0.004s] [daemon:info|daemon/daemon.cpp:169] [1m[31m--rpc-bind-ip/--rpc-bind-port/--rpc-restricted-bind-port/--restricted-rpc/--public-node/--rpc-use-ipv6 options are deprecated and will be removed from a future oxend version; use --rpc-public/--rpc-admin instead[0m
+[2025-07-25 08:31:57] [+0.004s] [daemon:info|daemon/daemon.cpp:238] - admin HTTP RPC server
+[2025-07-25 08:31:57] [+0.006s] [daemon:info|daemon/daemon.cpp:277] [1m[34mDone daemon object initialization[0m
+[2025-07-25 08:31:57] [+0.006s] [daemon:info|daemon/daemon.cpp:369] [1m[34mStarting up xeq-d services...[0m
+[2025-07-25 08:31:57] [+0.006s] [daemon:info|daemon/daemon.cpp:374] Starting core
+[2025-07-25 08:31:57] [+0.007s] [global:info|cryptonote_core/cryptonote_core.cpp:1213] [1m[36mNode public keys:[0m
+[2025-07-25 08:31:57] [+0.007s] [global:info|cryptonote_core/cryptonote_core.cpp:1219] [1m[33m- ed25519: 4e47d5e985b92d95aafe73080078a605a998b9dc4047ac8c59a42d385a12ec4d[0m
+[2025-07-25 08:31:57] [+0.007s] [global:info|cryptonote_core/cryptonote_core.cpp:1220] [1m[33m- x25519: 5b935a7395e127786cd49b5b11c466717e42d81d3f45056a3353975da93cae79[0m
+[2025-07-25 08:31:57] [+0.007s] [global:info|cryptonote_core/cryptonote_core.cpp:960] Loading blockchain from folder ./test-data/lmdb ...
+[2025-07-25 08:31:57] [+0.048s] [global:info|sqlite/db_sqlite.cpp:118] 0 rows, 0 recent [blks 0-0], 0 historical [blks 0-0] loaded @ height: 0
+[2025-07-25 08:31:57] [+0.244s] [blockchain:error|cryptonote_core/blockchain.cpp:1648] coinbase transaction transaction has the wrong unlock time=0, expected 30
+[2025-07-25 08:31:57] [+0.244s] [blockchain:error|cryptonote_core/blockchain.cpp:836] Failed to add genesis block to blockchain
+[2025-07-25 08:31:57] [+0.244s] [cn:error|cryptonote_core/cryptonote_core.cpp:890] Failed to initialize blockchain storage
+[2025-07-25 08:31:57] [+0.244s] [daemon:error|daemon/daemon.cpp:446] An exception occurred: Failed to start core
+[2025-07-25 08:31:57] [+0.309s] [daemon:info|daemon/daemon.cpp:284] [1m[34mDeinitializing daemon objects...[0m
+[2025-07-25 08:31:57] [+0.309s] [daemon:info|daemon/daemon.cpp:291] - admin HTTP RPC server
+[2025-07-25 08:31:57] [+0.309s] [daemon:info|daemon/daemon.cpp:295] - p2p
+[2025-07-25 08:31:57] [+0.309s] [global:info|p2p/net_node.h:461] Killing the net_node
+[2025-07-25 08:31:57] [+0.309s] [global:info|p2p/net_node.h:465] Joined extra background net_node threads
+[2025-07-25 08:31:57] [+0.309s] [daemon:info|daemon/daemon.cpp:302] - core
+[2025-07-25 08:31:57] [+0.310s] [daemon:error|daemon/daemon.cpp:307] Failed to deinitialize core: Invalid argument
+[2025-07-25 08:31:57] [+0.310s] [daemon:info|daemon/daemon.cpp:310] - cryptonote protocol
+[2025-07-25 08:31:57] [+0.310s] [daemon:info|daemon/daemon.cpp:317] [34mDeinitialization complete[0m
