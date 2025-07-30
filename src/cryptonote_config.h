@@ -292,7 +292,7 @@ namespace feature {
     constexpr auto ENFORCE_MIN_AGE = hf::hf16_pulse;
     constexpr auto EFFECTIVE_SHORT_TERM_MEDIAN_IN_PENALTY = hf::hf16_pulse;
     constexpr auto PULSE = hf::hf16_pulse;
-    constexpr auto CLSAG = hf::hf16_pulse;
+    constexpr auto CLSAG = hf::hf7;
     constexpr auto PROOF_BTENC = hf::hf18;
     constexpr auto ETH_TRANSITION = hf::hf20_eth_transition;
     constexpr auto ETH_BLS = hf::hf21_eth;

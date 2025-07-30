@@ -152,11 +152,7 @@ int main(int argc, char const* argv[]) {
         std::optional<fs::path> load_config;
 
         auto net_type = command_line::get_network(vm);
-	Log::info(
-			globallogcat,
-			fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
-			"using network type {}",
-			net_type);
+	
         if (command_line::is_arg_defaulted(vm, daemon_args::arg_config_file)) {
             // We are using the default config file, which will be in the data directory, as
             // determined *only* by the command-line arguments but *not* config file arguments,
@@ -230,8 +226,12 @@ int main(int argc, char const* argv[]) {
                 return 1;
             }
         }
-
+	
         if (load_config) {
+		Log::info(
+				globallogcat,
+				"Config path: {}",
+				load_config ? load_config->string() : "none");
             try {
                 std::ifstream cfg{*load_config};
                 if (!cfg.is_open())
@@ -340,6 +340,20 @@ int main(int argc, char const* argv[]) {
                 "Equilibria '{}' (v{})",
                 OXEN_RELEASE_NAME,
                 OXEN_VERSION_FULL);
+
+	Log::info(
+			globallogcat,
+			fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
+			"empty log for fun");
+
+	Log::info(
+			globallogcat,
+			fg(fmt::terminal_color::cyan) | fmt::emphasis::bold,
+			"Net type {}, addr1 {}, addr2 {}, addr3 {}",
+			network_type_to_string(get_config(command_line::get_network(vm)).NETWORK_TYPE), 
+			get_config(command_line::get_network(vm)).PUBLIC_ADDRESS_BASE58_PREFIX,
+			get_config(command_line::get_network(vm)).PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
+			get_config(command_line::get_network(vm)).PUBLIC_SUBADDRESS_BASE58_PREFIX);
 
         if (daemon_command_mode) {
             auto rpc_config = cryptonote::rpc_args::process(vm);

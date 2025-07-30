@@ -6962,6 +6962,16 @@ registration_details convert_registration_args(
         cryptonote::hf hf_version,
         const std::vector<std::string>& args,
         uint64_t staking_requirement) {
+    // ADD LOGGING HERE
+    log::info(globallogcat, "=== convert_registration_args DEBUG ===");
+    log::info(globallogcat, "Network type: {}", static_cast<int>(nettype));
+    log::info(globallogcat, "HF version: {}", static_cast<int>(hf_version));
+    log::info(globallogcat, "Staking requirement: {}", staking_requirement);
+    log::info(globallogcat, "Args count: {}", args.size());
+    for (size_t i = 0; i < args.size(); ++i) {
+        log::info(globallogcat, "  args[{}] = '{}'", i, args[i]);
+    }
+
     registration_details result{};
     if (args.size() % 2 == 0 || args.size() < 3)
         throw invalid_registration{
@@ -6987,6 +6997,8 @@ registration_details convert_registration_args(
     constexpr size_t OPERATOR_ARG_INDEX = 1;
     for (size_t i = OPERATOR_ARG_INDEX, num_contributions = 0; i < args.size();
          i += 2, ++num_contributions) {
+	log::info(globallogcat, "Processing contributor {}: address='{}', amount='{}'",
+                  num_contributions, args[i], args[i+1]);
         auto& [info, portion] = addr_to_amounts.emplace_back();
         if (!cryptonote::get_account_address_from_str(info, nettype, args[i]))
             throw invalid_registration{tr("Failed to parse address: ") + args[i]};
@@ -7002,6 +7014,8 @@ registration_details convert_registration_args(
                     tr("Invalid amount for contributor: ") + args[i] +
                     tr(", with portion amount that could not be converted to a number: ") +
                     args[i + 1]};
+	log::info(globallogcat, "Successfully parsed contributor: address parsed, amount={}", portion);
+
     }
 
     uint64_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -7021,6 +7035,17 @@ registration_details convert_registration_args(
 
     // Will throw if something is invalid:
     validate_registration(hf_version, nettype, staking_requirement, now, result);
+
+    log::info(globallogcat, "Final registration_details:");
+    log::info(globallogcat, "  uses_portions: {}", result.uses_portions);
+    log::info(globallogcat, "  hf: {}", static_cast<int>(result.hf));
+    log::info(globallogcat, "  fee: {}", result.fee);
+    log::info(globallogcat, "  reserved.size(): {}", result.reserved.size());
+    for (size_t i = 0; i < result.reserved.size(); ++i) {
+        log::info(globallogcat, "  reserved[{}] amount: {}", i, result.reserved[i].second);
+    }
+    log::info(globallogcat, "=== END convert_registration_args DEBUG ===");
+
 
     return result;
 }

@@ -454,9 +454,9 @@ bool command_parser_executor::start_mining(const std::vector<std::string>& args)
         ;
     else if (cryptonote::address_parse_info info;
              !cryptonote::get_account_address_from_str(
-                     info, cryptonote::network_type::MAINNET, address) &&
-             !cryptonote::get_account_address_from_str(
                      info, cryptonote::network_type::TESTNET, address) &&
+             !cryptonote::get_account_address_from_str(
+                     info, cryptonote::network_type::MAINNET, address) &&
              !cryptonote::get_account_address_from_str(
                      info, cryptonote::network_type::DEVNET, address) &&
              !cryptonote::get_account_address_from_str(
