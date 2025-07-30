@@ -73,6 +73,13 @@ cryptonote::network_type get_network(const boost::program_options::variables_map
                          : regtest  ? network_type::FAKECHAIN
                          : localdev ? network_type::LOCALDEV
                                     : network_type::MAINNET;
+    
+    log::info(
+            globallogcat,
+            fg(fmt::terminal_color::green) | fmt::emphasis::bold,
+            "Selected network type: {}",
+            network_type_to_string(nettype));
+    
     if (stagenet + testnet + devnet + regtest + localdev > 1)
         log::error(
                 globallogcat,
