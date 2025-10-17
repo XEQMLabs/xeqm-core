@@ -113,7 +113,7 @@ local debian_pipeline(name,
 local clang(version, lto=true) = debian_pipeline(
   'Debian sid/clang-' + version + ' (amd64)',
   docker_base + 'debian-sid-clang',
-  deps=['clang-' + version, 'llvm-' + version] + default_deps_nocxx,
+  deps=['clang-' + version, 'clang-tools-' + version, 'llvm-' + version] + default_deps_nocxx,
   cmake_extra='-DCMAKE_C_COMPILER=clang-' + version + ' -DCMAKE_CXX_COMPILER=clang++-' + version + ' ',
   lto=lto,
   build_everything=true
@@ -125,11 +125,9 @@ local distro_deb_suffix = {
   forky: '~deb14',
   trixie: '~deb13',
   bookworm: '~deb12',
-  bullseye: '~deb11',
-  oracular: '~ubuntu2410',
+  questing: '~ubuntu2510',
   noble: '~ubuntu2404',
   jammy: '~ubuntu2204',
-  focal: '~ubuntu2004',
 };
 local distro_fmtspdsecp(distro) = !(distro == 'bullseye' || distro == 'jammy' || distro == 'focal');
 local distro_build_env(distro, deb_suffix_base) = {
@@ -363,12 +361,10 @@ local gui_wallet_step_darwin = {
   snapshot_deb('trixie'),
   snapshot_deb('bookworm'),
   snapshot_deb('bookworm', buildarch='arm64', debarch='arm64', jobs=1),
-  snapshot_deb('bullseye'),
-  snapshot_deb('oracular'),
+  snapshot_deb('questing'),
   snapshot_deb('noble'),
   snapshot_deb('noble', buildarch='arm64', debarch='arm64', jobs=1),
   snapshot_deb('jammy'),
-  snapshot_deb('focal'),
 
   // Static mingw build (on focal) which gets uploaded to oxen.rocks:
   debian_pipeline(
