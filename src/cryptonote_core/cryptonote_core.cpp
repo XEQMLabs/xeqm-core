@@ -1979,7 +1979,7 @@ void core::check_service_node_time() {
                 const time_t local_seconds = time(nullptr);
                 log::debug(
                         logcat,
-                        "Timestamp message received: {}, local time is: ",
+                        "Timestamp message received: {}, local time is: {}",
                         data[0],
                         local_seconds);
                 if (success) {
