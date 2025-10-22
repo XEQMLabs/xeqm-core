@@ -6871,6 +6871,10 @@ void convert_registration_portions_hf18(
         uint64_t staking_requirement,
         std::vector<std::pair<cryptonote::address_parse_info, uint64_t>>& addr_to_portions,
         hf hf_version) {
+// ADD THIS AT THE START
+    log::info(globallogcat, "=== INSIDE convert_registration_portions_hf18 ===");
+    log::info(globallogcat, "Input result.reserved.size() = {}", result.reserved.size());
+    log::info(globallogcat, "Input addr_to_portions.size() = {}", addr_to_portions.size());
     //
     // FIXME(doyle): FIXME(oxen) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // This is temporary code to redistribute the insufficient portion dust
@@ -6881,13 +6885,18 @@ void convert_registration_portions_hf18(
     {
         // NOTE: Calculate excess portions from each contributor
         uint64_t oxen_reserved = 0;
+	        log::info(globallogcat, "Starting excess portions calculation loop");
         for (size_t index = 0; index < addr_to_portions.size(); ++index) {
             const auto& [addr, portion] = addr_to_portions[index];
+	                log::info(globallogcat, "Excess calc [{}]: portion = {}, oxen_reserved = {}", index, portion, oxen_reserved);
             uint64_t min_contribution_portions =
                     service_nodes::get_min_node_contribution_in_portions(
                             hf_version, staking_requirement, oxen_reserved, index);
+	                log::info(globallogcat, "min_contribution_portions = {}", min_contribution_portions);
+
             uint64_t oxen_amount = service_nodes::portions_to_amount(staking_requirement, portion);
             oxen_reserved += oxen_amount;
+            log::info(globallogcat, "oxen_amount = {}, new oxen_reserved = {}", oxen_amount, oxen_reserved);
 
             uint64_t excess = 0;
             if (portion > min_contribution_portions)
@@ -6895,18 +6904,28 @@ void convert_registration_portions_hf18(
 
             min_contributions[index] = min_contribution_portions;
             excess_portions[index] = excess;
+	                log::info(globallogcat, "Final: min_contributions[{}] = {}, excess_portions[{}] = {}",
+                     index, min_contributions[index], index, excess_portions[index]);
+
         }
     }
 
     uint64_t portions_left = cryptonote::old::STAKING_PORTIONS;
     uint64_t total_reserved = 0;
+    log::info(globallogcat, "Starting main processing loop, portions_left = {}", portions_left);
+
     for (size_t i = 0; i < addr_to_portions.size(); ++i) {
         auto& [addr, portion] = addr_to_portions[i];
+        log::info(globallogcat, "Main loop [{}]: processing portion = {}, total_reserved = {}", i, portion, total_reserved);
+
         uint64_t min_portions = get_min_node_contribution_in_portions(
                 hf_version, staking_requirement, total_reserved, i);
+    log::info(globallogcat, "min_portions = {}, portion = {}", min_portions, portion);
 
         uint64_t portions_to_steal = 0;
         if (portion < min_portions) {
+		            log::info(globallogcat, "portion {} < min_portions {}, entering steal logic", portion, min_portions);
+
             // NOTE: Steal dust portions from other contributor if we fall below
             // the minimum by a dust amount.
             uint64_t needed = min_portions - portion;
@@ -6949,12 +6968,17 @@ void convert_registration_portions_hf18(
             throw invalid_registration{
                     tr("Too many contributors specified, you can only split a node with up to: ") +
                     std::to_string(oxen::MAX_CONTRIBUTORS_V1) + tr(" people.")};
-
         portions_left -= portion;
         portions_left += portions_to_steal;
+    log::info(globallogcat, "About to emplace_back: addr, portion = {}", portion);
+
         result.reserved.emplace_back(addr.address, portion);
+	    log::info(globallogcat, "Successfully added to result.reserved");
+
         total_reserved += service_nodes::portions_to_amount(portion, staking_requirement);
     }
+log::info(globallogcat, "Final result.reserved.size() = {}", result.reserved.size());
+    log::info(globallogcat, "=== END convert_registration_portions_hf18 ===");
 }
 
 registration_details convert_registration_args(
@@ -7022,8 +7046,14 @@ registration_details convert_registration_args(
     if (hf_version < hf::hf19_reward_batching) {
         result.uses_portions = true;
         result.hf = now;
+	log::info(globallogcat, "BEFORE convert_registration_portions_hf18: result.reserved.size() = {}", result.reserved.size());
+	
         convert_registration_portions_hf18(
                 result, args, staking_requirement, addr_to_amounts, hf_version);
+	log::info(globallogcat, "AFTER convert_registration_portions_hf18: result.reserved.size() = {}", result.reserved.size());
+	for (size_t i = 0; i < result.reserved.size(); ++i) {
+		log::info(globallogcat, "  result.reserved[{}] amount: {}", i, result.reserved[i].second);
+	}
     } else {
         result.uses_portions = false;
         result.hf = static_cast<uint8_t>(hf_version);
