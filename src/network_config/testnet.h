@@ -5,8 +5,7 @@
 namespace cryptonote::config::testnet {
 
 inline constexpr std::array seeds = {
-        "37.27.236.229:35602"sv,  // public.session.foundation
-        "104.243.40.38:35619"sv,  // angus.oxen.io
+        "84.247.143.210:18080"sv,
 };
 
 inline constexpr network_config config{
@@ -38,7 +37,7 @@ inline constexpr network_config config{
                 0x4e,
                 0x54,  // "IANT"
         }},
-        .P2P_SEED_NODES = {},
+        .P2P_SEED_NODES = seeds,
         .GENESIS_TX =
                 "021e01ff00018080c9db97f4fb270278fe7eed60deb57ea863d65690c40abc5ff09505704f36ba94285a02b9e15f6942014c8f90cc270b3e4e154003ecf48f21b5762e57c52cc70df9c65502e4921cd97872000000000000000000000000000000000000000000000000000000000000000000"sv,
         .GENESIS_NONCE = 12345,
