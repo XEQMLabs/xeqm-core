@@ -165,151 +165,150 @@ class WalletManager:
             time.sleep(5)
 
 class ServiceNodeRegistrar:
-    """Handles service node registration"""
+    """Handles service node registration with robust funding and unlocking logic"""
 
     def __init__(self, rpc_client, wallet_manager, config):
         self.rpc = rpc_client
         self.wallet = wallet_manager
         self.config = config
 
-    def register_all_nodes(self, node_count):
-        """Register all service nodes with retry logic"""
-        print(f"🔐 Starting service node registration process...")
+    def register_node(self, node_id):
+        """Orchestrates the full registration flow for a single node"""
+        print(f"\n🚀 Starting automation for Service Node {node_id:02d}...")
 
-        # Wait for initial unlock
-        self.wallet.wait_for_unlocked_balance(self.config.staking_requirement)
+        # 1. Create the SN Wallet
+        sn_wallet_name = f"sn{node_id:02d}"
+        sn_address = self._create_sn_wallet(sn_wallet_name)
+        if not sn_address: return False
 
-        registered_nodes = set()
-        max_attempts = 5
-        attempt = 0
-        retry_interval = 2
+        # 2. Fund the SN Wallet from Genesis
+        print(f"💰 Funding {sn_wallet_name}...")
+        if not self._fund_wallet(sn_address, self.config.staking_requirement):
+            return False
 
-        while len(registered_nodes) < node_count and attempt < max_attempts:
-            attempt += 1
-            print(f"\n📋 Registration attempt {attempt}/{max_attempts}")
+        # 3. Switch back to SN Wallet and WAIT for unlock
+        # We need to be in the SN wallet to check its balance
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {"filename": sn_wallet_name, "password": "dummy"})
 
-            for i in range(1, node_count + 1):
-                if i in registered_nodes:
-                    continue
+        print(f"⏳ Waiting for funds to unlock in {sn_wallet_name} (approx 10 blocks)...")
+        if not self._wait_for_unlock(self.config.staking_requirement):
+            return False
 
-                if self._register_single_node(i):
-                    registered_nodes.add(i)
-                    print(f"✅ SN{i:02d} registered successfully")
-                else:
-                    print(f"❌ SN{i:02d} registration failed, will retry")
+        # 4. Get the Registration Command from the Daemon (not wallet)
+        # Calculate SN RPC port based on your network logic (18091, 18093, etc)
+        sn_daemon_rpc_port = 18091 + (node_id-1) * 2
 
-            if len(registered_nodes) < node_count:
-                print(f"⏳ Waiting {retry_interval} seconds before retry... ({len(registered_nodes)}/{node_count} registered)")
-                time.sleep(retry_interval)
+        reg_cmd = self._get_registration_cmd(sn_daemon_rpc_port, sn_address)
+        if not reg_cmd: return False
 
-        print(f"\n📊 Final result: {len(registered_nodes)}/{node_count} service nodes registered")
-        return len(registered_nodes)
+        # 5. Execute Registration
+        return self._execute_registration(reg_cmd)
 
-    def _register_single_node(self, node_id):
-        """Register a single service node"""
-        try:
-            print(f"🔄 Registering SN{node_id:02d}...")
+    def _create_sn_wallet(self, filename):
+        """Creates wallet and returns address"""
+        self.rpc.call(self.config.wallet_rpc_port, "create_wallet", {
+            "filename": filename, "password": "dummy", "language": "English"
+        })
+        res = self.rpc.call(self.config.wallet_rpc_port, "get_address")
+        if res and "result" in res:
+            addr = res["result"]["address"]
+            print(f"   📍 Created wallet {filename}: {addr}")
+            return addr
+        print("   ❌ Failed to get address")
+        return None
 
-            # Create service node wallet
-            wallet_name = f"sn{node_id:02d}"
-            result = self.rpc.call(self.config.wallet_rpc_port, "create_wallet", {
-                "filename": wallet_name,
-                "password": "dummy",
-                "language": "English"
-            })
+    def _fund_wallet(self, destination_address, amount):
+        """Switches to Genesis, WAITS for unlocked funds, then sends"""
+        # 1. Switch to Genesis
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+            "filename": "genesis",
+            "password": "dummy"
+        })
 
-            if not result or "error" in result:
-                print(f"❌ Failed to create wallet for SN{node_id:02d}")
-                return False
+        # 2. Calculate total needed (Amount + 1.0 XEQ for fees)
+        transfer_amount = amount + 1000000000
 
-            time.sleep(1)
+        # 3. WAIT for Genesis to have enough unlocked money
+        # This handles the "change lock" from the previous transaction
+        print(f"   💰 Checking Genesis unlocked balance...")
+        if not self._wait_for_unlock(transfer_amount):
+            print("   ❌ Genesis wallet never unlocked enough funds.")
+            return False
 
-            # Get service node address
-            result = self.rpc.call(self.config.wallet_rpc_port, "get_address")
-            if not result or "result" not in result:
-                print(f"❌ Failed to get address for SN{node_id:02d}")
-                return False
+        # 4. Send the funds
+        res = self.rpc.call(self.config.wallet_rpc_port, "transfer", {
+            "destinations": [{"amount": transfer_amount, "address": destination_address}],
+            "priority": 1,
+            "ring_size": 16
+        })
 
-            sn_address = result["result"]["address"]
-            print(f"📍 SN{node_id:02d} address: {sn_address}")
-
-            # Switch back to genesis wallet for transfer
-            self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
-                "filename": "genesis",
-                "password": "dummy"
-            })
-            time.sleep(1)
-
-            # Transfer staking amount
-            result = self.rpc.call(self.config.wallet_rpc_port, "transfer", {
-                "destinations": [{
-                    "amount": self.config.staking_requirement,
-                    "address": sn_address
-                }],
-                "priority": 1
-            })
-
-            if not result or "result" not in result:
-                print(f"❌ Failed to transfer to SN{node_id:02d}")
-                return False
-
-            print(f"💸 Transferred {self.config.staking_requirement:,} to SN{node_id:02d}")
-            time.sleep(5)
-
-            # Switch to service node wallet and refresh
-            self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
-                "filename": wallet_name,
-                "password": "dummy"
-            })
-            time.sleep(1)
-            self.rpc.call(self.config.wallet_rpc_port, "refresh")
-            time.sleep(2)
-
-            # Get service node RPC port and registration command
-            sn_rpc_port = 18091 + (node_id-1) * 2
-
-            print(f"🔍 Calling SN{node_id:02d} at port {sn_rpc_port}")
-            print(f"🔍 Using address: {sn_address}")
-            print(f"🔍 Staking requirement: {self.config.staking_requirement}")
-
-            # registration_cmd_result = self.rpc.call(sn_rpc_port, "get_service_node_registration_cmd", {
-            #     "operator_cut": "100.0",
-            #     "contributor_addresses": [sn_address],
-            #     "contributor_amounts": [self.config.staking_requirement],
-            #     "staking_requirement": self.config.staking_requirement
-            # })
-
-            # Use portions instead of atomic units for HF < 19
-            STAKING_PORTIONS = 18446744073709551612  # Total portions available (from your logs)
-
-            registration_cmd_result = self.rpc.call(sn_rpc_port, "get_service_node_registration_cmd", {
-                "operator_cut": "100.0",
-                "contributor_addresses": [sn_address],
-                "contributor_amounts": [STAKING_PORTIONS],  # Use full portions for 100% stake
-                "staking_requirement": self.config.staking_requirement
-            })
-
-            if not registration_cmd_result or "error" in registration_cmd_result:
-                print(f"❌ Failed to get registration cmd: {registration_cmd_result}")
-                return False
-
-            registration_cmd = registration_cmd_result["result"]["registration_cmd"]
-
-            # Submit registration via service node wallet
-            result = self.rpc.call(self.config.wallet_rpc_port, "register_service_node", {
-                "register_service_node_str": registration_cmd
-            })
-
-            if not result or "error" in result:
-                print(f"❌ SN{node_id:02d} registration failed: {result}")
-                return False
-
-            print(f"✅ SN{node_id:02d} registered successfully")
+        if res and "result" in res:
+            tx_hash = res["result"]["tx_hash"]
+            print(f"   💸 Sent {amount} (atomic) to SN. Tx: {tx_hash}")
             return True
 
-        except Exception as e:
-            print(f"❌ Exception registering SN{node_id:02d}: {e}")
-            return False
+        print(f"   ❌ Transfer failed: {res}")
+        return False
+
+    def _wait_for_unlock(self, required_amount):
+        """Polls the current wallet until unlocked_balance >= required"""
+        max_retries = 60 # Wait up to ~2-3 minutes (testnet blocks are fast)
+
+        for i in range(max_retries):
+            self.rpc.call(self.config.wallet_rpc_port, "refresh")
+            res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
+
+            if res and "result" in res:
+                unlocked = res["result"]["unlocked_balance"]
+                total = res["result"]["balance"]
+
+                if unlocked >= required_amount:
+                    print(f"   ✅ Funds unlocked! Balance: {unlocked}")
+                    return True
+
+                # Optional: Print status every 5 attempts
+                if i % 5 == 0:
+                    print(f"      ...waiting for unlock. Current: {unlocked}/{required_amount} (Total: {total})")
+
+            time.sleep(2)
+
+        print("   ❌ Timed out waiting for funds to unlock.")
+        return False
+
+    def _get_registration_cmd(self, sn_rpc_port, sn_address):
+        """Asks the Service Node Daemon for the registration string"""
+        # Note: Using the portions logic from your original script
+        STAKING_PORTIONS = 18446744073709551612
+
+        params = {
+            "operator_cut": "100.0",
+            "contributor_addresses": [sn_address],
+            "contributor_amounts": [STAKING_PORTIONS],
+            "staking_requirement": self.config.staking_requirement
+        }
+
+        res = self.rpc.call(sn_rpc_port, "get_service_node_registration_cmd", params)
+
+        if res and "result" in res:
+            return res["result"]["registration_cmd"]
+
+        print(f"   ❌ Failed to get registration command from port {sn_rpc_port}. Is the SN daemon running?")
+        return None
+
+    def _execute_registration(self, cmd):
+        """Submits the registration command to the wallet"""
+        print(f"   📝 Submitting registration transaction...")
+        res = self.rpc.call(self.config.wallet_rpc_port, "register_service_node", {
+            "register_service_node_str": cmd
+        })
+
+        if res and "result" in res:
+            tx_hash = res["result"]["tx_hash"]
+            print(f"   ✅ SUCCESS! Service Node Registered. Tx: {tx_hash}")
+            return True
+
+        print(f"   ❌ Registration failed: {res}")
+        return False
 
 
 class NetworkMonitor:
@@ -395,11 +394,22 @@ class EquilibriaNetwork:
         cmd = [
             "docker", "run", "-dit", "--name", "bootstrap", "--network", "host",
             "-v", f"{os.getcwd()}/data/bootstrap:/data", "equilibria-node",
-            "--testnet", "--dev-allow-local-ips", "--offline", "--no-sync",
-            f"--fixed-difficulty={self.config.difficulty}", "--data-dir=/data",
-            "--p2p-bind-port=18080", "--rpc-bind-port=18081", "--log-level=1"
+            "--testnet",
+            "--dev-allow-local-ips",
+            f"--fixed-difficulty={self.config.difficulty}",
+            "--data-dir=/data",
+            # --- FIXES ---
+            "--p2p-bind-ip=127.0.0.1",  # Only listen on localhost
+            "--p2p-bind-port=18080",
+            "--rpc-bind-port=18081",
+            "--out-peers=0",            # Don't dial out
+            "--no-igd",                 # Don't map ports on router
+            "--hide-my-port",           # Don't advertise to DHT
+            # -------------
+            "--log-level=1"
         ]
         return self.docker.run_command(cmd) is not None
+
 
     def start_wallet_rpc(self):
         """Start wallet RPC"""
@@ -426,10 +436,9 @@ class EquilibriaNetwork:
             cmd = [
                 "docker", "run", "-dit", "--name", f"sn{i:02d}", "--network", "host",
                 "-v", f"{os.getcwd()}/data/sn{i:02d}:/data", "equilibria-node",
-                "--testnet", "--dev-allow-local-ips", "--service-node",
-                "--offline", "--no-sync", f"--fixed-difficulty={self.config.difficulty}",
+                "--testnet", "--dev-allow-local-ips", "--service-node", f"--fixed-difficulty={self.config.difficulty}",
                 "--data-dir=/data", f"--p2p-bind-port={p2p_port}",
-                f"--rpc-bind-port={rpc_port}", "--add-exclusive-node=127.0.0.1:18080",
+                f"--rpc-bind-port={rpc_port}", "--add-priority-node=127.0.0.1:18080",
                 "--service-node-public-ip=127.0.0.1",
                 "--l2-provider=http://dummy-provider",
                 f"--quorumnet-port={quorumnet_port}",  # Use this instead of --omq-port
@@ -451,10 +460,10 @@ class EquilibriaNetwork:
             cmd = [
                 "docker", "run", "-dit", "--name", f"regular{i:02d}", "--network", "host",
                 "-v", f"{os.getcwd()}/data/regular{i:02d}:/data", "equilibria-node",
-                "--testnet", "--dev-allow-local-ips", "--offline", "--no-sync",
+                "--testnet", "--dev-allow-local-ips",
                 f"--fixed-difficulty={self.config.difficulty}", "--data-dir=/data",
                 f"--p2p-bind-port={p2p_port}", f"--rpc-bind-port={rpc_port}",
-                "--add-exclusive-node=127.0.0.1:18080", "--log-level=1"
+                "--add-priority-node=127.0.0.1:18080", "--log-level=1"
             ]
 
             self.docker.run_command(cmd)
@@ -554,7 +563,7 @@ class EquilibriaNetwork:
         print(f"   HF16 activation: Block {self.config.hf16_height}")
         print()
 
-        # Start core services
+        # 1. Start Core Infrastructure
         if not self.start_bootstrap():
             print("❌ Failed to start bootstrap node")
             return False
@@ -571,14 +580,14 @@ class EquilibriaNetwork:
             print("❌ Wallet RPC failed to start")
             return False
 
-        # Start nodes
+        # 2. Start Network Nodes
         self.start_service_nodes()
-        self.start_regular_nodes()
+        self.start_regular_nodes()  # UNCOMMENTED: Start regular nodes
 
-        print("⏳ Waiting for nodes to sync...")
-        time.sleep(10)
+        print("⏳ Waiting 15s for P2P connections to stabilize...")
+        time.sleep(15)  # UNCOMMENTED: Give docker containers time to spin up
 
-        # Setup wallet and mining
+        # 3. Setup Genesis Wallet & Mining
         if not self.wallet.setup_genesis_wallet():
             print("❌ Failed to setup genesis wallet")
             return False
@@ -587,21 +596,35 @@ class EquilibriaNetwork:
             print("❌ Failed to start mining")
             return False
 
-        # Wait for coins to unlock
-        self.wait_for_blocks(self.config.unlock_window)
+        # 4. Wait for Coinbase Unlock
+        # We wait for unlock_window + a buffer to ensure we have spendable funds
+        print(f"⏳ Mining blocks to unlock genesis funds (Target: {self.config.unlock_window + 5})...")
+        self.wait_for_blocks(self.config.unlock_window + 5)
 
-        # Create dummy transactions to populate output pool
-        self.create_dummy_transactions(2)
+        # 5. Create Dummy Transactions (CRITICAL)
+        # We need to populate the chain with outputs so Ring Signatures work.
+        # Without this, transfers will fail with "Not enough outputs".
+        self.create_dummy_transactions(15)
 
-        # Start monitoring and register service nodes
+        # 6. Register Service Nodes
         self.monitor.start()
-        registered = self.registrar.register_all_nodes(self.service_nodes)
+
+        registered_count = 0
+        print(f"\n🏁 Starting Registration Loop for {self.service_nodes} nodes...")
+
+        for i in range(1, self.service_nodes + 1):
+            # Using the new robust register_node method
+            if self.registrar.register_node(i):
+                registered_count += 1
+            else:
+                print(f"⚠️ Critical failure registering SN{i:02d}. Stopping sequence.")
+                break
+
         self.monitor.stop()
 
         print("\n🎉 Network setup complete!")
         print(f"   Bootstrap: http://127.0.0.1:18081")
         print(f"   Wallet RPC: http://127.0.0.1:18084")
-        print(f"   Service nodes: {self.service_nodes} (registered: {registered})")
-        print(f"   Regular nodes: {self.regular_nodes}")
+        print(f"   Service nodes Registered: {registered_count}/{self.service_nodes}")
 
         return True
