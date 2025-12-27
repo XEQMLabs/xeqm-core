@@ -63,7 +63,7 @@ inline constexpr network_config config{
         .LIMIT_BATCH_OUTPUTS = 15,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 720,
         .DEREGISTRATION_LOCK_DURATION = 30 * 24h,
-        .UNLOCK_DURATION = 15 * 24h,
+        .UNLOCK_DURATION = 14 * 24h,  // Equilibria Horizon: 14-day unbonding period
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD = 5 * 24h / TARGET_BLOCK_TIME,
         .HISTORY_ARCHIVE_INTERVAL = 10'000,
         .HISTORY_ARCHIVE_KEEP_WINDOW = 2 * 365 * 24h / TARGET_BLOCK_TIME,  // 2yrs worth

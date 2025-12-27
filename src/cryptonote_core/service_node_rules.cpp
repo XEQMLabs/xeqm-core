@@ -291,12 +291,13 @@ crypto::hash generate_request_stake_unlock_hash(uint32_t nonce) {
     return result;
 }
 
-// pre-HF11
+// Equilibria Horizon: Unbonding period = ~14 days at target block time
+// This applies to both voluntary operator unstake and forced deregistration
 uint64_t staking_num_lock_blocks(cryptonote::network_type nettype) {
     switch (nettype) {
         case cryptonote::network_type::FAKECHAIN: return 30;
         case cryptonote::network_type::TESTNET: return get_config(nettype).BLOCKS_IN(48h);
-        default: return get_config(nettype).BLOCKS_IN(30 * 24h);
+        default: return get_config(nettype).BLOCKS_IN(14 * 24h);  // 14 days (was 30 days)
     }
 }
 
@@ -392,13 +393,12 @@ uint16_t percent_to_basis_points(std::string percent_string) {
     if (!percent)
         throw oxen::traced<invalid_registration>{"could not parse fee percent"};
 
-    if (*percent < 0.0 || *percent > 100.0)
-        throw oxen::traced<invalid_registration>{"fee percent out of bounds"};
+    // Equilibria Horizon: Maximum operator fee is 10%
+    if (*percent < 0.0 || *percent > 10.0)
+        throw oxen::traced<invalid_registration>{"fee percent out of bounds (must be 0-10%)"};
 
     auto basis_points =
             static_cast<uint16_t>(std::lround(*percent / 100.0 * cryptonote::STAKING_FEE_BASIS));
-    if (*percent == 100.0)
-        basis_points = cryptonote::STAKING_FEE_BASIS;
 
     return basis_points;
 }

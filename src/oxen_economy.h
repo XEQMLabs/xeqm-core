@@ -46,20 +46,21 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 //
 // -------------------------------------------------------------------------------------------------
 
-// Fixed (pre-SESH) OXEN staking requirement since HF16 (before that it was height dependent, see
-// service_node_rules.cpp):
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 15'000 * COIN;
-// testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100 * COIN;
+// Equilibria Horizon: Fixed staking requirement for all hardforks
+// Set to 100,000 XEQ to ensure consistency across all network configurations
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 100'000 * COIN;
+// testnet/devnet/fakenet also use the same 100,000 XEQ requirement:
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 // Max contributors since HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// SESH staking requirement starting at HF20
-inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 25'000 * COIN;
-inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 20'000 * COIN;
-inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 20'000 * COIN;
+// Equilibria Horizon staking requirement (HF21+)
+// Full stake = 100,000 XEQ, minimum operator contribution = 25,000 XEQ (1/4 of full stake)
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 100'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 
 // Initial SESH reward for the first few blocks of HF21 (before there are L2_REWARD_CONSENSUS_BLOCKS
 // blocks to achieve reward consensus).  This value is based on a 40M initial reward pool with 15.1%
