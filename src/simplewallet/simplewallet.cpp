@@ -1981,33 +1981,23 @@ bool simple_wallet::net_stats(const std::vector<std::string>& args) {
 }
 
 bool simple_wallet::welcome(const std::vector<std::string>& args) {
-    message_writer() << tr("Welcome to Equilibria, the private cryptocurrency based on Monero");
+    message_writer() << tr("Welcome to Equilibria (XEQ)");
     message_writer() << "";
     message_writer() << tr(
-            "Equilibria, like Bitcoin, is a cryptocurrency. That is, it is digital money.");
+            "You've just joined a network built on one principle: privacy is fundamental,");
     message_writer() << tr(
-            "Unlike Bitcoin, your Equilibria transactions and balance stay private and are not visible "
-            "to the world by default.");
-    message_writer() << tr(
-            "However, you have the option of making those available to select parties if you "
-            "choose to.");
+            "not optional.");
     message_writer() << "";
     message_writer() << tr(
-            "Equilibria protects your privacy on the blockchain, and while Equilibria strives to improve all "
-            "the time,");
+            "Equilibria is a private blockchain and data oracle network. Your XEQ balance,");
     message_writer() << tr(
-            "no privacy technology can be 100% perfect, Monero and consequently Equilibria included.");
-    message_writer() << tr(
-            "Equilibria cannot protect you from malware, and it may not be as effective as we hope "
-            "against powerful adversaries.");
-    message_writer() << tr(
-            "Flaws in Equilibria may be discovered in the future, and attacks may be developed to peek "
-            "under some");
-    message_writer() << tr(
-            "of the layers of privacy Equilibria provides. Be safe and practice defense in depth.");
+            "transactions, and personal data are protected by design - invisible to the world.");
     message_writer() << "";
     message_writer() << tr(
-            "Welcome to Equilibria and financial privacy. For more information, see https://oxen.io");
+            "No technology is perfect. Practice good security habits and stay informed.");
+    message_writer() << "";
+    message_writer() << tr(
+            "Welcome to financial privacy. Learn more at https://equilibria-network.gitbook.io/docs/");
     return true;
 }
 
