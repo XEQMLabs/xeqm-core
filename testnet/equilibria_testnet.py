@@ -11,7 +11,7 @@ import logging
 
 class EmojiFormatter(logging.Formatter):
     """Add emojis to differentiate log levels"""
-    
+
     EMOJIS = {
         logging.DEBUG: "🔍",
         logging.INFO: "ℹ️ ",
@@ -594,7 +594,7 @@ class EquilibriaNetwork:
                 f"--rpc-bind-port={rpc_port}",
                 "--add-priority-node=127.0.0.1:18080",
                 f"--service-node-public-ip={sn_ip}",
-                "--l2-provider=http://dummy-provider",
+                "--l2-provider=http://127.0.0.1:8545",
                 f"--quorumnet-port={quorumnet_port}",
                 "--log-level=3"
             ]
@@ -661,14 +661,14 @@ class EquilibriaNetwork:
     def wait_for_hf16_and_stop_mining(self):
         """Wait for HF16 activation and stop PoW mining"""
         self.logger.info(f"Waiting for HF16 activation at block {self.config.hf16_height}")
-        
+
         # Wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
         self.logger.info(f"HF16 height reached at block {self.config.hf16_height}")
-        
+
         # Stop PoW mining now that PoS is active
         self.stop_mining()
-        
+
         return True
 
     def create_dummy_transactions(self, count=20):
