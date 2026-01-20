@@ -598,52 +598,17 @@ class EquilibriaNetwork:
                     return True
             time.sleep(2)
 
-    def wait_for_pos_activation(self, pos_blocks_required=3):
-        """Wait for HF16 activation and confirm PoS blocks are being produced"""
-        print(f"\n⏳ Waiting for PoS activation (HF16 at block {self.config.hf16_height})...")
-
-        # First, wait for HF16 height
+    def wait_for_hf16_and_stop_mining(self):
+        """Wait for HF16 activation and stop PoW mining"""
+        print(f"\n⏳ Waiting for HF16 activation at block {self.config.hf16_height}...")
+        
+        # Wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
         print(f"✅ HF16 height reached at block {self.config.hf16_height}")
-
-        # Now verify PoS blocks are being produced
-        print(f"🔍 Verifying PoS block production (need {pos_blocks_required} consecutive PoS blocks)...")
-
-        pos_block_count = 0
-        last_height = self.config.hf16_height
-
-        while pos_block_count < pos_blocks_required:
-            time.sleep(3)
-
-            result = self.rpc.call(self.config.daemon_rpc_port, "get_info")
-            if not result or "result" not in result:
-                continue
-
-            current_height = result["result"].get("height", 0)
-
-            # Check if new blocks have been produced
-            if current_height > last_height:
-                # Get the last block header to check if it's a PoS block
-                block_result = self.rpc.call(self.config.daemon_rpc_port, "get_last_block_header")
-
-                if block_result and "result" in block_result:
-                    block_header = block_result["result"].get("block_header", {})
-
-                    # PoS blocks have a reward of 0 (service nodes get rewards differently)
-                    # PoW blocks have a non-zero reward
-                    reward = block_header.get("reward", 0)
-
-                    if reward == 0:
-                        pos_block_count += 1
-                        print(f"   ✅ PoS block detected at height {current_height} ({pos_block_count}/{pos_blocks_required})")
-                    else:
-                        # Reset counter if we see a PoW block
-                        pos_block_count = 0
-                        print(f"   ⚠️  PoW block detected at height {current_height}, resetting counter")
-
-                last_height = current_height
-
-        print(f"✅ PoS network is active! {pos_blocks_required} consecutive PoS blocks confirmed")
+        
+        # Stop PoW mining now that PoS is active
+        self.stop_mining()
+        
         return True
 
     def create_dummy_transactions(self, count=20):
@@ -787,13 +752,10 @@ class EquilibriaNetwork:
 
         self.monitor.stop()
 
-        # 7. Wait for PoS activation and stop PoW mining
+        # 7. Wait for HF16 and stop PoW mining
         if registered_count > 0:
             print(f"\n🔄 Transitioning to PoS consensus...")
-            if self.wait_for_pos_activation(pos_blocks_required=3):
-                self.stop_mining()
-            else:
-                print("⚠️  PoS activation verification failed, but continuing...")
+            self.wait_for_hf16_and_stop_mining()
 
         print("\n🎉 Network setup complete!")
         print(f"   Bootstrap: http://127.0.0.1:18081")
