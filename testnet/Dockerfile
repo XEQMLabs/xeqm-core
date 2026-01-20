@@ -74,7 +74,7 @@ RUN set -ex && \
 
 
 # Copy all binaries
-COPY bins-HF16-height-30/* /usr/local/bin/
+COPY ../build/bin/* /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
 
 # Create directories
