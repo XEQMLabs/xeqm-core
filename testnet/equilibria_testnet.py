@@ -50,7 +50,8 @@ class NetworkConfig:
         self.staking_requirement = 15000000000000  # 15,000 XEQ in atomic units
         self.difficulty = 750
         self.unlock_window = 30  # Blocks needed for coin unlock
-        self.hf16_height = 50    # HF16 activation height
+        self.hf16_height = 300   # HF16 activation height (Pulse)
+        self.pulse_min_service_nodes = 12  # Minimum active SNs for Pulse
         self.eth_node_port = 8545  # Ethereum node port
 
 class DockerManager:
@@ -851,16 +852,50 @@ class EquilibriaNetwork:
                     return True
             time.sleep(2)
 
-    def wait_for_hf16_and_stop_mining(self):
-        """Wait for HF16 activation and stop PoW mining"""
-        self.logger.info(f"Waiting for HF16 activation at block {self.config.hf16_height}")
+    def get_active_service_node_count(self):
+        """Get the number of active and funded service nodes"""
+        result = self.rpc.call(self.config.daemon_rpc_port, "get_service_nodes")
+        if not result or "result" not in result:
+            return 0
+        
+        sns = result["result"].get("service_node_states", [])
+        active_count = sum(1 for sn in sns if sn.get("active") and sn.get("funded"))
+        return active_count
 
+    def wait_for_active_service_nodes(self, required_count, timeout=600):
+        """Wait until we have enough active service nodes"""
+        self.logger.info(f"Waiting for {required_count} active service nodes")
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            active_count = self.get_active_service_node_count()
+            
+            if active_count >= required_count:
+                self.logger.info(f"Have {active_count} active service nodes (required: {required_count})")
+                return True
+            
+            self.logger.debug(f"Active SNs: {active_count}/{required_count}, waiting...")
+            time.sleep(5)
+        
+        self.logger.warning(f"Timeout waiting for active service nodes. Have {self.get_active_service_node_count()}, need {required_count}")
+        return False
+
+    def wait_for_pulse_ready_and_stop_mining(self):
+        """Wait for HF16 height AND enough active SNs, then stop PoW mining"""
+        self.logger.info(f"Waiting for Pulse readiness (HF16 at block {self.config.hf16_height}, need {self.config.pulse_min_service_nodes} active SNs)")
+        
+        # First wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
-        self.logger.info(f"HF16 height reached at block {self.config.hf16_height}")
-
-        self.stop_mining()
-
-        return True
+        self.logger.info(f"HF16 height {self.config.hf16_height} reached")
+        
+        # Then wait for enough active service nodes
+        if self.wait_for_active_service_nodes(self.config.pulse_min_service_nodes):
+            self.logger.info("Pulse requirements met, stopping PoW mining")
+            self.stop_mining()
+            return True
+        else:
+            self.logger.warning("Not enough active SNs for Pulse, keeping PoW mining active")
+            return False
 
     def create_dummy_transactions(self, count=20):
         """Create dummy transactions to populate output pool for ring signatures"""
@@ -926,7 +961,8 @@ class EquilibriaNetwork:
         self.logger.info("Starting Equilibria Network")
         self.logger.info(f"Service nodes: {self.service_nodes}")
         self.logger.info(f"Regular nodes: {self.regular_nodes}")
-        self.logger.info(f"HF16 activation: Block {self.config.hf16_height}")
+        self.logger.info(f"HF16 (Pulse) activation: Block {self.config.hf16_height}")
+        self.logger.info(f"Pulse min service nodes: {self.config.pulse_min_service_nodes}")
         self.logger.info("=" * 60)
 
         # 0. Setup Ethereum Node (if directory provided)
@@ -991,10 +1027,10 @@ class EquilibriaNetwork:
 
         self.monitor.stop()
 
-        # 7. Wait for HF16 and stop PoW mining
+        # 7. Wait for Pulse readiness (HF16 + enough active SNs) and stop PoW mining
         if registered_count > 0:
-            self.logger.info("Transitioning to PoS consensus")
-            self.wait_for_hf16_and_stop_mining()
+            self.logger.info("Waiting for Pulse consensus to be ready")
+            self.wait_for_pulse_ready_and_stop_mining()
 
         self.logger.info("=" * 60)
         self.logger.info("Network setup complete!")
@@ -1003,6 +1039,7 @@ class EquilibriaNetwork:
         if self.eth_node.node_directory:
             self.logger.info(f"Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
         self.logger.info(f"Service nodes Registered: {registered_count}/{self.service_nodes}")
+        self.logger.info(f"Active Service Nodes: {self.get_active_service_node_count()}")
         self.logger.info("=" * 60)
 
         return True
