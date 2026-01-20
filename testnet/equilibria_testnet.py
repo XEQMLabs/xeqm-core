@@ -6,6 +6,7 @@ import argparse
 import os
 from pathlib import Path
 import threading
+import signal
 
 class NetworkConfig:
     """Network configuration constants"""
@@ -19,6 +20,7 @@ class NetworkConfig:
         self.difficulty = 750
         self.unlock_window = 30  # Blocks needed for coin unlock
         self.hf16_height = 50    # HF16 activation height
+        self.eth_node_port = 8545  # Ethereum node port
 
 class DockerManager:
     """Handles Docker container operations"""
@@ -61,6 +63,91 @@ class DockerManager:
             subprocess.run(["docker", "kill", container], capture_output=True)
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)
         print(f"🧹 Cleaned up {len(container_names)} containers")
+
+class EthereumNodeManager:
+    """Manages external Ethereum node process"""
+
+    def __init__(self, config, node_directory=None):
+        self.config = config
+        self.node_directory = node_directory or os.getcwd()
+        self.node_process = None
+
+    def start_node(self):
+        """Start the Ethereum node using 'make node' in background"""
+        print(f"🚀 Starting Ethereum node in {self.node_directory}...")
+
+        try:
+            log_file = open(os.path.join(self.node_directory, 'l2.log'), 'w')
+
+            # Start the node process
+            self.node_process = subprocess.Popen(
+                ["make", "node"],
+                cwd=self.node_directory,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid  # Create new process group
+            )
+
+            print(f"   Node process started with PID {self.node_process.pid}")
+            print(f"   Output being written to {self.node_directory}/l2.log")
+
+            # Wait for node to be ready
+            print("⏳ Waiting 30 seconds for node to initialize...")
+            time.sleep(30)
+
+            # Verify node is running
+            if self.node_process.poll() is not None:
+                print("❌ Node process terminated unexpectedly")
+                return False
+
+            print("✅ Node should be ready")
+            return True
+
+        except Exception as e:
+            print(f"❌ Failed to start node: {e}")
+            return False
+
+    def deploy_contracts(self):
+        """Deploy contracts using 'make deploy-local'"""
+        print("📝 Deploying contracts...")
+
+        try:
+            result = subprocess.run(
+                ["make", "deploy-local"],
+                cwd=self.node_directory,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+
+            if result.returncode == 0:
+                print("✅ Contracts deployed successfully")
+                print(result.stdout)
+                return True
+            else:
+                print(f"❌ Contract deployment failed:")
+                print(result.stderr)
+                return False
+
+        except Exception as e:
+            print(f"❌ Failed to deploy contracts: {e}")
+            return False
+
+    def stop_node(self):
+        """Stop the Ethereum node process"""
+        if self.node_process:
+            print("🛑 Stopping Ethereum node...")
+            try:
+                # Kill the entire process group
+                os.killpg(os.getpgid(self.node_process.pid), signal.SIGTERM)
+                self.node_process.wait(timeout=10)
+                print("✅ Ethereum node stopped")
+            except Exception as e:
+                print(f"⚠️  Error stopping node: {e}")
+                try:
+                    os.killpg(os.getpgid(self.node_process.pid), signal.SIGKILL)
+                except:
+                    pass
 
 class RPCClient:
     """Handles RPC communication with daemon and wallet"""
@@ -355,7 +442,7 @@ class NetworkMonitor:
 class EquilibriaNetwork:
     """Main network orchestrator"""
 
-    def __init__(self, service_nodes=20, regular_nodes=5):
+    def __init__(self, service_nodes=20, regular_nodes=5, eth_node_directory=None):
         self.service_nodes = service_nodes
         self.regular_nodes = regular_nodes
 
@@ -366,6 +453,7 @@ class EquilibriaNetwork:
         self.wallet = WalletManager(self.rpc, self.config)
         self.registrar = ServiceNodeRegistrar(self.rpc, self.wallet, self.config)
         self.monitor = NetworkMonitor(self.rpc, self.wallet, self.config)
+        self.eth_node = EthereumNodeManager(self.config, eth_node_directory)
 
         self._setup_directories()
 
@@ -387,6 +475,12 @@ class EquilibriaNetwork:
         containers.extend([f"sn{i:02d}" for i in range(1, self.service_nodes + 1)])
         containers.extend([f"regular{i:02d}" for i in range(1, self.regular_nodes + 1)])
         self.docker.cleanup_all_containers(containers)
+
+    def cleanup(self):
+        """Clean up all resources"""
+        print("\n🧹 Cleaning up...")
+        self.cleanup_containers()
+        self.eth_node.stop_node()
 
     def start_bootstrap(self):
         """Start bootstrap node"""
@@ -507,38 +601,38 @@ class EquilibriaNetwork:
     def wait_for_pos_activation(self, pos_blocks_required=3):
         """Wait for HF16 activation and confirm PoS blocks are being produced"""
         print(f"\n⏳ Waiting for PoS activation (HF16 at block {self.config.hf16_height})...")
-        
+
         # First, wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
         print(f"✅ HF16 height reached at block {self.config.hf16_height}")
-        
+
         # Now verify PoS blocks are being produced
         print(f"🔍 Verifying PoS block production (need {pos_blocks_required} consecutive PoS blocks)...")
-        
+
         pos_block_count = 0
         last_height = self.config.hf16_height
-        
+
         while pos_block_count < pos_blocks_required:
             time.sleep(3)
-            
+
             result = self.rpc.call(self.config.daemon_rpc_port, "get_info")
             if not result or "result" not in result:
                 continue
-                
+
             current_height = result["result"].get("height", 0)
-            
+
             # Check if new blocks have been produced
             if current_height > last_height:
                 # Get the last block header to check if it's a PoS block
                 block_result = self.rpc.call(self.config.daemon_rpc_port, "get_last_block_header")
-                
+
                 if block_result and "result" in block_result:
                     block_header = block_result["result"].get("block_header", {})
-                    
+
                     # PoS blocks have a reward of 0 (service nodes get rewards differently)
                     # PoW blocks have a non-zero reward
                     reward = block_header.get("reward", 0)
-                    
+
                     if reward == 0:
                         pos_block_count += 1
                         print(f"   ✅ PoS block detected at height {current_height} ({pos_block_count}/{pos_blocks_required})")
@@ -546,9 +640,9 @@ class EquilibriaNetwork:
                         # Reset counter if we see a PoW block
                         pos_block_count = 0
                         print(f"   ⚠️  PoW block detected at height {current_height}, resetting counter")
-                
+
                 last_height = current_height
-        
+
         print(f"✅ PoS network is active! {pos_blocks_required} consecutive PoS blocks confirmed")
         return True
 
@@ -622,6 +716,20 @@ class EquilibriaNetwork:
         print(f"   HF16 activation: Block {self.config.hf16_height}")
         print()
 
+        # 0. Setup Ethereum Node (if directory provided)
+        if self.eth_node.node_directory:
+            print("\n🔷 Setting up Ethereum node...")
+
+            if not self.eth_node.start_node():
+                print("❌ Failed to start Ethereum node")
+                return False
+
+            if not self.eth_node.deploy_contracts():
+                print("❌ Failed to deploy contracts")
+                return False
+
+            print("✅ Ethereum node setup complete\n")
+
         # 1. Start Core Infrastructure
         if not self.start_bootstrap():
             print("❌ Failed to start bootstrap node")
@@ -641,10 +749,10 @@ class EquilibriaNetwork:
 
         # 2. Start Network Nodes
         self.start_service_nodes()
-        self.start_regular_nodes()  # UNCOMMENTED: Start regular nodes
+        self.start_regular_nodes()
 
         print("⏳ Waiting 15s for P2P connections to stabilize...")
-        time.sleep(15)  # UNCOMMENTED: Give docker containers time to spin up
+        time.sleep(15)
 
         # 3. Setup Genesis Wallet & Mining
         if not self.wallet.setup_genesis_wallet():
@@ -656,7 +764,6 @@ class EquilibriaNetwork:
             return False
 
         # 4. Wait for Coinbase Unlock
-        # We wait for unlock_window + a buffer to ensure we have spendable funds
         print(f"⏳ Mining blocks to unlock genesis funds (Target: {self.config.unlock_window + 5})...")
         self.wait_for_blocks(self.config.unlock_window + 5)
 
@@ -672,7 +779,6 @@ class EquilibriaNetwork:
         print(f"\n🏁 Starting Registration Loop for {self.service_nodes} nodes...")
 
         for i in range(1, self.service_nodes + 1):
-            # Using the new robust register_node method
             if self.registrar.register_node(i):
                 registered_count += 1
             else:
@@ -692,6 +798,8 @@ class EquilibriaNetwork:
         print("\n🎉 Network setup complete!")
         print(f"   Bootstrap: http://127.0.0.1:18081")
         print(f"   Wallet RPC: http://127.0.0.1:18084")
+        if self.eth_node.node_directory:
+            print(f"   Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
         print(f"   Service nodes Registered: {registered_count}/{self.service_nodes}")
 
         return True
