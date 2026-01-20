@@ -7,6 +7,16 @@ import os
 from pathlib import Path
 import threading
 import signal
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+logger = logging.getLogger(__name__)
 
 class NetworkConfig:
     """Network configuration constants"""
@@ -27,6 +37,7 @@ class DockerManager:
 
     def __init__(self, config):
         self.config = config
+        self.logger = logging.getLogger(f"{__name__}.DockerManager")
 
     def run_command(self, cmd):
         """Run docker command with error handling"""
@@ -34,19 +45,18 @@ class DockerManager:
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
             if result.returncode != 0:
-                print(f"❌ Docker command failed:")
-                print(f"Command: {' '.join(cmd)}")
-                print(f"Exit code: {result.returncode}")
-                print(f"STDERR: {result.stderr}")
+                self.logger.error(f"Docker command failed: {' '.join(cmd)}")
+                self.logger.error(f"Exit code: {result.returncode}")
+                self.logger.error(f"STDERR: {result.stderr}")
                 self._cleanup_failed_container(cmd)
                 return None
 
             if result.stdout:
-                print(f"[DOCKER] {result.stdout.strip()}")
+                self.logger.debug(f"Docker output: {result.stdout.strip()}")
             return result
 
         except Exception as e:
-            print(f"❌ Docker exception: {e}")
+            self.logger.error(f"Docker exception: {e}")
             return None
 
     def _cleanup_failed_container(self, cmd):
@@ -62,7 +72,7 @@ class DockerManager:
         for container in container_names:
             subprocess.run(["docker", "kill", container], capture_output=True)
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)
-        print(f"🧹 Cleaned up {len(container_names)} containers")
+        self.logger.info(f"Cleaned up {len(container_names)} containers")
 
 class EthereumNodeManager:
     """Manages external Ethereum node process"""
@@ -71,10 +81,11 @@ class EthereumNodeManager:
         self.config = config
         self.node_directory = node_directory or os.getcwd()
         self.node_process = None
+        self.logger = logging.getLogger(f"{__name__}.EthereumNodeManager")
 
     def start_node(self):
         """Start the Ethereum node using 'make node' in background"""
-        print(f"🚀 Starting Ethereum node in {self.node_directory}...")
+        self.logger.info(f"Starting Ethereum node in {self.node_directory}")
 
         try:
             log_file = open(os.path.join(self.node_directory, 'l2.log'), 'w')
@@ -88,28 +99,28 @@ class EthereumNodeManager:
                 preexec_fn=os.setsid  # Create new process group
             )
 
-            print(f"   Node process started with PID {self.node_process.pid}")
-            print(f"   Output being written to {self.node_directory}/l2.log")
+            self.logger.info(f"Node process started with PID {self.node_process.pid}")
+            self.logger.debug(f"Output being written to {self.node_directory}/l2.log")
 
             # Wait for node to be ready
-            print("⏳ Waiting 30 seconds for node to initialize...")
+            self.logger.info("Waiting 30 seconds for node to initialize...")
             time.sleep(30)
 
             # Verify node is running
             if self.node_process.poll() is not None:
-                print("❌ Node process terminated unexpectedly")
+                self.logger.error("Node process terminated unexpectedly")
                 return False
 
-            print("✅ Node should be ready")
+            self.logger.info("Node is ready")
             return True
 
         except Exception as e:
-            print(f"❌ Failed to start node: {e}")
+            self.logger.error(f"Failed to start node: {e}")
             return False
 
     def deploy_contracts(self):
         """Deploy contracts using 'make deploy-local'"""
-        print("📝 Deploying contracts...")
+        self.logger.info("Deploying contracts...")
 
         try:
             result = subprocess.run(
@@ -121,29 +132,29 @@ class EthereumNodeManager:
             )
 
             if result.returncode == 0:
-                print("✅ Contracts deployed successfully")
-                print(result.stdout)
+                self.logger.info("Contracts deployed successfully")
+                self.logger.debug(result.stdout)
                 return True
             else:
-                print(f"❌ Contract deployment failed:")
-                print(result.stderr)
+                self.logger.error("Contract deployment failed")
+                self.logger.error(result.stderr)
                 return False
 
         except Exception as e:
-            print(f"❌ Failed to deploy contracts: {e}")
+            self.logger.error(f"Failed to deploy contracts: {e}")
             return False
 
     def stop_node(self):
         """Stop the Ethereum node process"""
         if self.node_process:
-            print("🛑 Stopping Ethereum node...")
+            self.logger.info("Stopping Ethereum node...")
             try:
                 # Kill the entire process group
                 os.killpg(os.getpgid(self.node_process.pid), signal.SIGTERM)
                 self.node_process.wait(timeout=10)
-                print("✅ Ethereum node stopped")
+                self.logger.info("Ethereum node stopped")
             except Exception as e:
-                print(f"⚠️  Error stopping node: {e}")
+                self.logger.warning(f"Error stopping node: {e}")
                 try:
                     os.killpg(os.getpgid(self.node_process.pid), signal.SIGKILL)
                 except:
@@ -151,6 +162,9 @@ class EthereumNodeManager:
 
 class RPCClient:
     """Handles RPC communication with daemon and wallet"""
+
+    def __init__(self):
+        self.logger = logging.getLogger(f"{__name__}.RPCClient")
 
     def call(self, port, method, params=None):
         """Make RPC call"""
@@ -172,11 +186,12 @@ class RPCClient:
             )
             return response.json()
         except Exception as e:
-            print(f"RPC call failed: {method} on port {port} - {e}")
+            self.logger.error(f"RPC call failed: {method} on port {port} - {e}")
             return None
 
     def wait_for_service(self, port, timeout=60):
         """Wait for service to be ready"""
+        self.logger.debug(f"Waiting for service on port {port}")
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
@@ -186,10 +201,12 @@ class RPCClient:
                     timeout=5
                 )
                 if response.status_code == 200:
+                    self.logger.debug(f"Service on port {port} is ready")
                     return True
             except:
                 pass
             time.sleep(2)
+        self.logger.error(f"Service on port {port} failed to start within {timeout}s")
         return False
 
 class WalletManager:
@@ -198,10 +215,11 @@ class WalletManager:
     def __init__(self, rpc_client, config):
         self.rpc = rpc_client
         self.config = config
+        self.logger = logging.getLogger(f"{__name__}.WalletManager")
 
     def setup_genesis_wallet(self):
         """Create and setup genesis wallet"""
-        print("📝 Setting up genesis wallet...")
+        self.logger.info("Setting up genesis wallet")
 
         result = self.rpc.call(self.config.wallet_rpc_port, "generate_from_keys", {
             "filename": "genesis",
@@ -213,10 +231,10 @@ class WalletManager:
         })
 
         if not result or "error" in result:
-            print(f'Failed to generate genesis wallet: {result}')
+            self.logger.error(f'Failed to generate genesis wallet: {result}')
             return False
 
-        print("🔍 Rescanning blockchain...")
+        self.logger.info("Rescanning blockchain...")
         self.rpc.call(self.config.wallet_rpc_port, "rescan_blockchain")
         time.sleep(5)
         self.refresh()
@@ -224,6 +242,7 @@ class WalletManager:
 
     def refresh(self):
         """Refresh wallet state"""
+        self.logger.debug("Refreshing wallet")
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
         time.sleep(2)
 
@@ -236,7 +255,7 @@ class WalletManager:
 
     def wait_for_unlocked_balance(self, required_amount):
         """Wait until sufficient unlocked balance is available"""
-        print(f"⏳ Waiting for {required_amount:,} unlocked balance...")
+        self.logger.info(f"Waiting for {required_amount:,} unlocked balance")
 
         while True:
             self.refresh()
@@ -244,11 +263,11 @@ class WalletManager:
             unlocked = balance_info.get("unlocked_balance", 0)
 
             if unlocked >= required_amount:
-                print(f"✅ Sufficient unlocked balance: {unlocked:,}")
+                self.logger.info(f"Sufficient unlocked balance: {unlocked:,}")
                 return True
 
             blocks_to_unlock = balance_info.get("blocks_to_unlock", 0)
-            print(f"💰 Unlocked: {unlocked:,}, need: {required_amount:,}, blocks to unlock: {blocks_to_unlock}")
+            self.logger.debug(f"Unlocked: {unlocked:,}, need: {required_amount:,}, blocks to unlock: {blocks_to_unlock}")
             time.sleep(5)
 
 class ServiceNodeRegistrar:
@@ -258,10 +277,11 @@ class ServiceNodeRegistrar:
         self.rpc = rpc_client
         self.wallet = wallet_manager
         self.config = config
+        self.logger = logging.getLogger(f"{__name__}.ServiceNodeRegistrar")
 
     def register_node(self, node_id):
         """Orchestrates the full registration flow for a single node"""
-        print(f"\n🚀 Starting automation for Service Node {node_id:02d}...")
+        self.logger.info(f"Starting automation for Service Node {node_id:02d}")
 
         # 1. Create the SN Wallet
         sn_wallet_name = f"sn{node_id:02d}"
@@ -269,7 +289,7 @@ class ServiceNodeRegistrar:
         if not sn_address: return False
 
         # 2. Fund the SN Wallet from Genesis
-        print(f"💰 Funding {sn_wallet_name}...")
+        self.logger.info(f"Funding {sn_wallet_name}")
         if not self._fund_wallet(sn_address, self.config.staking_requirement):
             return False
 
@@ -277,7 +297,7 @@ class ServiceNodeRegistrar:
         # We need to be in the SN wallet to check its balance
         self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {"filename": sn_wallet_name, "password": "dummy"})
 
-        print(f"⏳ Waiting for funds to unlock in {sn_wallet_name} (approx 10 blocks)...")
+        self.logger.info(f"Waiting for funds to unlock in {sn_wallet_name} (approx 10 blocks)")
         if not self._wait_for_unlock(self.config.staking_requirement):
             return False
 
@@ -299,9 +319,9 @@ class ServiceNodeRegistrar:
         res = self.rpc.call(self.config.wallet_rpc_port, "get_address")
         if res and "result" in res:
             addr = res["result"]["address"]
-            print(f"   📍 Created wallet {filename}: {addr}")
+            self.logger.info(f"Created wallet {filename}: {addr}")
             return addr
-        print("   ❌ Failed to get address")
+        self.logger.error(f"Failed to get address for {filename}")
         return None
 
     def _fund_wallet(self, destination_address, amount):
@@ -317,9 +337,9 @@ class ServiceNodeRegistrar:
 
         # 3. WAIT for Genesis to have enough unlocked money
         # This handles the "change lock" from the previous transaction
-        print(f"   💰 Checking Genesis unlocked balance...")
+        self.logger.debug("Checking Genesis unlocked balance")
         if not self._wait_for_unlock(transfer_amount):
-            print("   ❌ Genesis wallet never unlocked enough funds.")
+            self.logger.error("Genesis wallet never unlocked enough funds")
             return False
 
         # 4. Send the funds
@@ -331,10 +351,10 @@ class ServiceNodeRegistrar:
 
         if res and "result" in res:
             tx_hash = res["result"]["tx_hash"]
-            print(f"   💸 Sent {amount} (atomic) to SN. Tx: {tx_hash}")
+            self.logger.info(f"Sent {amount} (atomic) to SN. Tx: {tx_hash}")
             return True
 
-        print(f"   ❌ Transfer failed: {res}")
+        self.logger.error(f"Transfer failed: {res}")
         return False
 
     def _wait_for_unlock(self, required_amount):
@@ -350,16 +370,16 @@ class ServiceNodeRegistrar:
                 total = res["result"]["balance"]
 
                 if unlocked >= required_amount:
-                    print(f"   ✅ Funds unlocked! Balance: {unlocked}")
+                    self.logger.info(f"Funds unlocked! Balance: {unlocked}")
                     return True
 
                 # Optional: Print status every 5 attempts
                 if i % 5 == 0:
-                    print(f"      ...waiting for unlock. Current: {unlocked}/{required_amount} (Total: {total})")
+                    self.logger.debug(f"Waiting for unlock. Current: {unlocked}/{required_amount} (Total: {total})")
 
             time.sleep(2)
 
-        print("   ❌ Timed out waiting for funds to unlock.")
+        self.logger.error("Timed out waiting for funds to unlock")
         return False
 
     def _get_registration_cmd(self, sn_rpc_port, sn_address):
@@ -379,22 +399,22 @@ class ServiceNodeRegistrar:
         if res and "result" in res:
             return res["result"]["registration_cmd"]
 
-        print(f"   ❌ Failed to get registration command from port {sn_rpc_port}. Is the SN daemon running?")
+        self.logger.error(f"Failed to get registration command from port {sn_rpc_port}. Is the SN daemon running?")
         return None
 
     def _execute_registration(self, cmd):
         """Submits the registration command to the wallet"""
-        print(f"   📝 Submitting registration transaction...")
+        self.logger.info("Submitting registration transaction")
         res = self.rpc.call(self.config.wallet_rpc_port, "register_service_node", {
             "register_service_node_str": cmd
         })
 
         if res and "result" in res:
             tx_hash = res["result"]["tx_hash"]
-            print(f"   ✅ SUCCESS! Service Node Registered. Tx: {tx_hash}")
+            self.logger.info(f"SUCCESS! Service Node Registered. Tx: {tx_hash}")
             return True
 
-        print(f"   ❌ Registration failed: {res}")
+        self.logger.error(f"Registration failed: {res}")
         return False
 
 
@@ -407,18 +427,21 @@ class NetworkMonitor:
         self.config = config
         self.active = False
         self.thread = None
+        self.logger = logging.getLogger(f"{__name__}.NetworkMonitor")
 
     def start(self):
         """Start monitoring"""
         self.active = True
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.thread.start()
+        self.logger.debug("Network monitoring started")
 
     def stop(self):
         """Stop monitoring"""
         self.active = False
         if self.thread:
             self.thread.join(timeout=2)
+        self.logger.debug("Network monitoring stopped")
 
     def _monitor_loop(self):
         """Background monitoring loop"""
@@ -434,7 +457,7 @@ class NetworkMonitor:
                     balance = balance_info.get("balance", 0)
                     unlocked = balance_info.get("unlocked_balance", 0)
 
-                    print(f"📊 Block: {height} | Difficulty: {difficulty:,} | Balance: {balance:,} | Unlocked: {unlocked:,}")
+                    self.logger.info(f"Block: {height} | Difficulty: {difficulty:,} | Balance: {balance:,} | Unlocked: {unlocked:,}")
             except:
                 pass
             time.sleep(1)
@@ -454,6 +477,7 @@ class EquilibriaNetwork:
         self.registrar = ServiceNodeRegistrar(self.rpc, self.wallet, self.config)
         self.monitor = NetworkMonitor(self.rpc, self.wallet, self.config)
         self.eth_node = EthereumNodeManager(self.config, eth_node_directory)
+        self.logger = logging.getLogger(f"{__name__}.EquilibriaNetwork")
 
         self._setup_directories()
 
@@ -478,13 +502,13 @@ class EquilibriaNetwork:
 
     def cleanup(self):
         """Clean up all resources"""
-        print("\n🧹 Cleaning up...")
+        self.logger.info("Cleaning up resources")
         self.cleanup_containers()
         self.eth_node.stop_node()
 
     def start_bootstrap(self):
         """Start bootstrap node"""
-        print("🚀 Starting bootstrap node...")
+        self.logger.info("Starting bootstrap node")
         cmd = [
             "docker", "run", "-dit", "--name", "bootstrap", "--network", "host",
             "-v", f"{os.getcwd()}/data/bootstrap:/data", "equilibria-node",
@@ -507,7 +531,7 @@ class EquilibriaNetwork:
 
     def start_wallet_rpc(self):
         """Start wallet RPC"""
-        print("💳 Starting wallet RPC...")
+        self.logger.info("Starting wallet RPC")
         cmd = [
             "docker", "run", "-d", "--name", "wallet-rpc", "--network", "host",
             "--entrypoint", "/usr/local/bin/xeq-wallet-rpc",
@@ -520,7 +544,7 @@ class EquilibriaNetwork:
 
     def start_service_nodes(self):
         """Start all service nodes"""
-        print(f"🔐 Starting {self.service_nodes} service nodes...")
+        self.logger.info(f"Starting {self.service_nodes} service nodes")
 
         for i in range(1, self.service_nodes + 1):
             p2p_port = 18090 + (i-1) * 2
@@ -540,12 +564,12 @@ class EquilibriaNetwork:
             ]
 
             if self.docker.run_command(cmd):
-                print(f"    ✅ SN{i:02d} started (ports: P2P={p2p_port}, RPC={rpc_port}, OMQ={quorumnet_port})")
+                self.logger.info(f"SN{i:02d} started (ports: P2P={p2p_port}, RPC={rpc_port}, OMQ={quorumnet_port})")
             time.sleep(0.5)
 
     def start_regular_nodes(self):
         """Start all regular nodes"""
-        print(f"📡 Starting {self.regular_nodes} regular nodes...")
+        self.logger.info(f"Starting {self.regular_nodes} regular nodes")
 
         for i in range(1, self.regular_nodes + 1):
             p2p_port = 18150 + (i-1) * 2
@@ -565,7 +589,7 @@ class EquilibriaNetwork:
 
     def start_mining(self):
         """Start mining"""
-        print("⛏️  Starting mining...")
+        self.logger.info("Starting mining")
         result = self.rpc.call(self.config.daemon_rpc_port, "start_mining", {
             "miner_address": self.config.genesis_address,
             "threads_count": 4,
@@ -576,35 +600,35 @@ class EquilibriaNetwork:
 
     def stop_mining(self):
         """Stop mining on bootstrap node"""
-        print("🛑 Stopping PoW mining on bootstrap node...")
+        self.logger.info("Stopping PoW mining on bootstrap node")
         result = self.rpc.call(self.config.daemon_rpc_port, "stop_mining")
         if result and "error" not in result:
-            print("✅ PoW mining stopped successfully")
+            self.logger.info("PoW mining stopped successfully")
             return True
         else:
-            print(f"⚠️  Failed to stop mining: {result}")
+            self.logger.warning(f"Failed to stop mining: {result}")
             return False
 
     def wait_for_blocks(self, target_height):
         """Wait for blockchain to reach target height"""
-        print(f"⏳ Waiting for block {target_height}...")
+        self.logger.info(f"Waiting for block {target_height}")
 
         while True:
             result = self.rpc.call(self.config.daemon_rpc_port, "get_info")
             if result and "result" in result:
                 height = result["result"].get("height", 0)
                 if height >= target_height:
-                    print(f"✅ Reached block {height}!")
+                    self.logger.info(f"Reached block {height}")
                     return True
             time.sleep(2)
 
     def wait_for_hf16_and_stop_mining(self):
         """Wait for HF16 activation and stop PoW mining"""
-        print(f"\n⏳ Waiting for HF16 activation at block {self.config.hf16_height}...")
+        self.logger.info(f"Waiting for HF16 activation at block {self.config.hf16_height}")
         
         # Wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
-        print(f"✅ HF16 height reached at block {self.config.hf16_height}")
+        self.logger.info(f"HF16 height reached at block {self.config.hf16_height}")
         
         # Stop PoW mining now that PoS is active
         self.stop_mining()
@@ -613,7 +637,7 @@ class EquilibriaNetwork:
 
     def create_dummy_transactions(self, count=20):
         """Create dummy transactions to populate output pool for ring signatures"""
-        print(f"🔄 Creating {count} dummy transactions to populate output pool...")
+        self.logger.info(f"Creating {count} dummy transactions to populate output pool")
 
         # Ensure genesis wallet is open
         self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
@@ -623,12 +647,12 @@ class EquilibriaNetwork:
         time.sleep(1)
 
         # First, sweep dust to consolidate small outputs
-        print("🧹 Sweeping dust first...")
+        self.logger.info("Sweeping dust first")
         sweep_result = self.rpc.call(self.config.wallet_rpc_port, "sweep_dust", {
             "get_tx_keys": True
         })
         if sweep_result and "result" in sweep_result:
-            print("    ✅ Dust swept successfully")
+            self.logger.info("Dust swept successfully")
             time.sleep(5)  # Wait for sweep to be mined
 
         # Refresh wallet
@@ -658,16 +682,16 @@ class EquilibriaNetwork:
             })
 
             if result and "result" in result:
-                print(f"    ✅ Dummy tx {i+1}/{count} created ({amount:,} atomic)")
+                self.logger.debug(f"Dummy tx {i+1}/{count} created ({amount:,} atomic)")
             else:
-                print(f"    ❌ Dummy tx {i+1}/{count} failed: {result}")
+                self.logger.warning(f"Dummy tx {i+1}/{count} failed: {result}")
                 # If it fails, try with sweep_all instead
                 if "Not enough outputs" in str(result):
                     break
 
             time.sleep(1)
 
-        print(f"📊 Dummy transaction creation complete")
+        self.logger.info("Dummy transaction creation complete")
         time.sleep(10)  # Wait for mining
 
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
@@ -675,61 +699,62 @@ class EquilibriaNetwork:
 
     def start_network(self):
         """Start the complete network"""
-        print("🚀 Starting Equilibria Network...")
-        print(f"   Service nodes: {self.service_nodes}")
-        print(f"   Regular nodes: {self.regular_nodes}")
-        print(f"   HF16 activation: Block {self.config.hf16_height}")
-        print()
+        self.logger.info("=" * 60)
+        self.logger.info("Starting Equilibria Network")
+        self.logger.info(f"Service nodes: {self.service_nodes}")
+        self.logger.info(f"Regular nodes: {self.regular_nodes}")
+        self.logger.info(f"HF16 activation: Block {self.config.hf16_height}")
+        self.logger.info("=" * 60)
 
         # 0. Setup Ethereum Node (if directory provided)
         if self.eth_node.node_directory:
-            print("\n🔷 Setting up Ethereum node...")
+            self.logger.info("Setting up Ethereum node")
 
             if not self.eth_node.start_node():
-                print("❌ Failed to start Ethereum node")
+                self.logger.error("Failed to start Ethereum node")
                 return False
 
             if not self.eth_node.deploy_contracts():
-                print("❌ Failed to deploy contracts")
+                self.logger.error("Failed to deploy contracts")
                 return False
 
-            print("✅ Ethereum node setup complete\n")
+            self.logger.info("Ethereum node setup complete")
 
         # 1. Start Core Infrastructure
         if not self.start_bootstrap():
-            print("❌ Failed to start bootstrap node")
+            self.logger.error("Failed to start bootstrap node")
             return False
 
         if not self.rpc.wait_for_service(self.config.daemon_rpc_port):
-            print("❌ Bootstrap node failed to start")
+            self.logger.error("Bootstrap node failed to start")
             return False
 
         if not self.start_wallet_rpc():
-            print("❌ Failed to start wallet RPC")
+            self.logger.error("Failed to start wallet RPC")
             return False
 
         if not self.rpc.wait_for_service(self.config.wallet_rpc_port):
-            print("❌ Wallet RPC failed to start")
+            self.logger.error("Wallet RPC failed to start")
             return False
 
         # 2. Start Network Nodes
         self.start_service_nodes()
         self.start_regular_nodes()
 
-        print("⏳ Waiting 15s for P2P connections to stabilize...")
+        self.logger.info("Waiting 15s for P2P connections to stabilize")
         time.sleep(15)
 
         # 3. Setup Genesis Wallet & Mining
         if not self.wallet.setup_genesis_wallet():
-            print("❌ Failed to setup genesis wallet")
+            self.logger.error("Failed to setup genesis wallet")
             return False
 
         if not self.start_mining():
-            print("❌ Failed to start mining")
+            self.logger.error("Failed to start mining")
             return False
 
         # 4. Wait for Coinbase Unlock
-        print(f"⏳ Mining blocks to unlock genesis funds (Target: {self.config.unlock_window + 5})...")
+        self.logger.info(f"Mining blocks to unlock genesis funds (Target: {self.config.unlock_window + 5})")
         self.wait_for_blocks(self.config.unlock_window + 5)
 
         # 5. Create Dummy Transactions (CRITICAL)
@@ -741,27 +766,29 @@ class EquilibriaNetwork:
         self.monitor.start()
 
         registered_count = 0
-        print(f"\n🏁 Starting Registration Loop for {self.service_nodes} nodes...")
+        self.logger.info(f"Starting Registration Loop for {self.service_nodes} nodes")
 
         for i in range(1, self.service_nodes + 1):
             if self.registrar.register_node(i):
                 registered_count += 1
             else:
-                print(f"⚠️ Critical failure registering SN{i:02d}. Stopping sequence.")
+                self.logger.error(f"Critical failure registering SN{i:02d}. Stopping sequence.")
                 break
 
         self.monitor.stop()
 
         # 7. Wait for HF16 and stop PoW mining
         if registered_count > 0:
-            print(f"\n🔄 Transitioning to PoS consensus...")
+            self.logger.info("Transitioning to PoS consensus")
             self.wait_for_hf16_and_stop_mining()
 
-        print("\n🎉 Network setup complete!")
-        print(f"   Bootstrap: http://127.0.0.1:18081")
-        print(f"   Wallet RPC: http://127.0.0.1:18084")
+        self.logger.info("=" * 60)
+        self.logger.info("Network setup complete!")
+        self.logger.info(f"Bootstrap: http://127.0.0.1:18081")
+        self.logger.info(f"Wallet RPC: http://127.0.0.1:18084")
         if self.eth_node.node_directory:
-            print(f"   Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
-        print(f"   Service nodes Registered: {registered_count}/{self.service_nodes}")
+            self.logger.info(f"Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
+        self.logger.info(f"Service nodes Registered: {registered_count}/{self.service_nodes}")
+        self.logger.info("=" * 60)
 
         return True
