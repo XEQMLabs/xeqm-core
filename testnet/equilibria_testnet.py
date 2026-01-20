@@ -300,7 +300,7 @@ class WalletManager:
             time.sleep(5)
 
 class ServiceNodeRegistrar:
-    """Handles service node registration with robust funding and unlocking logic"""
+    """Handles service node registration with parallel funding"""
 
     def __init__(self, rpc_client, wallet_manager, config):
         self.rpc = rpc_client
@@ -308,34 +308,78 @@ class ServiceNodeRegistrar:
         self.config = config
         self.logger = logging.getLogger(f"{__name__}.ServiceNodeRegistrar")
 
-    def register_node(self, node_id):
-        """Orchestrates the full registration flow for a single node"""
-        self.logger.info(f"Starting automation for Service Node {node_id:02d}")
+    def register_all_nodes_parallel(self, num_nodes):
+        """
+        Register all service nodes using parallel funding strategy:
+        1. Create all wallets
+        2. Fund all wallets from genesis
+        3. Wait once for all funds to unlock
+        4. Register all nodes
+        """
+        self.logger.info(f"Starting parallel registration for {num_nodes} service nodes")
 
-        # 1. Create the SN Wallet
-        sn_wallet_name = f"sn{node_id:02d}"
-        sn_address = self._create_sn_wallet(sn_wallet_name)
-        if not sn_address: return False
+        # Phase 1: Create all SN wallets and collect addresses
+        self.logger.info("Phase 1: Creating all service node wallets")
+        sn_data = []  # List of (node_id, wallet_name, address)
+        
+        for i in range(1, num_nodes + 1):
+            sn_wallet_name = f"sn{i:02d}"
+            sn_address = self._create_sn_wallet(sn_wallet_name)
+            if sn_address:
+                sn_data.append((i, sn_wallet_name, sn_address))
+            else:
+                self.logger.error(f"Failed to create wallet for SN{i:02d}")
 
-        # 2. Fund the SN Wallet from Genesis
-        self.logger.info(f"Funding {sn_wallet_name}")
-        if not self._fund_wallet(sn_address, self.config.staking_requirement):
-            return False
+        self.logger.info(f"Created {len(sn_data)}/{num_nodes} wallets")
 
-        # 3. Switch back to SN Wallet and WAIT for unlock
-        # We need to be in the SN wallet to check its balance
-        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {"filename": sn_wallet_name, "password": "dummy"})
+        if len(sn_data) == 0:
+            self.logger.error("No wallets created, aborting")
+            return 0
 
-        self.logger.info(f"Waiting for funds to unlock in {sn_wallet_name} (approx 10 blocks)")
-        if not self._wait_for_unlock(self.config.staking_requirement):
-            return False
+        # Phase 2: Fund all wallets from genesis
+        self.logger.info("Phase 2: Funding all service node wallets")
+        
+        # Open genesis wallet
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+            "filename": "genesis",
+            "password": "dummy"
+        })
+        time.sleep(1)
+        self.rpc.call(self.config.wallet_rpc_port, "refresh")
+        time.sleep(2)
 
-        # 4. Get the Registration Command from the Daemon (not wallet)
-        reg_cmd = self._get_registration_cmd(node_id, sn_address)
-        if not reg_cmd: return False
+        funded_nodes = []
+        for node_id, wallet_name, address in sn_data:
+            if self._fund_wallet_no_wait(address, self.config.staking_requirement):
+                funded_nodes.append((node_id, wallet_name, address))
+                self.logger.info(f"Funded {wallet_name}")
+            else:
+                self.logger.error(f"Failed to fund {wallet_name}")
+            # Small delay between transactions to avoid issues
+            time.sleep(1)
 
-        # 5. Execute Registration
-        return self._execute_registration(reg_cmd)
+        self.logger.info(f"Funded {len(funded_nodes)}/{len(sn_data)} wallets")
+
+        if len(funded_nodes) == 0:
+            self.logger.error("No wallets funded, aborting")
+            return 0
+
+        # Phase 3: Wait for all funds to unlock
+        self.logger.info("Phase 3: Waiting for all funds to unlock")
+        self._wait_for_all_unlocks(funded_nodes)
+
+        # Phase 4: Register all nodes
+        self.logger.info("Phase 4: Registering all service nodes")
+        registered_count = 0
+        
+        for node_id, wallet_name, address in funded_nodes:
+            if self._register_funded_node(node_id, wallet_name, address):
+                registered_count += 1
+            else:
+                self.logger.error(f"Failed to register SN{node_id:02d}")
+
+        self.logger.info(f"Successfully registered {registered_count}/{len(funded_nodes)} service nodes")
+        return registered_count
 
     def _create_sn_wallet(self, filename):
         """Creates wallet and returns address"""
@@ -345,30 +389,35 @@ class ServiceNodeRegistrar:
         res = self.rpc.call(self.config.wallet_rpc_port, "get_address")
         if res and "result" in res:
             addr = res["result"]["address"]
-            self.logger.info(f"Created wallet {filename}: {addr}")
+            self.logger.debug(f"Created wallet {filename}: {addr[:16]}...")
             return addr
         self.logger.error(f"Failed to get address for {filename}")
         return None
 
-    def _fund_wallet(self, destination_address, amount):
-        """Switches to Genesis, WAITS for unlocked funds, then sends"""
-        # 1. Switch to Genesis
+    def _fund_wallet_no_wait(self, destination_address, amount):
+        """Send funds without waiting for unlock (for parallel funding)"""
+        # Make sure genesis wallet is open
         self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
             "filename": "genesis",
             "password": "dummy"
         })
-
-        # 2. Calculate total needed (Amount + 1.0 XEQ for fees)
+        
+        # Refresh to get latest balance
+        self.rpc.call(self.config.wallet_rpc_port, "refresh")
+        
+        # Calculate total needed (Amount + 1.0 XEQ for fees)
         transfer_amount = amount + 1000000000
 
-        # 3. WAIT for Genesis to have enough unlocked money
-        # This handles the "change lock" from the previous transaction
-        self.logger.debug("Checking Genesis unlocked balance")
-        if not self._wait_for_unlock(transfer_amount):
-            self.logger.error("Genesis wallet never unlocked enough funds")
-            return False
+        # Check if we have enough unlocked balance
+        balance_info = self.wallet.get_balance()
+        unlocked = balance_info.get("unlocked_balance", 0)
+        
+        if unlocked < transfer_amount:
+            self.logger.warning(f"Insufficient unlocked balance: {unlocked:,} < {transfer_amount:,}, waiting...")
+            if not self._wait_for_unlock_genesis(transfer_amount):
+                return False
 
-        # 4. Send the funds
+        # Send the funds
         res = self.rpc.call(self.config.wallet_rpc_port, "transfer", {
             "destinations": [{"amount": transfer_amount, "address": destination_address}],
             "priority": 1,
@@ -377,40 +426,107 @@ class ServiceNodeRegistrar:
 
         if res and "result" in res:
             tx_hash = res["result"]["tx_hash"]
-            self.logger.info(f"Sent {amount} (atomic) to SN. Tx: {tx_hash}")
+            self.logger.debug(f"Sent {amount:,} atomic. Tx: {tx_hash[:16]}...")
             return True
 
         self.logger.error(f"Transfer failed: {res}")
         return False
 
-    def _wait_for_unlock(self, required_amount):
-        """Polls the current wallet until unlocked_balance >= required"""
-        max_retries = 60 # Wait up to ~2-3 minutes (testnet blocks are fast)
-
+    def _wait_for_unlock_genesis(self, required_amount):
+        """Wait for genesis wallet to have enough unlocked funds"""
+        max_retries = 120  # Up to ~4 minutes
+        
         for i in range(max_retries):
+            self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+                "filename": "genesis",
+                "password": "dummy"
+            })
             self.rpc.call(self.config.wallet_rpc_port, "refresh")
             res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
 
             if res and "result" in res:
                 unlocked = res["result"]["unlocked_balance"]
-                total = res["result"]["balance"]
-
                 if unlocked >= required_amount:
-                    self.logger.info(f"Funds unlocked! Balance: {unlocked}")
                     return True
-
-                # Optional: Print status every 5 attempts
-                if i % 5 == 0:
-                    self.logger.debug(f"Waiting for unlock. Current: {unlocked}/{required_amount} (Total: {total})")
+                if i % 10 == 0:
+                    self.logger.debug(f"Genesis unlock wait: {unlocked:,}/{required_amount:,}")
 
             time.sleep(2)
 
-        self.logger.error("Timed out waiting for funds to unlock")
+        self.logger.error("Timed out waiting for genesis funds to unlock")
         return False
+
+    def _wait_for_all_unlocks(self, funded_nodes):
+        """Wait for all funded wallets to have unlocked balances"""
+        self.logger.info(f"Waiting for {len(funded_nodes)} wallets to unlock...")
+        
+        pending = set(node_id for node_id, _, _ in funded_nodes)
+        max_retries = 120  # Up to ~4 minutes
+        
+        for attempt in range(max_retries):
+            still_pending = set()
+            
+            for node_id, wallet_name, _ in funded_nodes:
+                if node_id not in pending:
+                    continue
+                    
+                self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+                    "filename": wallet_name,
+                    "password": "dummy"
+                })
+                self.rpc.call(self.config.wallet_rpc_port, "refresh")
+                res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
+                
+                if res and "result" in res:
+                    unlocked = res["result"]["unlocked_balance"]
+                    if unlocked >= self.config.staking_requirement:
+                        self.logger.debug(f"{wallet_name} unlocked: {unlocked:,}")
+                    else:
+                        still_pending.add(node_id)
+            
+            pending = still_pending
+            
+            if not pending:
+                self.logger.info("All wallets unlocked!")
+                return True
+            
+            if attempt % 10 == 0:
+                self.logger.info(f"Still waiting for {len(pending)} wallets to unlock...")
+            
+            time.sleep(2)
+        
+        self.logger.warning(f"Timeout: {len(pending)} wallets still locked")
+        return len(pending) == 0
+
+    def _register_funded_node(self, node_id, wallet_name, sn_address):
+        """Register a node that has already been funded and unlocked"""
+        self.logger.info(f"Registering SN{node_id:02d}")
+
+        # Open the SN wallet
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+            "filename": wallet_name,
+            "password": "dummy"
+        })
+        self.rpc.call(self.config.wallet_rpc_port, "refresh")
+
+        # Verify funds are unlocked
+        res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
+        if res and "result" in res:
+            unlocked = res["result"]["unlocked_balance"]
+            if unlocked < self.config.staking_requirement:
+                self.logger.error(f"SN{node_id:02d} has insufficient unlocked balance: {unlocked:,}")
+                return False
+
+        # Get registration command from the SN daemon
+        reg_cmd = self._get_registration_cmd(node_id, sn_address)
+        if not reg_cmd:
+            return False
+
+        # Execute registration
+        return self._execute_registration(reg_cmd)
 
     def _get_registration_cmd(self, node_id, sn_address):
         """Asks the Service Node Daemon for the registration string"""
-        # Note: Using the portions logic from your original script
         STAKING_PORTIONS = 18446744073709551612
 
         params = {
@@ -428,22 +544,103 @@ class ServiceNodeRegistrar:
         if res and "result" in res:
             return res["result"]["registration_cmd"]
 
-        self.logger.error(f"Failed to get registration command from {sn_ip}:{sn_rpc_port}. Is the SN daemon running?")
+        self.logger.error(f"Failed to get registration command from {sn_ip}:{sn_rpc_port}")
         return None
 
     def _execute_registration(self, cmd):
         """Submits the registration command to the wallet"""
-        self.logger.info("Submitting registration transaction")
+        self.logger.debug("Submitting registration transaction")
         res = self.rpc.call(self.config.wallet_rpc_port, "register_service_node", {
             "register_service_node_str": cmd
         })
 
         if res and "result" in res:
             tx_hash = res["result"]["tx_hash"]
-            self.logger.info(f"SUCCESS! Service Node Registered. Tx: {tx_hash}")
+            self.logger.info(f"Registration successful. Tx: {tx_hash[:16]}...")
             return True
 
         self.logger.error(f"Registration failed: {res}")
+        return False
+
+    # Keep the old sequential method for backwards compatibility
+    def register_node(self, node_id):
+        """Orchestrates the full registration flow for a single node (sequential method)"""
+        self.logger.info(f"Starting automation for Service Node {node_id:02d}")
+
+        sn_wallet_name = f"sn{node_id:02d}"
+        sn_address = self._create_sn_wallet(sn_wallet_name)
+        if not sn_address:
+            return False
+
+        self.logger.info(f"Funding {sn_wallet_name}")
+        if not self._fund_wallet_sequential(sn_address, self.config.staking_requirement):
+            return False
+
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+            "filename": sn_wallet_name,
+            "password": "dummy"
+        })
+
+        self.logger.info(f"Waiting for funds to unlock in {sn_wallet_name}")
+        if not self._wait_for_unlock(self.config.staking_requirement):
+            return False
+
+        reg_cmd = self._get_registration_cmd(node_id, sn_address)
+        if not reg_cmd:
+            return False
+
+        return self._execute_registration(reg_cmd)
+
+    def _fund_wallet_sequential(self, destination_address, amount):
+        """Sequential funding with wait (old method)"""
+        self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
+            "filename": "genesis",
+            "password": "dummy"
+        })
+
+        transfer_amount = amount + 1000000000
+
+        self.logger.debug("Checking Genesis unlocked balance")
+        if not self._wait_for_unlock(transfer_amount):
+            self.logger.error("Genesis wallet never unlocked enough funds")
+            return False
+
+        res = self.rpc.call(self.config.wallet_rpc_port, "transfer", {
+            "destinations": [{"amount": transfer_amount, "address": destination_address}],
+            "priority": 1,
+            "ring_size": 16
+        })
+
+        if res and "result" in res:
+            tx_hash = res["result"]["tx_hash"]
+            self.logger.info(f"Sent {amount} (atomic) to SN. Tx: {tx_hash}")
+            return True
+
+        self.logger.error(f"Transfer failed: {res}")
+        return False
+
+    def _wait_for_unlock(self, required_amount):
+        """Polls the current wallet until unlocked_balance >= required"""
+        max_retries = 60
+
+        for i in range(max_retries):
+            self.rpc.call(self.config.wallet_rpc_port, "refresh")
+            res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
+
+            if res and "result" in res:
+                unlocked = res["result"]["unlocked_balance"]
+                total = res["result"]["balance"]
+
+                if unlocked >= required_amount:
+                    self.logger.info(f"Funds unlocked! Balance: {unlocked}")
+                    return True
+
+                if i % 5 == 0:
+                    self.logger.debug(f"Waiting for unlock. Current: {unlocked}/{required_amount} (Total: {total})")
+
+            time.sleep(2)
+
+        self.logger.error("Timed out waiting for funds to unlock")
         return False
 
 
@@ -545,18 +742,15 @@ class EquilibriaNetwork:
             "--dev-allow-local-ips",
             f"--fixed-difficulty={self.config.difficulty}",
             "--data-dir=/data",
-            # --- FIXES ---
-            "--p2p-bind-ip=127.0.0.1",  # Only listen on localhost
+            "--p2p-bind-ip=127.0.0.1",
             "--p2p-bind-port=18080",
             "--rpc-bind-port=18081",
-            "--out-peers=0",            # Don't dial out
-            "--no-igd",                 # Don't map ports on router
-            "--hide-my-port",           # Don't advertise to DHT
-            # -------------
+            "--out-peers=0",
+            "--no-igd",
+            "--hide-my-port",
             "--log-level=1"
         ]
         return self.docker.run_command(cmd) is not None
-
 
     def start_wallet_rpc(self):
         """Start wallet RPC"""
@@ -576,11 +770,10 @@ class EquilibriaNetwork:
         self.logger.info(f"Starting {self.service_nodes} service nodes")
 
         for i in range(1, self.service_nodes + 1):
-            # Use unique loopback IP for each service node (127.0.0.1, 127.0.0.2, etc.)
             sn_ip = f"127.0.0.{i}"
             p2p_port = 18090 + (i-1) * 2
             rpc_port = 18091 + (i-1) * 2
-            quorumnet_port = 38160  # Can use same port since IPs are different
+            quorumnet_port = 38160
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"sn{i:02d}", "--network", "host",
@@ -662,11 +855,9 @@ class EquilibriaNetwork:
         """Wait for HF16 activation and stop PoW mining"""
         self.logger.info(f"Waiting for HF16 activation at block {self.config.hf16_height}")
 
-        # Wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
         self.logger.info(f"HF16 height reached at block {self.config.hf16_height}")
 
-        # Stop PoW mining now that PoS is active
         self.stop_mining()
 
         return True
@@ -675,23 +866,20 @@ class EquilibriaNetwork:
         """Create dummy transactions to populate output pool for ring signatures"""
         self.logger.info(f"Creating {count} dummy transactions to populate output pool")
 
-        # Ensure genesis wallet is open
         self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
             "filename": "genesis",
             "password": "dummy"
         })
         time.sleep(1)
 
-        # First, sweep dust to consolidate small outputs
         self.logger.info("Sweeping dust first")
         sweep_result = self.rpc.call(self.config.wallet_rpc_port, "sweep_dust", {
             "get_tx_keys": True
         })
         if sweep_result and "result" in sweep_result:
             self.logger.info("Dust swept successfully")
-            time.sleep(5)  # Wait for sweep to be mined
+            time.sleep(5)
 
-        # Refresh wallet
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
         time.sleep(3)
 
@@ -705,7 +893,7 @@ class EquilibriaNetwork:
         ]
 
         for i in range(count):
-            amount = amounts[i % len(amounts)]  # Cycle through different amounts
+            amount = amounts[i % len(amounts)]
 
             result = self.rpc.call(self.config.wallet_rpc_port, "transfer", {
                 "destinations": [{
@@ -713,7 +901,7 @@ class EquilibriaNetwork:
                     "address": self.config.genesis_address
                 }],
                 "priority": 1,
-                "ring_size": 2,  # Use minimum ring size initially
+                "ring_size": 2,
                 "get_tx_key": True
             })
 
@@ -721,14 +909,13 @@ class EquilibriaNetwork:
                 self.logger.debug(f"Dummy tx {i+1}/{count} created ({amount:,} atomic)")
             else:
                 self.logger.warning(f"Dummy tx {i+1}/{count} failed: {result}")
-                # If it fails, try with sweep_all instead
                 if "Not enough outputs" in str(result):
                     break
 
             time.sleep(1)
 
         self.logger.info("Dummy transaction creation complete")
-        time.sleep(10)  # Wait for mining
+        time.sleep(10)
 
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
         time.sleep(3)
@@ -793,23 +980,14 @@ class EquilibriaNetwork:
         self.logger.info(f"Mining blocks to unlock genesis funds (Target: {self.config.unlock_window + 5})")
         self.wait_for_blocks(self.config.unlock_window + 5)
 
-        # 5. Create Dummy Transactions (CRITICAL)
-        # We need to populate the chain with outputs so Ring Signatures work.
-        # Without this, transfers will fail with "Not enough outputs".
+        # 5. Create Dummy Transactions
         self.create_dummy_transactions(15)
 
-        # 6. Register Service Nodes
+        # 6. Register Service Nodes (using parallel method)
         self.monitor.start()
 
-        registered_count = 0
-        self.logger.info(f"Starting Registration Loop for {self.service_nodes} nodes")
-
-        for i in range(1, self.service_nodes + 1):
-            if self.registrar.register_node(i):
-                registered_count += 1
-            else:
-                self.logger.error(f"Critical failure registering SN{i:02d}. Stopping sequence.")
-                break
+        self.logger.info(f"Starting Parallel Registration for {self.service_nodes} nodes")
+        registered_count = self.registrar.register_all_nodes_parallel(self.service_nodes)
 
         self.monitor.stop()
 
