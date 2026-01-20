@@ -8,6 +8,8 @@ from pathlib import Path
 import threading
 import signal
 import logging
+from dataclasses import dataclass
+from typing import List, Optional
 
 class EmojiFormatter(logging.Formatter):
     """Add emojis to differentiate log levels"""
@@ -38,6 +40,73 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ServiceNodeInfo:
+    """Information about a single service node"""
+    pubkey: str
+    pubkey_x25519: str
+    active: bool
+    funded: bool
+    state_height: int
+    last_uptime_proof: int
+    public_ip: str
+    quorumnet_port: int
+    
+    @property
+    def pubkey_short(self) -> str:
+        return self.pubkey[:16] + "..."
+
+
+@dataclass
+class ServiceNodeState:
+    """Overall state of service nodes in the network"""
+    total_registered: int
+    active_count: int
+    inactive_count: int
+    funded_count: int
+    nodes: List[ServiceNodeInfo]
+    current_height: int
+    pulse_min_required: int
+    
+    @property
+    def pulse_ready(self) -> bool:
+        return self.active_count >= self.pulse_min_required
+    
+    @property
+    def quorum_possible(self) -> bool:
+        return self.active_count >= 7  # Minimum for signatures
+    
+    def summary(self) -> str:
+        """Return a formatted summary string"""
+        lines = [
+            "=" * 60,
+            "SERVICE NODE STATE SUMMARY",
+            "=" * 60,
+            f"Current Height: {self.current_height}",
+            f"Total Registered: {self.total_registered}",
+            f"Active: {self.active_count}",
+            f"Inactive: {self.inactive_count}",
+            f"Funded: {self.funded_count}",
+            f"Pulse Min Required: {self.pulse_min_required}",
+            f"Pulse Ready: {'✅ YES' if self.pulse_ready else '❌ NO'}",
+            f"Quorum Possible: {'✅ YES' if self.quorum_possible else '❌ NO'}",
+            "-" * 60,
+            "INDIVIDUAL NODES:",
+            "-" * 60,
+        ]
+        
+        for node in self.nodes:
+            status = "🟢 ACTIVE" if node.active else "🔴 INACTIVE"
+            lines.append(f"  {node.pubkey_short} | {status} | IP: {node.public_ip} | Height: {node.state_height}")
+        
+        lines.append("=" * 60)
+        return "\n".join(lines)
+    
+    def __str__(self) -> str:
+        return self.summary()
+
 
 class NetworkConfig:
     """Network configuration constants"""
@@ -852,15 +921,74 @@ class EquilibriaNetwork:
                     return True
             time.sleep(2)
 
-    def get_active_service_node_count(self):
-        """Get the number of active and funded service nodes"""
+    def get_current_height(self) -> int:
+        """Get the current blockchain height"""
+        result = self.rpc.call(self.config.daemon_rpc_port, "get_info")
+        if result and "result" in result:
+            return result["result"].get("height", 0)
+        return 0
+
+    def get_service_node_state(self) -> Optional[ServiceNodeState]:
+        """Get comprehensive service node state information"""
         result = self.rpc.call(self.config.daemon_rpc_port, "get_service_nodes")
         if not result or "result" not in result:
-            return 0
+            self.logger.error("Failed to get service node state")
+            return None
         
         sns = result["result"].get("service_node_states", [])
-        active_count = sum(1 for sn in sns if sn.get("active") and sn.get("funded"))
-        return active_count
+        current_height = self.get_current_height()
+        
+        nodes = []
+        active_count = 0
+        inactive_count = 0
+        funded_count = 0
+        
+        for sn in sns:
+            node = ServiceNodeInfo(
+                pubkey=sn.get("service_node_pubkey", ""),
+                pubkey_x25519=sn.get("pubkey_x25519", ""),
+                active=sn.get("active", False),
+                funded=sn.get("funded", False),
+                state_height=sn.get("state_height", 0),
+                last_uptime_proof=sn.get("last_uptime_proof", 0),
+                public_ip=sn.get("public_ip", ""),
+                quorumnet_port=sn.get("quorumnet_port", 0)
+            )
+            nodes.append(node)
+            
+            if node.active:
+                active_count += 1
+            else:
+                inactive_count += 1
+            
+            if node.funded:
+                funded_count += 1
+        
+        return ServiceNodeState(
+            total_registered=len(nodes),
+            active_count=active_count,
+            inactive_count=inactive_count,
+            funded_count=funded_count,
+            nodes=nodes,
+            current_height=current_height,
+            pulse_min_required=self.config.pulse_min_service_nodes
+        )
+
+    def print_service_node_state(self):
+        """Print the current service node state to the logger"""
+        state = self.get_service_node_state()
+        if state:
+            for line in state.summary().split('\n'):
+                self.logger.info(line)
+        else:
+            self.logger.error("Could not retrieve service node state")
+
+    def get_active_service_node_count(self):
+        """Get the number of active and funded service nodes"""
+        state = self.get_service_node_state()
+        if state:
+            return state.active_count
+        return 0
 
     def wait_for_active_service_nodes(self, required_count, timeout=600):
         """Wait until we have enough active service nodes"""
@@ -868,13 +996,14 @@ class EquilibriaNetwork:
         
         start_time = time.time()
         while time.time() - start_time < timeout:
-            active_count = self.get_active_service_node_count()
+            state = self.get_service_node_state()
             
-            if active_count >= required_count:
-                self.logger.info(f"Have {active_count} active service nodes (required: {required_count})")
+            if state and state.active_count >= required_count:
+                self.logger.info(f"Have {state.active_count} active service nodes (required: {required_count})")
                 return True
             
-            self.logger.debug(f"Active SNs: {active_count}/{required_count}, waiting...")
+            active = state.active_count if state else 0
+            self.logger.debug(f"Active SNs: {active}/{required_count}, waiting...")
             time.sleep(5)
         
         self.logger.warning(f"Timeout waiting for active service nodes. Have {self.get_active_service_node_count()}, need {required_count}")
@@ -1031,6 +1160,9 @@ class EquilibriaNetwork:
         if registered_count > 0:
             self.logger.info("Waiting for Pulse consensus to be ready")
             self.wait_for_pulse_ready_and_stop_mining()
+
+        # Print final service node state
+        self.print_service_node_state()
 
         self.logger.info("=" * 60)
         self.logger.info("Network setup complete!")
