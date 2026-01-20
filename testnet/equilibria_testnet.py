@@ -188,7 +188,11 @@ class RPCClient:
         self.logger = logging.getLogger(f"{__name__}.RPCClient")
 
     def call(self, port, method, params=None):
-        """Make RPC call"""
+        """Make RPC call to 127.0.0.1"""
+        return self.call_host("127.0.0.1", port, method, params)
+
+    def call_host(self, host, port, method, params=None):
+        """Make RPC call to specific host"""
         if params is None:
             params = {}
 
@@ -201,33 +205,37 @@ class RPCClient:
 
         try:
             response = requests.post(
-                f"http://127.0.0.1:{port}/json_rpc",
+                f"http://{host}:{port}/json_rpc",
                 json=payload,
                 timeout=30
             )
             return response.json()
         except Exception as e:
-            self.logger.error(f"RPC call failed: {method} on port {port} - {e}")
+            self.logger.error(f"RPC call failed: {method} on {host}:{port} - {e}")
             return None
 
     def wait_for_service(self, port, timeout=60):
         """Wait for service to be ready"""
-        self.logger.debug(f"Waiting for service on port {port}")
+        return self.wait_for_service_host("127.0.0.1", port, timeout)
+
+    def wait_for_service_host(self, host, port, timeout=60):
+        """Wait for service to be ready on specific host"""
+        self.logger.debug(f"Waiting for service on {host}:{port}")
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
                 response = requests.post(
-                    f"http://127.0.0.1:{port}/json_rpc",
+                    f"http://{host}:{port}/json_rpc",
                     json={"jsonrpc": "2.0", "id": "0", "method": "get_info"},
                     timeout=5
                 )
                 if response.status_code == 200:
-                    self.logger.debug(f"Service on port {port} is ready")
+                    self.logger.debug(f"Service on {host}:{port} is ready")
                     return True
             except:
                 pass
             time.sleep(2)
-        self.logger.error(f"Service on port {port} failed to start within {timeout}s")
+        self.logger.error(f"Service on {host}:{port} failed to start within {timeout}s")
         return False
 
 class WalletManager:
@@ -323,10 +331,7 @@ class ServiceNodeRegistrar:
             return False
 
         # 4. Get the Registration Command from the Daemon (not wallet)
-        # Calculate SN RPC port based on your network logic (18091, 18093, etc)
-        sn_daemon_rpc_port = 18091 + (node_id-1) * 2
-
-        reg_cmd = self._get_registration_cmd(sn_daemon_rpc_port, sn_address)
+        reg_cmd = self._get_registration_cmd(node_id, sn_address)
         if not reg_cmd: return False
 
         # 5. Execute Registration
@@ -403,7 +408,7 @@ class ServiceNodeRegistrar:
         self.logger.error("Timed out waiting for funds to unlock")
         return False
 
-    def _get_registration_cmd(self, sn_rpc_port, sn_address):
+    def _get_registration_cmd(self, node_id, sn_address):
         """Asks the Service Node Daemon for the registration string"""
         # Note: Using the portions logic from your original script
         STAKING_PORTIONS = 18446744073709551612
@@ -415,12 +420,15 @@ class ServiceNodeRegistrar:
             "staking_requirement": self.config.staking_requirement
         }
 
-        res = self.rpc.call(sn_rpc_port, "get_service_node_registration_cmd", params)
+        # Each service node has a unique loopback IP
+        sn_ip = f"127.0.0.{node_id}"
+        sn_rpc_port = 18091 + (node_id - 1) * 2
+        res = self.rpc.call_host(sn_ip, sn_rpc_port, "get_service_node_registration_cmd", params)
 
         if res and "result" in res:
             return res["result"]["registration_cmd"]
 
-        self.logger.error(f"Failed to get registration command from port {sn_rpc_port}. Is the SN daemon running?")
+        self.logger.error(f"Failed to get registration command from {sn_ip}:{sn_rpc_port}. Is the SN daemon running?")
         return None
 
     def _execute_registration(self, cmd):
@@ -568,24 +576,31 @@ class EquilibriaNetwork:
         self.logger.info(f"Starting {self.service_nodes} service nodes")
 
         for i in range(1, self.service_nodes + 1):
+            # Use unique loopback IP for each service node (127.0.0.1, 127.0.0.2, etc.)
+            sn_ip = f"127.0.0.{i}"
             p2p_port = 18090 + (i-1) * 2
             rpc_port = 18091 + (i-1) * 2
-            quorumnet_port = 38160 + (i-1)  # Unique quorumnet port for each SN
+            quorumnet_port = 38160  # Can use same port since IPs are different
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"sn{i:02d}", "--network", "host",
                 "-v", f"{os.getcwd()}/data/sn{i:02d}:/data", "equilibria-node",
-                "--testnet", "--dev-allow-local-ips", "--service-node", f"--fixed-difficulty={self.config.difficulty}",
-                "--data-dir=/data", f"--p2p-bind-port={p2p_port}",
-                f"--rpc-bind-port={rpc_port}", "--add-priority-node=127.0.0.1:18080",
-                "--service-node-public-ip=127.0.0.1",
+                "--testnet", "--dev-allow-local-ips", "--service-node",
+                f"--fixed-difficulty={self.config.difficulty}",
+                "--data-dir=/data",
+                f"--p2p-bind-ip={sn_ip}",
+                f"--p2p-bind-port={p2p_port}",
+                f"--rpc-bind-ip={sn_ip}",
+                f"--rpc-bind-port={rpc_port}",
+                "--add-priority-node=127.0.0.1:18080",
+                f"--service-node-public-ip={sn_ip}",
                 "--l2-provider=http://dummy-provider",
-                f"--quorumnet-port={quorumnet_port}",  # Use this instead of --omq-port
+                f"--quorumnet-port={quorumnet_port}",
                 "--log-level=3"
             ]
 
             if self.docker.run_command(cmd):
-                self.logger.info(f"SN{i:02d} started (ports: P2P={p2p_port}, RPC={rpc_port}, OMQ={quorumnet_port})")
+                self.logger.info(f"SN{i:02d} started (IP={sn_ip}, P2P={p2p_port}, RPC={rpc_port}, QNet={quorumnet_port})")
             time.sleep(0.5)
 
     def start_regular_nodes(self):
