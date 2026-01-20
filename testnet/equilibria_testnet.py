@@ -9,11 +9,32 @@ import threading
 import signal
 import logging
 
-# Configure logging
+class EmojiFormatter(logging.Formatter):
+    """Add emojis to differentiate log levels"""
+    
+    EMOJIS = {
+        logging.DEBUG: "🔍",
+        logging.INFO: "ℹ️ ",
+        logging.WARNING: "⚠️ ",
+        logging.ERROR: "❌",
+        logging.CRITICAL: "🔥"
+    }
+
+    def format(self, record):
+        emoji = self.EMOJIS.get(record.levelno, "")
+        record.msg = f"{emoji} {record.msg}"
+        return super().format(record)
+
+# Configure logging with emoji formatter
+handler = logging.StreamHandler()
+handler.setFormatter(EmojiFormatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    handlers=[handler]
 )
 
 logger = logging.getLogger(__name__)
