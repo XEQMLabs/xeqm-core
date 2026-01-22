@@ -110,7 +110,7 @@ class ServiceNodeState:
 
 class NetworkConfig:
     """Network configuration constants"""
-    def __init__(self):
+    def __init__(self, public_ip=None):
         self.genesis_address = "XEQTN3HrcXx7oWPEyWVzyw1V1GQFkXkPzJ9g7LyuHm5D6xbPFrAE8MyK7ZiVBp11ic72YQZwo6UzF2Rc5EWbnEHT99VbHLUx18"
         self.genesis_spend_key = "e0e3bfa8113406541ad8765bf1dddbf5151da1ad6f7586af8686bc5e5e15470b"
         self.genesis_view_key = "f49c400d21ef3f12854e3377d467ff63ba2d6013fa85d465f3c807b716b1c60b"
@@ -123,6 +123,25 @@ class NetworkConfig:
         self.hf16_height = 300   # HF16 activation height (Pulse)
         self.pulse_min_service_nodes = 12  # Minimum active SNs for Pulse
         self.eth_node_port = 8545  # Ethereum node port
+        # Public IP for external connectivity - if not provided, try to detect
+        self.public_ip = public_ip or self._detect_public_ip()
+        # Base ports for service nodes (each SN uses base + index*2 for p2p and base + index*2 + 1 for rpc)
+        self.sn_p2p_base_port = 18100
+        self.sn_rpc_base_port = 18200
+        self.sn_qnet_base_port = 18300
+
+    def _detect_public_ip(self):
+        """Try to detect the public IP address"""
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
+
 
 class DockerManager:
     """Handles Docker container operations"""
@@ -607,15 +626,14 @@ class ServiceNodeRegistrar:
             "staking_requirement": self.config.staking_requirement
         }
 
-        # Each service node has a unique loopback IP
-        sn_ip = f"127.0.0.{node_id}"
-        sn_rpc_port = 18091 + (node_id - 1) * 2
-        res = self.rpc.call_host(sn_ip, sn_rpc_port, "get_service_node_registration_cmd", params)
+        # Each service node has its own RPC port
+        sn_rpc_port = self.config.sn_rpc_base_port + node_id
+        res = self.rpc.call_host("127.0.0.1", sn_rpc_port, "get_service_node_registration_cmd", params)
 
         if res and "result" in res:
             return res["result"]["registration_cmd"]
 
-        self.logger.error(f"Failed to get registration command from {sn_ip}:{sn_rpc_port}")
+        self.logger.error(f"Failed to get registration command from 127.0.0.1:{sn_rpc_port}")
         return None
 
     def _execute_registration(self, cmd):
@@ -762,12 +780,12 @@ class NetworkMonitor:
 class EquilibriaNetwork:
     """Main network orchestrator"""
 
-    def __init__(self, service_nodes=20, regular_nodes=5, eth_node_directory=None):
+    def __init__(self, service_nodes=20, regular_nodes=5, eth_node_directory=None, public_ip=None):
         self.service_nodes = service_nodes
         self.regular_nodes = regular_nodes
 
         # Initialize components
-        self.config = NetworkConfig()
+        self.config = NetworkConfig(public_ip=public_ip)
         self.docker = DockerManager(self.config)
         self.rpc = RPCClient()
         self.wallet = WalletManager(self.rpc, self.config)
@@ -806,6 +824,7 @@ class EquilibriaNetwork:
     def start_bootstrap(self):
         """Start bootstrap node"""
         self.logger.info("Starting bootstrap node")
+        self.logger.info(f"Bootstrap will be accessible at {self.config.public_ip}:18080")
         cmd = [
             "docker", "run", "-dit", "--name", "bootstrap", "--network", "host",
             "-v", f"{os.getcwd()}/data/bootstrap:/data", "equilibria-node",
@@ -815,7 +834,9 @@ class EquilibriaNetwork:
             "--data-dir=/data",
             "--p2p-bind-ip=0.0.0.0",
             "--p2p-bind-port=18080",
+            "--rpc-bind-ip=0.0.0.0",
             "--rpc-bind-port=18081",
+            "--confirm-external-bind",
             "--log-level=1"
         ]
         return self.docker.run_command(cmd) is not None
@@ -836,12 +857,12 @@ class EquilibriaNetwork:
     def start_service_nodes(self):
         """Start all service nodes"""
         self.logger.info(f"Starting {self.service_nodes} service nodes")
+        self.logger.info(f"Service nodes will be accessible externally via {self.config.public_ip}")
 
         for i in range(1, self.service_nodes + 1):
-            sn_ip = f"127.0.0.{i}"
-            p2p_port = 18090 + (i-1) * 2
-            rpc_port = 18091 + (i-1) * 2
-            quorumnet_port = 38160
+            p2p_port = self.config.sn_p2p_base_port + i
+            rpc_port = self.config.sn_rpc_base_port + i
+            quorumnet_port = self.config.sn_qnet_base_port + i
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"sn{i:02d}", "--network", "host",
@@ -849,19 +870,20 @@ class EquilibriaNetwork:
                 "--testnet", "--dev-allow-local-ips", "--service-node",
                 f"--fixed-difficulty={self.config.difficulty}",
                 "--data-dir=/data",
-                f"--p2p-bind-ip={sn_ip}",
+                "--p2p-bind-ip=0.0.0.0",
                 f"--p2p-bind-port={p2p_port}",
-                f"--rpc-bind-ip={sn_ip}",
+                "--rpc-bind-ip=0.0.0.0",
                 f"--rpc-bind-port={rpc_port}",
+                "--confirm-external-bind",
                 "--add-priority-node=127.0.0.1:18080",
-                f"--service-node-public-ip={sn_ip}",
+                f"--service-node-public-ip={self.config.public_ip}",
                 "--l2-provider=http://127.0.0.1:8545",
                 f"--quorumnet-port={quorumnet_port}",
                 "--log-level=3"
             ]
 
             if self.docker.run_command(cmd):
-                self.logger.info(f"SN{i:02d} started (IP={sn_ip}, P2P={p2p_port}, RPC={rpc_port}, QNet={quorumnet_port})")
+                self.logger.info(f"SN{i:02d} started (P2P={p2p_port}, RPC={rpc_port}, QNet={quorumnet_port})")
             time.sleep(0.5)
 
     def start_regular_nodes(self):
@@ -869,16 +891,21 @@ class EquilibriaNetwork:
         self.logger.info(f"Starting {self.regular_nodes} regular nodes")
 
         for i in range(1, self.regular_nodes + 1):
-            p2p_port = 18150 + (i-1) * 2
-            rpc_port = 18151 + (i-1) * 2
+            p2p_port = 18400 + i
+            rpc_port = 18500 + i
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"regular{i:02d}", "--network", "host",
                 "-v", f"{os.getcwd()}/data/regular{i:02d}:/data", "equilibria-node",
                 "--testnet", "--dev-allow-local-ips",
                 f"--fixed-difficulty={self.config.difficulty}", "--data-dir=/data",
-                f"--p2p-bind-port={p2p_port}", f"--rpc-bind-port={rpc_port}",
-                "--add-priority-node=127.0.0.1:18080", "--log-level=1"
+                "--p2p-bind-ip=0.0.0.0",
+                f"--p2p-bind-port={p2p_port}",
+                "--rpc-bind-ip=0.0.0.0",
+                f"--rpc-bind-port={rpc_port}",
+                "--confirm-external-bind",
+                "--add-priority-node=127.0.0.1:18080",
+                "--log-level=1"
             ]
 
             self.docker.run_command(cmd)
@@ -1082,12 +1109,30 @@ class EquilibriaNetwork:
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
         time.sleep(3)
 
+    def print_connection_info(self):
+        """Print connection information for external nodes"""
+        self.logger.info("=" * 60)
+        self.logger.info("EXTERNAL NODE CONNECTION INFO")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Bootstrap P2P: {self.config.public_ip}:18080")
+        self.logger.info(f"Bootstrap RPC: {self.config.public_ip}:18081")
+        self.logger.info("")
+        self.logger.info("Service Node P2P Ports:")
+        for i in range(1, self.service_nodes + 1):
+            p2p_port = self.config.sn_p2p_base_port + i
+            self.logger.info(f"  SN{i:02d}: {self.config.public_ip}:{p2p_port}")
+        self.logger.info("")
+        self.logger.info("To connect an external node, use:")
+        self.logger.info(f"  --add-priority-node={self.config.public_ip}:18080")
+        self.logger.info("=" * 60)
+
     def start_network(self):
         """Start the complete network"""
         self.logger.info("=" * 60)
         self.logger.info("Starting Equilibria Horizon Network")
         self.logger.info(f"Service nodes: {self.service_nodes}")
         self.logger.info(f"Regular nodes: {self.regular_nodes}")
+        self.logger.info(f"Public IP: {self.config.public_ip}")
         self.logger.info(f"Staking requirement: {self.config.staking_requirement:,} atomic ({self.config.staking_requirement // 1000000000:,} XEQ)")
         self.logger.info(f"HF16 (Pulse) activation: Block {self.config.hf16_height}")
         self.logger.info(f"Pulse min service nodes: {self.config.pulse_min_service_nodes}")
@@ -1163,9 +1208,12 @@ class EquilibriaNetwork:
         # Print final service node state
         self.print_service_node_state()
 
+        # Print connection info for external nodes
+        self.print_connection_info()
+
         self.logger.info("=" * 60)
         self.logger.info("Equilibria Horizon Network setup complete!")
-        self.logger.info(f"Bootstrap: http://127.0.0.1:18081")
+        self.logger.info(f"Bootstrap: http://{self.config.public_ip}:18081")
         self.logger.info(f"Wallet RPC: http://127.0.0.1:18084")
         if self.eth_node.node_directory:
             self.logger.info(f"Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
