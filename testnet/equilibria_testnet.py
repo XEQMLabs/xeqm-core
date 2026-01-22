@@ -8,6 +8,7 @@ from pathlib import Path
 import threading
 import signal
 import logging
+import shutil
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -815,11 +816,23 @@ class EquilibriaNetwork:
         containers.extend([f"regular{i:02d}" for i in range(1, self.regular_nodes + 1)])
         self.docker.cleanup_all_containers(containers)
 
-    def cleanup(self):
+    def cleanup_data(self):
+        """Clean up all data directories for a fresh start"""
+        self.logger.info("Cleaning up data directories")
+        dirs_to_clean = ["./data", "./wallets"]
+        for d in dirs_to_clean:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+                self.logger.debug(f"Removed {d}")
+        self.logger.info("Data directories cleaned")
+
+    def cleanup(self, clean_data=False):
         """Clean up all resources"""
         self.logger.info("Cleaning up resources")
         self.cleanup_containers()
         self.eth_node.stop_node()
+        if clean_data:
+            self.cleanup_data()
 
     def start_bootstrap(self):
         """Start bootstrap node"""
@@ -1126,8 +1139,12 @@ class EquilibriaNetwork:
         self.logger.info(f"  --add-priority-node={self.config.public_ip}:18080")
         self.logger.info("=" * 60)
 
-    def start_network(self):
-        """Start the complete network"""
+    def start_network(self, fresh_start=True):
+        """Start the complete network
+        
+        Args:
+            fresh_start: If True, clean all data directories before starting
+        """
         self.logger.info("=" * 60)
         self.logger.info("Starting Equilibria Horizon Network")
         self.logger.info(f"Service nodes: {self.service_nodes}")
@@ -1136,7 +1153,16 @@ class EquilibriaNetwork:
         self.logger.info(f"Staking requirement: {self.config.staking_requirement:,} atomic ({self.config.staking_requirement // 1000000000:,} XEQ)")
         self.logger.info(f"HF16 (Pulse) activation: Block {self.config.hf16_height}")
         self.logger.info(f"Pulse min service nodes: {self.config.pulse_min_service_nodes}")
+        self.logger.info(f"Fresh start: {fresh_start}")
         self.logger.info("=" * 60)
+
+        # Clean up any existing containers and optionally data
+        self.cleanup_containers()
+        if fresh_start:
+            self.cleanup_data()
+
+        # Recreate directories after cleanup
+        self._setup_directories()
 
         # 0. Setup Ethereum Node (if directory provided)
         if self.eth_node.node_directory:
