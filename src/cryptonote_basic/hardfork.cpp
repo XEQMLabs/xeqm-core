@@ -119,13 +119,13 @@ static constexpr std::array testnet_hard_forks = {
         hard_fork{hf::hf13_enforce_checkpoints, 0, 4, 1653632397},
         hard_fork{hf::hf14_blink, 0, 5, 1653632397},
         hard_fork{hf::hf15_ons, 0, 6, 1653632397},
-        hard_fork{hf::hf16_pulse, 0, 300, 1653632397},
-        hard_fork{hf::hf17, 0, 301, 1653632397},
-        hard_fork{hf::hf18, 0, 302, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 0, 303, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 1, 304, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 2, 305, 1661205699},
-        hard_fork{hf::hf19_reward_batching, 3, 306, 1673385120},
+        hard_fork{hf::hf16_pulse, 0, 750, 1653632397},
+        hard_fork{hf::hf17, 0, 751, 1653632397},
+        hard_fork{hf::hf18, 0, 752, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 0, 753, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
+        hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
 };
 
 static constexpr std::array devnet_hard_forks = {
