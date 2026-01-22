@@ -296,7 +296,7 @@ uint64_t staking_num_lock_blocks(cryptonote::network_type nettype) {
     switch (nettype) {
         case cryptonote::network_type::FAKECHAIN: return 30;
         case cryptonote::network_type::TESTNET: return get_config(nettype).BLOCKS_IN(48h);
-        default: return get_config(nettype).BLOCKS_IN(30 * 24h);
+        default: return get_config(nettype).BLOCKS_IN(14 * 24h);
     }
 }
 
