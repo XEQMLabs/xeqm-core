@@ -170,6 +170,9 @@ using MAXIMUM_ACCEPTABLE_STAKE = std::ratio<101, 100>;
 // precision of HF19+ registrations (i.e. to a percentage with two decimal places of precision).
 inline constexpr uint64_t STAKING_FEE_BASIS = 10'000;
 
+// Equilibria Horizon: Maximum operator fee is 10% (1,000 basis points out of 10,000)
+inline constexpr uint64_t MAX_OPERATOR_FEE_BASIS = 1'000;
+
 // We calculate and store batch rewards in thousanths of atomic OXEN/SESH, to reduce the size of
 // errors from integer division of rewards.
 constexpr int64_t BATCH_REWARD_FACTOR = 1000;
