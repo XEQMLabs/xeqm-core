@@ -53,7 +53,7 @@ class ServiceNodeInfo:
     last_uptime_proof: int
     public_ip: str
     quorumnet_port: int
-    
+
     @property
     def pubkey_short(self) -> str:
         return self.pubkey[:16] + "..."
@@ -69,15 +69,15 @@ class ServiceNodeState:
     nodes: List[ServiceNodeInfo]
     current_height: int
     pulse_min_required: int
-    
+
     @property
     def pulse_ready(self) -> bool:
         return self.active_count >= self.pulse_min_required
-    
+
     @property
     def quorum_possible(self) -> bool:
         return self.active_count >= 7  # Minimum for signatures
-    
+
     def summary(self) -> str:
         """Return a formatted summary string"""
         lines = [
@@ -96,14 +96,14 @@ class ServiceNodeState:
             "INDIVIDUAL NODES:",
             "-" * 60,
         ]
-        
+
         for node in self.nodes:
             status = "🟢 ACTIVE" if node.active else "🔴 INACTIVE"
             lines.append(f"  {node.pubkey_short} | {status} | IP: {node.public_ip} | Height: {node.state_height}")
-        
+
         lines.append("=" * 60)
         return "\n".join(lines)
-    
+
     def __str__(self) -> str:
         return self.summary()
 
@@ -116,7 +116,8 @@ class NetworkConfig:
         self.genesis_view_key = "f49c400d21ef3f12854e3377d467ff63ba2d6013fa85d465f3c807b716b1c60b"
         self.wallet_rpc_port = 18084
         self.daemon_rpc_port = 18081
-        self.staking_requirement = 15000000000000  # 15,000 XEQ in atomic units
+        # Equilibria Horizon: Full stake requirement is 100,000 XEQ (in atomic units)
+        self.staking_requirement = 100000000000000  # 100,000 XEQ in atomic units
         self.difficulty = 750
         self.unlock_window = 30  # Blocks needed for coin unlock
         self.hf16_height = 300   # HF16 activation height (Pulse)
@@ -391,7 +392,7 @@ class ServiceNodeRegistrar:
         # Phase 1: Create all SN wallets and collect addresses
         self.logger.info("Phase 1: Creating all service node wallets")
         sn_data = []  # List of (node_id, wallet_name, address)
-        
+
         for i in range(1, num_nodes + 1):
             sn_wallet_name = f"sn{i:02d}"
             sn_address = self._create_sn_wallet(sn_wallet_name)
@@ -408,7 +409,7 @@ class ServiceNodeRegistrar:
 
         # Phase 2: Fund all wallets from genesis
         self.logger.info("Phase 2: Funding all service node wallets")
-        
+
         # Open genesis wallet
         self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
             "filename": "genesis",
@@ -441,7 +442,7 @@ class ServiceNodeRegistrar:
         # Phase 4: Register all nodes
         self.logger.info("Phase 4: Registering all service nodes")
         registered_count = 0
-        
+
         for node_id, wallet_name, address in funded_nodes:
             if self._register_funded_node(node_id, wallet_name, address):
                 registered_count += 1
@@ -471,17 +472,17 @@ class ServiceNodeRegistrar:
             "filename": "genesis",
             "password": "dummy"
         })
-        
+
         # Refresh to get latest balance
         self.rpc.call(self.config.wallet_rpc_port, "refresh")
-        
+
         # Calculate total needed (Amount + 1.0 XEQ for fees)
         transfer_amount = amount + 1000000000
 
         # Check if we have enough unlocked balance
         balance_info = self.wallet.get_balance()
         unlocked = balance_info.get("unlocked_balance", 0)
-        
+
         if unlocked < transfer_amount:
             self.logger.warning(f"Insufficient unlocked balance: {unlocked:,} < {transfer_amount:,}, waiting...")
             if not self._wait_for_unlock_genesis(transfer_amount):
@@ -505,7 +506,7 @@ class ServiceNodeRegistrar:
     def _wait_for_unlock_genesis(self, required_amount):
         """Wait for genesis wallet to have enough unlocked funds"""
         max_retries = 120  # Up to ~4 minutes
-        
+
         for i in range(max_retries):
             self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
                 "filename": "genesis",
@@ -529,42 +530,42 @@ class ServiceNodeRegistrar:
     def _wait_for_all_unlocks(self, funded_nodes):
         """Wait for all funded wallets to have unlocked balances"""
         self.logger.info(f"Waiting for {len(funded_nodes)} wallets to unlock...")
-        
+
         pending = set(node_id for node_id, _, _ in funded_nodes)
         max_retries = 120  # Up to ~4 minutes
-        
+
         for attempt in range(max_retries):
             still_pending = set()
-            
+
             for node_id, wallet_name, _ in funded_nodes:
                 if node_id not in pending:
                     continue
-                    
+
                 self.rpc.call(self.config.wallet_rpc_port, "open_wallet", {
                     "filename": wallet_name,
                     "password": "dummy"
                 })
                 self.rpc.call(self.config.wallet_rpc_port, "refresh")
                 res = self.rpc.call(self.config.wallet_rpc_port, "get_balance")
-                
+
                 if res and "result" in res:
                     unlocked = res["result"]["unlocked_balance"]
                     if unlocked >= self.config.staking_requirement:
                         self.logger.debug(f"{wallet_name} unlocked: {unlocked:,}")
                     else:
                         still_pending.add(node_id)
-            
+
             pending = still_pending
-            
+
             if not pending:
                 self.logger.info("All wallets unlocked!")
                 return True
-            
+
             if attempt % 10 == 0:
                 self.logger.info(f"Still waiting for {len(pending)} wallets to unlock...")
-            
+
             time.sleep(2)
-        
+
         self.logger.warning(f"Timeout: {len(pending)} wallets still locked")
         return len(pending) == 0
 
@@ -600,7 +601,7 @@ class ServiceNodeRegistrar:
         STAKING_PORTIONS = 18446744073709551612
 
         params = {
-            "operator_cut": "100.0",
+            "operator_cut": "10.0",  # Equilibria Horizon: Max operator fee is 10%
             "contributor_addresses": [sn_address],
             "contributor_amounts": [STAKING_PORTIONS],
             "staking_requirement": self.config.staking_requirement
@@ -812,12 +813,9 @@ class EquilibriaNetwork:
             "--dev-allow-local-ips",
             f"--fixed-difficulty={self.config.difficulty}",
             "--data-dir=/data",
-            "--p2p-bind-ip=127.0.0.1",
+            "--p2p-bind-ip=0.0.0.0",
             "--p2p-bind-port=18080",
             "--rpc-bind-port=18081",
-            "--out-peers=0",
-            "--no-igd",
-            "--hide-my-port",
             "--log-level=1"
         ]
         return self.docker.run_command(cmd) is not None
@@ -934,15 +932,15 @@ class EquilibriaNetwork:
         if not result or "result" not in result:
             self.logger.error("Failed to get service node state")
             return None
-        
+
         sns = result["result"].get("service_node_states", [])
         current_height = self.get_current_height()
-        
+
         nodes = []
         active_count = 0
         inactive_count = 0
         funded_count = 0
-        
+
         for sn in sns:
             node = ServiceNodeInfo(
                 pubkey=sn.get("service_node_pubkey", ""),
@@ -955,15 +953,15 @@ class EquilibriaNetwork:
                 quorumnet_port=sn.get("quorumnet_port", 0)
             )
             nodes.append(node)
-            
+
             if node.active:
                 active_count += 1
             else:
                 inactive_count += 1
-            
+
             if node.funded:
                 funded_count += 1
-        
+
         return ServiceNodeState(
             total_registered=len(nodes),
             active_count=active_count,
@@ -993,30 +991,30 @@ class EquilibriaNetwork:
     def wait_for_active_service_nodes(self, required_count, timeout=600):
         """Wait until we have enough active service nodes"""
         self.logger.info(f"Waiting for {required_count} active service nodes")
-        
+
         start_time = time.time()
         while time.time() - start_time < timeout:
             state = self.get_service_node_state()
-            
+
             if state and state.active_count >= required_count:
                 self.logger.info(f"Have {state.active_count} active service nodes (required: {required_count})")
                 return True
-            
+
             active = state.active_count if state else 0
             self.logger.debug(f"Active SNs: {active}/{required_count}, waiting...")
             time.sleep(5)
-        
+
         self.logger.warning(f"Timeout waiting for active service nodes. Have {self.get_active_service_node_count()}, need {required_count}")
         return False
 
     def wait_for_pulse_ready_and_stop_mining(self):
         """Wait for HF16 height AND enough active SNs, then stop PoW mining"""
         self.logger.info(f"Waiting for Pulse readiness (HF16 at block {self.config.hf16_height}, need {self.config.pulse_min_service_nodes} active SNs)")
-        
+
         # First wait for HF16 height
         self.wait_for_blocks(self.config.hf16_height)
         self.logger.info(f"HF16 height {self.config.hf16_height} reached")
-        
+
         # Then wait for enough active service nodes
         if self.wait_for_active_service_nodes(self.config.pulse_min_service_nodes):
             self.logger.info("Pulse requirements met, stopping PoW mining")
@@ -1087,9 +1085,10 @@ class EquilibriaNetwork:
     def start_network(self):
         """Start the complete network"""
         self.logger.info("=" * 60)
-        self.logger.info("Starting Equilibria Network")
+        self.logger.info("Starting Equilibria Horizon Network")
         self.logger.info(f"Service nodes: {self.service_nodes}")
         self.logger.info(f"Regular nodes: {self.regular_nodes}")
+        self.logger.info(f"Staking requirement: {self.config.staking_requirement:,} atomic ({self.config.staking_requirement // 1000000000:,} XEQ)")
         self.logger.info(f"HF16 (Pulse) activation: Block {self.config.hf16_height}")
         self.logger.info(f"Pulse min service nodes: {self.config.pulse_min_service_nodes}")
         self.logger.info("=" * 60)
@@ -1165,13 +1164,14 @@ class EquilibriaNetwork:
         self.print_service_node_state()
 
         self.logger.info("=" * 60)
-        self.logger.info("Network setup complete!")
+        self.logger.info("Equilibria Horizon Network setup complete!")
         self.logger.info(f"Bootstrap: http://127.0.0.1:18081")
         self.logger.info(f"Wallet RPC: http://127.0.0.1:18084")
         if self.eth_node.node_directory:
             self.logger.info(f"Ethereum Node: http://127.0.0.1:{self.config.eth_node_port}")
         self.logger.info(f"Service nodes Registered: {registered_count}/{self.service_nodes}")
         self.logger.info(f"Active Service Nodes: {self.get_active_service_node_count()}")
+        self.logger.info(f"Staking Requirement: {self.config.staking_requirement // 1000000000:,} XEQ")
         self.logger.info("=" * 60)
 
         return True

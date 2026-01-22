@@ -74,14 +74,14 @@ inline constexpr network_config config{
         .ETHEREUM_REWARDS_CONTRACT = "0xC2B9fC251aC068763EbDfdecc792E3352E351c00",
         .ETHEREUM_POOL_CONTRACT = "0x11f040E89dFAbBA9070FFE6145E914AC68DbFea0",
         // Update every ~10 minutes with an Arbitrum ~250ms block time:
-        .L2_REWARD_POOL_UPDATE_BLOCKS = 10min / L2_BLOCK_TIME,
+        .L2_REWARD_POOL_UPDATE_BLOCKS = 10min / config::L2_BLOCK_TIME,
         // The default is 70s behind with an Arbitrum ~250ms block time, so that pulse nodes using
         // 1min update period will work (with a few seconds for provider and request latencies).
-        .L2_TRACKER_SAFE_BLOCKS = 70s / L2_BLOCK_TIME,
+        .L2_TRACKER_SAFE_BLOCKS = 70s / config::L2_BLOCK_TIME,
         // This relatively infrequent check is only for handling highly unusual cleanup cases where
         // a L2 disruption or bug between the contract and oxend results in oxend service nodes
         // state having nodes that *don't* exist in the contract (or vice versa) for some reason.
-        .L2_NODE_LIST_PURGE_BLOCKS = 1h / L2_BLOCK_TIME,
+        .L2_NODE_LIST_PURGE_BLOCKS = 1h / config::L2_BLOCK_TIME,
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = 24h / TARGET_BLOCK_TIME,
         .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
 };
