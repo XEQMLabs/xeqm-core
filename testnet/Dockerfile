@@ -47,6 +47,7 @@ RUN set -ex && \
 
 ARG OPENSSL_VERSION=1.1.1g
 ARG OPENSSL_HASH=ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46
+
 RUN set -ex && \
     wget https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz && \
     echo "${OPENSSL_HASH}  openssl-${OPENSSL_VERSION}.tar.gz" | sha256sum -c && \
@@ -59,6 +60,7 @@ RUN set -ex && \
 ARG BOOST_VERSION=1_83_0
 ARG BOOST_VERSION_DOT=1.83.0
 ARG BOOST_HASH=6478edfe2f3305127cffe8caf73ea0176c53769f4bf1585be237eb30798c3b8e
+
 RUN set -ex && \
     wget -O boost_${BOOST_VERSION}.tar.bz2 https://sourceforge.net/projects/boost/files/boost/${BOOST_VERSION_DOT}/boost_${BOOST_VERSION}.tar.bz2 && \
     echo "${BOOST_HASH}  boost_${BOOST_VERSION}.tar.bz2" | sha256sum -c && \
@@ -72,9 +74,24 @@ RUN set -ex && \
         -j$(nproc) install && \
     ldconfig
 
+# Check if bin directory exists, otherwise show helpful error
+RUN if [ ! -d "bin" ]; then \
+        echo ""; \
+        echo "ERROR: bin directory not found in build context!"; \
+        echo ""; \
+        echo "Please copy the binaries before building:"; \
+        echo "  cp -r ../build/bin ./bin"; \
+        echo "  docker build -t equilibria-node ."; \
+        echo ""; \
+        echo "Or run from project root:"; \
+        echo "  docker build -t equilibria-node -f testnet/Dockerfile ."; \
+        echo "  (and update COPY to use build/bin/*)"; \
+        echo ""; \
+        exit 1; \
+    fi
 
 # Copy all binaries
-COPY ../build/bin/* /usr/local/bin/
+COPY bin/* /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
 
 # Create directories
