@@ -10,7 +10,9 @@ inline constexpr size_t DISPLAY_DECIMAL_POINT = 9;
 
 // total number coins to be generated (old curve)
 inline constexpr uint64_t MONEY_SUPPLY = ((uint64_t)(-1));
-inline constexpr uint64_t EMISSION_LINEAR_BASE = ((uint64_t)(1) << 58);
+// Increased from (1 << 58) to (1 << 61) to support up to 1.2B coin supply
+// (original supported ~150M max, new supports ~1.2B max)
+inline constexpr uint64_t EMISSION_LINEAR_BASE = ((uint64_t)(1) << 61);
 inline constexpr uint64_t EMISSION_SUPPLY_MULTIPLIER = 19;
 inline constexpr uint64_t EMISSION_SUPPLY_DIVISOR = 10;
 inline constexpr uint64_t EMISSION_DIVISOR = 2000000;
