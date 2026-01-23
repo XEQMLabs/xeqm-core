@@ -36,13 +36,13 @@ inline constexpr network_config config{
                   0x62,
                   0x65}},
         .GENESIS_TX =
-                "011e01ff00018080c9db97f4fb27022f5400bc9f976c15e9b045a2dd99aa4d988dfb4e15d6589e75b2ce37aafa3e5a2101c5f3513f4085c3786d2a1d5b7f449f288abb5f200987d2d35995e00fb21670a7"sv
+                "021e01ff00018080c9db97f4fb270278fe7eed60deb57ea863d65690c40abc5ff09505704f36ba94285a02b9e15f6942014c8f90cc270b3e4e154003ecf48f21b5762e57c52cc70df9c65502e4921cd97872000000000000000000000000000000000000000000000000000000000000000000"sv
         ,
         .GENESIS_NONCE = 12345,
         .GOVERNANCE_REWARD_INTERVAL = 24h,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
-                        "XEQMPRuPnTa6GnWz7n7zqHZWWs9c4C9cwHCcpuPD776u3N5bdnDqsBu27VVZ9y4UARgTgnTaKxeoZK9vEa1cJnXv6JPfrLxc3W"
+                        "XEQT8QP2BWFevNjsrvAqipQdCF7C6WdXs5BPWfa2vZRH4h1ZfuRr9wtds5gAwCGqoAd5psteQiTwdH17Fe3Vb7G25BkRFEo2MC"
                 },
         .UPTIME_PROOF_TOLERANCE = 5min,
         .UPTIME_PROOF_STARTUP_DELAY = 30s,
@@ -70,9 +70,10 @@ inline constexpr network_config config{
         .HISTORY_RECENT_KEEP_WINDOW = 65,
         .ETH_EXIT_BUFFER = 7 * 24h / TARGET_BLOCK_TIME,
         .ETH_DEREG_BUFFER = 7 * 24h / TARGET_BLOCK_TIME,
-        .ETHEREUM_CHAIN_ID = 42161,  // Arbitrum One
-        .ETHEREUM_REWARDS_CONTRACT = "0xC2B9fC251aC068763EbDfdecc792E3352E351c00",
-        .ETHEREUM_POOL_CONTRACT = "0x11f040E89dFAbBA9070FFE6145E914AC68DbFea0",
+        // .ETHEREUM_CHAIN_ID = 42161,  // Arbitrum One
+        .ETHEREUM_CHAIN_ID = 31337,// 421614,  // Arbitrum Sepolia
+        .ETHEREUM_REWARDS_CONTRACT = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",// "0x0B5C58A27A41D5fE3FF83d74060d761D7dDDc1D2",
+        .ETHEREUM_POOL_CONTRACT = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",// "0x8D69Bb9D7b03993234bfd221aCB391Db597a920a",
         // Update every ~10 minutes with an Arbitrum ~250ms block time:
         .L2_REWARD_POOL_UPDATE_BLOCKS = 10min / config::L2_BLOCK_TIME,
         // The default is 70s behind with an Arbitrum ~250ms block time, so that pulse nodes using
