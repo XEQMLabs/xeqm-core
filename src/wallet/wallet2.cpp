@@ -9149,7 +9149,7 @@ wallet2::stake_result wallet2::check_stake_allowed(
 
     if (max_contrib_total == 0) {
         result.status = stake_result_status::service_node_contribution_maxed;
-        result.msg = tr("The service node cannot receive any more Oxen from this wallet");
+        result.msg = tr("The service node cannot receive any more XEQ from this wallet");
         return result;
     }
 
@@ -9175,10 +9175,27 @@ wallet2::stake_result wallet2::check_stake_allowed(
             result.msg += "\n";
         } else {
             result.status = stake_result_status::service_node_insufficient_contribution;
-            result.msg.reserve(128);
-            result.msg = tr("You must contribute at least ");
-            result.msg += print_money(min_contrib_total);
-            result.msg += tr(" oxen to become a contributor for this service node.");
+            
+            // Calculate values for the detailed error explanation
+            const uint64_t needed = staking_req - total_res;
+            const size_t max_contributors = *hf_version >= hf::hf19_reward_batching
+                                                ? oxen::MAX_CONTRIBUTORS_HF19
+                                                : oxen::MAX_CONTRIBUTORS_V1;
+            const size_t remaining_slots = max_contributors > total_existing_contributions
+                                                ? max_contributors - total_existing_contributions
+                                                : 0;
+            
+            result.msg = fmt::format(
+                tr("You must contribute at least {} XEQ to become a contributor for this service node.\n"
+                   "Minimum is calculated as: (remaining amount needed) / (available contributor slots)\n"
+                   "  Remaining needed: {} XEQ\n"
+                   "  Available slots: {} (out of {} max contributors)\n"
+                   "  Minimum per slot: {} XEQ"),
+                print_money(min_contrib_total),
+                print_money(needed),
+                remaining_slots,
+                max_contributors,
+                print_money(min_contrib_total));
             return result;
         }
     }
@@ -9186,7 +9203,7 @@ wallet2::stake_result wallet2::check_stake_allowed(
     if (amount > max_contrib_total) {
         result.msg += tr("You may only contribute up to ");
         result.msg += print_money(max_contrib_total);
-        result.msg += tr(" more oxen to this service node. ");
+        result.msg += tr(" more XEQ to this service node. ");
         result.msg += tr("Reducing your stake from ");
         result.msg += print_money(amount);
         result.msg += tr(" to ");
