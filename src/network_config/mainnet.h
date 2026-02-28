@@ -18,23 +18,24 @@ inline constexpr network_config config{
         .P2P_DEFAULT_PORT = 9230,
         .RPC_DEFAULT_PORT = 9231,
         .QNET_DEFAULT_PORT = 9232,
-        .NETWORK_ID =
-                {{0x43,
-                  0x6c,
-                  0x6c,
-                  0x79,
-                  0x6f,
-                  0x75,
-                  0x72,
-                  0x53,
-                  0x45,
-                  0x4e,
-                  0x54,
-                  0x61,
-                  0x72,
-                  0x65,
-                  0x62,
-                  0x65}},
+        .NETWORK_ID = {{
+                0x45,
+                0x51,
+                0x55,
+                0x49,  // "EQUI"
+                0x4c,
+                0x49,
+                0x42,
+                0x52,  // "LIBR"
+                0x49,
+                0x41,
+                0x4e,
+                0x54,  // "IANT"
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+        }},
         .GENESIS_TX =
                 "021e01ff00018080c9db97f4fb270278fe7eed60deb57ea863d65690c40abc5ff09505704f36ba94285a02b9e15f6942014c8f90cc270b3e4e154003ecf48f21b5762e57c52cc70df9c65502e4921cd97872000000000000000000000000000000000000000000000000000000000000000000"sv
         ,
