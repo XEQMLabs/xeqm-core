@@ -93,23 +93,6 @@ static constexpr std::array mainnet_hard_forks = {
         // Oxen 10.6: Mandatory SS 2.8.0 update
         hard_fork{hf::hf19_reward_batching, 6, 1641104, 1722468600 /*Wed, 31 July 2024 23:30*/},
 
-        // Oxen 11.1 was publicly released but did not contain a HF: it was to bring various
-        // improvements from the 11.x branch to stable nodes before the transition started.
-
-        // Oxen 11.2: SESH transition; this sets up the pieces needed for the full transition to
-        // follow in Oxen 11.3.
-        hard_fork{hf::hf20_eth_transition, 0, 1836239, 1745884800 /*Tue, 29 Apr 2025 00:00*/},
-
-        // Oxen 11.3: SESH TGE and completion of the Oxen network transition to SESH
-        hard_fork{hf::hf21_eth, 0, 1852079, 1747785600 /*Wed, 21 May 2025 00:00*/},
-
-        // Oxen 11.4: Enforce BLS key signature in proofs
-        hard_fork{hf::hf22_eth_fixup, 0, 1871519, 1750118400 /*Tue, 17 Jun 2025 00:00*/},
-
-        // Oxen 11.5: Mandatory upgrade to fix reward database calculations
-        hard_fork{hf::hf22_eth_fixup, 1, 1901759, 1753747200 /*Tue, 29 Jul 2025 00:00*/},
-
-        // NOTE: See contrib/hardfork-calc.py to aid with new HF block/date calculations!
 };
 
 static constexpr std::array testnet_hard_forks = {

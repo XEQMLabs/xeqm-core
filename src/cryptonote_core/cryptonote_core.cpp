@@ -461,18 +461,13 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
         if (command_line::get_arg(vm, arg_l2_provider).empty() &&
             command_line::get_arg(vm, arg_l2_oxend).empty()) {
+            // XEQ: L2 connectivity is only required once the chain reaches the ETH_BLS era (HF21+).
+            // Before that, allow service nodes to run without any L2 provider configuration.
+            //
+            // NOTE: We use "latest known" hardfork schedule here (rather than current height)
+            // because this check runs during startup config validation.
             auto latest_hf_known = get_latest_hard_fork(m_nettype);
-            if (latest_hf_known.version < hf::hf21_eth) {
-                // If HF21 is not yet scheduled on this chain then show an error in the logs because
-                // we won't send proofs, but don't make it fatal.  This is needed, in particular, to
-                // help with HF20 package migration where oxend might get restarted with
-                // service-node=1 configured by without the l2-provider= configuration added yet.
-                log::error(globallogcat, "No L2 providers given.");
-                log::error(
-                        globallogcat,
-                        "At least one L2 provider URL (or L2 oxend proxy) is REQUIRED. Uptime "
-                        "proofs will not be sent until this is corrected!");
-            } else {
+            if (latest_hf_known.version >= hf::hf21_eth) {
                 log::error(
                         logcat,
                         "At least one ethereum L2 provider (or L2 oxend proxy) must be specified "
@@ -2677,46 +2672,51 @@ void core::do_uptime_proof_call() {
                 return;
             }
 
-            auto l2_update_age = l2_tracker().latest_height_age();
-            if (!l2_update_age || *l2_update_age > netconf.UPTIME_PROOF_FREQUENCY) {
-                log::error(
-                        globallogcat,
-                        fg(fmt::terminal_color::red) | fmt::emphasis::bold,
-                        "Failed to submit uptime proof: the L2 RPC provider has not responded "
-                        "since {}.  Make sure the L2 RPC provider configuration is correct, "
-                        "and consider adding a backup provider for redundancy.",
-                        l2_update_age ? "{} ago"_format(tools::friendly_duration(*l2_update_age))
-                                      : "startup");
-                return;
-            }
+            // L2 RPC / event syncing is only required once the chain reaches the ETH_BLS era
+            // (HF21+).  Before that, allow service nodes to submit uptime proofs without any L2
+            // connectivity.
+            if (blockchain.get_network_version() >= cryptonote::feature::ETH_BLS) {
+                auto l2_update_age = l2_tracker().latest_height_age();
+                if (!l2_update_age || *l2_update_age > netconf.UPTIME_PROOF_FREQUENCY) {
+                    log::error(
+                            globallogcat,
+                            fg(fmt::terminal_color::red) | fmt::emphasis::bold,
+                            "Failed to submit uptime proof: the L2 RPC provider has not responded "
+                            "since {}.  Make sure the L2 RPC provider configuration is correct, "
+                            "and consider adding a backup provider for redundancy.",
+                            l2_update_age ? "{} ago"_format(tools::friendly_duration(*l2_update_age))
+                                          : "startup");
+                    return;
+                }
 
-            // Allow the synced blocks to be up to L2_TRACKER_SAFE_BLOCKS, because that's what
-            // we require for proper pulse participation, and so it is a valid refresh period to
-            // be slightly under that interval.  We need the threshold here to be longer than
-            // the refresh interval because otherwise it's entirely possible for this code to
-            // land in between a height update and a getLogs call, and trigger spurious
-            // instances of this error.  (Or worse: with both on the same interval, this timer
-            // could get stuck in between height+getLogs calls and never seen proofs).
-            eth::L2Tracker::L2Heights l2_heights = l2_tracker().get_l2_heights();
-            if (l2_heights.latest >= l2_heights.synced + netconf.L2_TRACKER_SAFE_BLOCKS) {
-                // Don't log this as an error in the first couple minutes, because L2 rate log
-                // size and rate limiting often needs 30s+ to fetch all logs from the past 30
-                // minutes of L2 blocks on startup.
-                auto level = std::chrono::seconds{time(nullptr) - get_start_time()} >= 2min
-                                   ? log::Level::err
-                                   : log::Level::debug;
-                log::log(
-                        globallogcat,
-                        level,
-                        fg(fmt::terminal_color::red) | fmt::emphasis::bold,
-                        "Failed to submit uptime proof: L2 events are not yet synced "
-                        "to the latest known L2 height {} ({} blocks behind). Check your "
-                        "L2 provider's dashboard for request health or the logs of "
-                        "your local Arbitrum node to ensure the getLogs requests are being "
-                        "handled successfully",
-                        l2_heights.latest,
-                        l2_heights.latest - l2_heights.synced);
-                return;
+                // Allow the synced blocks to be up to L2_TRACKER_SAFE_BLOCKS, because that's what
+                // we require for proper pulse participation, and so it is a valid refresh period
+                // to be slightly under that interval.  We need the threshold here to be longer than
+                // the refresh interval because otherwise it's entirely possible for this code to
+                // land in between a height update and a getLogs call, and trigger spurious
+                // instances of this error.  (Or worse: with both on the same interval, this timer
+                // could get stuck in between height+getLogs calls and never seen proofs).
+                eth::L2Tracker::L2Heights l2_heights = l2_tracker().get_l2_heights();
+                if (l2_heights.latest >= l2_heights.synced + netconf.L2_TRACKER_SAFE_BLOCKS) {
+                    // Don't log this as an error in the first couple minutes, because L2 rate log
+                    // size and rate limiting often needs 30s+ to fetch all logs from the past 30
+                    // minutes of L2 blocks on startup.
+                    auto level = std::chrono::seconds{time(nullptr) - get_start_time()} >= 2min
+                                       ? log::Level::err
+                                       : log::Level::debug;
+                    log::log(
+                            globallogcat,
+                            level,
+                            fg(fmt::terminal_color::red) | fmt::emphasis::bold,
+                            "Failed to submit uptime proof: L2 events are not yet synced "
+                            "to the latest known L2 height {} ({} blocks behind). Check your "
+                            "L2 provider's dashboard for request health or the logs of "
+                            "your local Arbitrum node to ensure the getLogs requests are being "
+                            "handled successfully",
+                            l2_heights.latest,
+                            l2_heights.latest - l2_heights.synced);
+                    return;
+                }
             }
 
             submit_uptime_proof();
