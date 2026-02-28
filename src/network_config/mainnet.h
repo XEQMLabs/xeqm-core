@@ -47,44 +47,44 @@ inline constexpr network_config config{
         .UPTIME_PROOF_TOLERANCE = 5min,
         .UPTIME_PROOF_STARTUP_DELAY = 30s,
         .UPTIME_PROOF_CHECK_INTERVAL = 30s,
-        .UPTIME_PROOF_FREQUENCY = 1h,
-        .UPTIME_PROOF_VALIDITY = 2h + 5min,
-        .MAX_DEACTIVATE_PER_BLOCK = 10,
-        .HAVE_STORAGE_SERVER = true,
-        .HAVE_SESSION_ROUTER = true,
-        .HAVE_LOKINET = true,
+        .UPTIME_PROOF_FREQUENCY = 10min,
+        .UPTIME_PROOF_VALIDITY = 21min,
+        .MAX_DEACTIVATE_PER_BLOCK = 1,
+        .HAVE_STORAGE_SERVER = false,
+        .HAVE_SESSION_ROUTER = false,
+        .HAVE_LOKINET = false,
         .TARGET_BLOCK_TIME = TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = 10s,
         .PULSE_ROUND_TIMEOUT = 30s,
         .PULSE_MAX_START_ADJUSTMENT = 15s,
-        .PULSE_MIN_SERVICE_NODES = 25,
-        .BATCHING_INTERVAL = 1440,
+        .PULSE_MIN_SERVICE_NODES = 12,
+        .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,  // 1 OXEN (in atomic units)
         .LIMIT_BATCH_OUTPUTS = 15,
-        .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 720,
-        .DEREGISTRATION_LOCK_DURATION = 30 * 24h,
-        .UNLOCK_DURATION = 15 * 24h,
+        .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
+        .DEREGISTRATION_LOCK_DURATION = 48h,
+        .UNLOCK_DURATION = 24h,
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD = 5 * 24h / TARGET_BLOCK_TIME,
         .HISTORY_ARCHIVE_INTERVAL = 10'000,
         .HISTORY_ARCHIVE_KEEP_WINDOW = 2 * 365 * 24h / TARGET_BLOCK_TIME,  // 2yrs worth
         .HISTORY_RECENT_KEEP_WINDOW = 65,
-        .ETH_EXIT_BUFFER = 7 * 24h / TARGET_BLOCK_TIME,
-        .ETH_DEREG_BUFFER = 7 * 24h / TARGET_BLOCK_TIME,
+        .ETH_EXIT_BUFFER = 1h / TARGET_BLOCK_TIME,
+        .ETH_DEREG_BUFFER = 1h / TARGET_BLOCK_TIME,
         // .ETHEREUM_CHAIN_ID = 42161,  // Arbitrum One
-        .ETHEREUM_CHAIN_ID = 31337,// 421614,  // Arbitrum Sepolia
+        .ETHEREUM_CHAIN_ID = 421614,  // Arbitrum Sepolia
         .ETHEREUM_REWARDS_CONTRACT = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",// "0x0B5C58A27A41D5fE3FF83d74060d761D7dDDc1D2",
         .ETHEREUM_POOL_CONTRACT = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",// "0x8D69Bb9D7b03993234bfd221aCB391Db597a920a",
         // Update every ~10 minutes with an Arbitrum ~250ms block time:
-        .L2_REWARD_POOL_UPDATE_BLOCKS = 10min / config::L2_BLOCK_TIME,
+        .L2_REWARD_POOL_UPDATE_BLOCKS = 10min / config::L2_BLOCK_TIME / 4,
         // The default is 70s behind with an Arbitrum ~250ms block time, so that pulse nodes using
         // 1min update period will work (with a few seconds for provider and request latencies).
         .L2_TRACKER_SAFE_BLOCKS = 70s / config::L2_BLOCK_TIME,
         // This relatively infrequent check is only for handling highly unusual cleanup cases where
         // a L2 disruption or bug between the contract and oxend results in oxend service nodes
         // state having nodes that *don't* exist in the contract (or vice versa) for some reason.
-        .L2_NODE_LIST_PURGE_BLOCKS = 1h / config::L2_BLOCK_TIME,
+        .L2_NODE_LIST_PURGE_BLOCKS = 1h / config::L2_BLOCK_TIME / 2,
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = 24h / TARGET_BLOCK_TIME,
-        .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
+        .DEFAULT_STAKING_URL = ""sv,
 };
 inline constexpr std::array<const char*, 5> SEED_NODES = {
     "seed1.equilibria.network:9230",
