@@ -68,7 +68,7 @@ extern const command_line::arg_descriptor<size_t> arg_block_download_max_size;
 // has been set up but before it starts listening.  Return an opaque pointer (void *) that gets
 // passed into all the other callbacks below so that the callbacks can recast it into whatever it
 // should be.
-using quorumnet_new_proc = void*(core& core);
+using quorumnet_new_proc = void*(core& core, pulse::pulse pulse);
 // Initializes quorumnet; unlike `quorumnet_new_proc` this needs to be called for all nodes, not
 // just service nodes.  The second argument should be the `quorumnet_new` return value if a
 // service node, nullptr if not.
@@ -682,7 +682,7 @@ class core final {
     void flush_invalid_blocks();
 
     /// Time point at which the storage server and lokinet last pinged us
-    std::atomic<time_t> m_last_storage_server_ping, m_last_lokinet_ping;
+    std::atomic<time_t> m_last_storage_server_ping, m_last_lokinet_ping, m_last_srouter_ping;
     std::atomic<uint16_t> m_storage_https_port{0}, m_storage_omq_port{0};
 
     uint32_t sn_public_ip() const { return m_sn_public_ip; }
@@ -732,7 +732,7 @@ class core final {
      */
     bool check_tx_semantic(const transaction& tx, bool kept_by_block) const;
     void check_service_node_ip_address();
-    bool check_service_node_time();
+    void check_service_node_time();
     void set_semantics_failed(const crypto::hash& tx_hash);
 
     void parse_incoming_tx_pre(tx_verification_batch_info& tx_info);
@@ -833,9 +833,10 @@ class core final {
     }
     oxenmq::TaggedThreadID const& pulse_thread_id() const { return *m_pulse_thread_id; }
 
-    /// Service Node's storage server and lokinet version
+    /// Service Node's storage server, lokinet, and Sesion Router versions
     std::array<uint16_t, 3> ss_version;
     std::array<uint16_t, 3> lokinet_version;
+    std::array<uint16_t, 3> srouter_version;
 
     tx_memory_pool mempool;  //!< transaction pool instance
     Blockchain blockchain;   //!< Blockchain instance
@@ -894,6 +895,12 @@ class core final {
     tools::periodic_task m_service_node_vote_relayer{"vote relay", 2min, false};
     /// interval for when we drop expired uptime proofs
     tools::periodic_task m_sn_proof_cleanup_interval{"proof cleanup", 1h, false};
+    /// interval for storing long-term service node state archive.  This is saved on normal exit,
+    /// and so this extra timer is intended as a guard against crashing (or an unexpected server
+    /// reboot), particularly if oxend was previously running for a very long time.  This is
+    /// randomized in 6-7d between calls so that different oxends don't all trigger it at the same
+    /// time.
+    tools::periodic_task m_sn_archive_state_interval{"sn state storage", 6 * 24h, false, 24h};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 
@@ -926,6 +933,9 @@ class core final {
     // avoid linking issues (protocol does not link against core).
     void* m_quorumnet_state = nullptr;
 
+    // Internal mostly opaque interface to pulse state.
+    pulse::pulse m_pulse;
+
     /// Stores x25519 -> access level for OMQ authentication.
     /// Not to be modified after the OMQ listener starts.
     std::unordered_map<crypto::x25519_public_key, oxenmq::AuthLevel> m_omq_auth;
@@ -941,8 +951,25 @@ class core final {
     bool m_pad_transactions;
     bool m_has_ip_check_disabled;
 
-    // TODO: remove this after HF20:
-    bool m_skip_proof_l2_check = false;
+    // Recently seen proof filter for uptime proofs so that we can drop repeated proofs without
+    // processing them.
+    struct proof_filter_t {
+
+        std::mutex mut;
+        // seen/seen_old store BLAKE2b hashes of (proof || signature || ed_sig) of incoming proofs
+        // seen in the last 0-30s, and the last 30-60s.  Every 60s we rotate seen into seen_old, so
+        // that (by checking both) we always have de-duplication of any proofs received in the last
+        // 30s.
+        std::unordered_set<crypto::hash> seen, seen_old;
+        static constexpr auto ROTATE_INTERVAL = 30s;
+        std::chrono::steady_clock::time_point rotate =
+                std::chrono::steady_clock::now() + ROTATE_INTERVAL;
+
+        // Inserts a new proof, rotating seen->seen_old if due.  Thread-safe.  Returns true if the
+        // proof was not found and inserted, false if it has been recently seen.
+        bool insert(const NOTIFY_BTENCODED_UPTIME_PROOF::request& req);
+
+    } proof_filter;
 
     struct {
         std::shared_mutex mutex;

@@ -941,7 +941,7 @@ std::string WalletImpl::publicMultisigSignerKey() const {
 
 EXPORT
 std::string WalletImpl::path() const {
-    return tools::convert_str<char>(wallet()->path().u8string());
+    return tools::path_to_str(wallet()->path());
 }
 
 EXPORT
@@ -965,12 +965,12 @@ bool WalletImpl::store(std::string_view path_) {
 
 EXPORT
 std::string WalletImpl::filename() const {
-    return tools::convert_str<char>(wallet()->get_wallet_file().u8string());
+    return tools::path_to_str(wallet()->get_wallet_file());
 }
 
 EXPORT
 std::string WalletImpl::keysFilename() const {
-    return tools::convert_str<char>(wallet()->get_keys_file().u8string());
+    return tools::path_to_str(wallet()->get_keys_file());
 }
 
 EXPORT
@@ -1621,7 +1621,7 @@ PendingTransaction* WalletImpl::createTransactionMultDest(
 
             if (amount) {
                 oxen_construct_tx_params tx_params =
-                        tools::wallet2::construct_params(*hf_version, txtype::standard, priority);
+                        w->construct_params(*hf_version, txtype::standard, priority);
                 transaction->m_pending_tx = w->create_transactions_2(
                         dsts,
                         cryptonote::TX_OUTPUT_DECOYS,

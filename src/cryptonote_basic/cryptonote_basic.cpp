@@ -92,7 +92,7 @@ void transaction::invalidate_hashes() {
 
 size_t transaction::get_signature_size(const txin_v& tx_in) {
     if (std::holds_alternative<txin_to_key>(tx_in))
-        return var::get<txin_to_key>(tx_in).key_offsets.size();
+        return std::get<txin_to_key>(tx_in).key_offsets.size();
     return 0;
 }
 
@@ -106,7 +106,7 @@ uint64_t block::get_height() const {
         return _height;
     } else {
         assert(miner_tx && miner_tx->is_miner_tx());
-        return var::get<txin_gen>(miner_tx->vin.front()).height;
+        return std::get<txin_gen>(miner_tx->vin.front()).height;
     }
 }
 
@@ -150,6 +150,8 @@ void block::set_hash_valid(bool v) const {
 // it does this by taking the first 64 bits of the public_view_key and converting to an integer
 // This is used to determine when an address gets paid their batching reward.
 uint64_t account_public_address::modulus(uint64_t interval) const {
+    if (interval == 0)
+        return 0;
     uint64_t address_as_integer = 0;
     std::memcpy(&address_as_integer, m_view_public_key.data(), sizeof(address_as_integer));
     oxenc::host_to_little_inplace(address_as_integer);

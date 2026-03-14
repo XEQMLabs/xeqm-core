@@ -33,18 +33,29 @@
 #include <cryptonote_core/service_node_list.h>  // service_node_list::state_t...
 
 #include <filesystem>
+#include <optional>
 #include <sqlitedb/database.hpp>
 #include <string>
 
 namespace cryptonote {
 
+struct sql_payment {
+    cryptonote::reward_money amount;  // The amount to payout not including the liqudation fee
+
+    // Fee to apply on the payment amount, 0 in most cases except when the payment is the return of
+    // a stake after being liquidated and the associated address is the operator.
+    cryptonote::reward_money liquidation;
+};
+
 using block_payments = std::
-        unordered_map<std::variant<eth::address, cryptonote::account_public_address>, uint64_t>;
+        unordered_map<std::variant<eth::address, cryptonote::account_public_address>, sql_payment>;
 
 class BlockchainSQLite : public db::Database {
   public:
     explicit BlockchainSQLite(cryptonote::network_type nettype, std::filesystem::path db_path);
     BlockchainSQLite(const BlockchainSQLite&) = delete;
+
+    ~BlockchainSQLite() { rescan_stop(); }
 
     // Database management functions. Should be called on creation of BlockchainSQLite
     void create_schema();
@@ -64,17 +75,40 @@ class BlockchainSQLite : public db::Database {
 
     // Rewinds the SQL DB to the specified height. This function is called internally by the SNL on
     // detach.
-    void blockchain_detached(PaymentTableType type, uint64_t height);
+    void blockchain_detached(PaymentTableType type, uint64_t height, uint64_t target_height = 0);
 
-    // Return the number of rows for the desired batched payments accrued table. The row count will
-    // be for the 'height' specified. 'height' is ignored if type is nil as the default accrued
-    // table only stores state for the current DB's height already. If 'height' is nullopt then the
-    // row count of the entire table will be returned.
-    size_t batch_payments_accrued_row_count(PaymentTableType type, std::optional<uint64_t> height);
+    // Return the number of rows for the current payments accrued table.
+    int batch_payments_accrued_row_count();
+    // Returns true if the recent (recent=true) or archive (recent=false) table has any stored
+    // payments for the given height.
+    bool batch_payments_accrued_has_any(bool recent, uint64_t height);
 
     // Add payments to the specified addresses to the SQL rewards table. The function throws if
     // insertion into the DB fails.
-    void add_sn_rewards(const block_payments& payments);
+    //
+    // If the payments are token rewards set `is_rewards` to true to ensure that rewards are
+    // tracked in a separate column. Set it to `false` if payments are for delayed/exit payments
+    // inorder to separate the tracked rewards from the exit payments values.
+    void add_sn_rewards(hf hf_version, const block_payments& payments, bool is_rewards);
+
+    // Submit locked and purged stakes to the DB to update the non-consensus metadata that tracks
+    // the lifetime total locked stakes for a given ethereum address.
+    void submit_stakes_metadata(
+            const service_nodes::block_add_result& block_add, bool _no_transaction = false);
+
+    enum class delayed_payments_type {
+        all,
+        height,
+        address,
+    };
+
+    // Retrieves all pending delayed payments
+    block_payments get_delayed_payments();
+    // Retrieves pending delayed payments for a single ETH address:
+    block_payments get_delayed_payments(const eth::address& addr);
+    // Retrieves delayed payments due at the given height.  Note that this will return
+    // already-applied payments for a height if given a height <= the current db height.
+    block_payments get_delayed_payments(uint64_t height);
 
   private:
     // This function throws if adding the rewards to the SQL tables for 'block'
@@ -82,50 +116,95 @@ class BlockchainSQLite : public db::Database {
     void reward_handler(
             const cryptonote::block& block,
             const service_nodes::service_node_list::state_t& service_nodes_state,
-            block_payments payments = {});
+            const service_nodes::block_add_result& block_add);
 
-    block_payments get_delayed_payments(uint64_t height);
-
-    std::unordered_map<account_public_address, std::string> address_str_cache;
     std::pair<hf, cryptonote::address_parse_info> parsed_governance_addr = {hf::none, {}};
-    std::string get_address_str(const cryptonote::batch_sn_payment& addr);
-    std::pair<int, std::string> get_address_str(
-            const std::variant<eth::address, cryptonote::account_public_address>& addr,
-            uint64_t batching_interval);
-    std::mutex address_str_cache_mutex;
 
     bool table_exists(const std::string& name);
+    bool index_exists(const std::string& name);
     bool trigger_exists(const std::string& name);
 
+    // Long rescans can take quite a while to process.  Batching block inserts into one database
+    // transaction speeds this up considerably.  This is called automatically if a rescan is
+    // larger than 5000 blocks.
+    void rescan_start();
+    void rescan_stop();
+
+    std::optional<SQLite::Transaction> rescan_tx{std::nullopt};
+    size_t rescan_count{0};
+    uint64_t rescan_target{0};
+
+    // Returns a new transaction *unless* the rescan_tx is already active, in which case you get
+    // nullopt.
+    std::optional<SQLite::Transaction> begin_tx(
+            SQLite::TransactionBehavior behave = SQLite::TransactionBehavior::IMMEDIATE);
+
   public:
-    // Retrieves the amount (in atomic SENT) that has been accrued to the Ethereum `address`.
-    // Returns the current height and the atomic lifetime value that the address is owed.  (Note
-    // that, unlike Oxen addresses, these rewards never reset to zero; but rather the rewards
-    // contract keeps track of the current paid and current total and pays out the difference).
-    std::pair<uint64_t, uint64_t> get_accrued_rewards(const eth::address& address);
+    struct wallet_info {
+        uint64_t height;  // Height at which the wallet info was retrieved for
 
-    // Retrieves the amount (in atomic OXEN) that has been accrued but not yet paid out to the Oxen
-    // wallet `address`.  Returns the current height and the atomic unpaid amount that the address
-    // is owed.
-    std::pair<uint64_t, uint64_t> get_accrued_rewards(const account_public_address& address);
+        // True if the wallet has participated in the network or not. When false all values are
+        // zeroed (because the wallet has not earnt or spent any tokens on the network).
+        bool found;
 
-    // Returns the amount (in atomic SENT) that has been accrued to the Ethereum `address` as of the
-    // given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
-    // current block height, or lower than the oldest stored recent height (see network_config's
-    // STORE_RECENT_REWARDS;, otherwise returns the balance.
-    std::optional<uint64_t> get_accrued_rewards(const eth::address& address, uint64_t at_height);
+        // For OXEN addresses, rewards that has been accrued but not paid out to the address yet.
+        //
+        // For ETH addresses, lifetime rewards _and_ unlocked stakes for the address. (Note that,
+        // unlike Oxen addresses, these rewards never reset to zero; but rather the rewards contract
+        // keeps track of the current paid and current total and pays out the difference).
+        //
+        // For ETH addresses, this can be derived by
+        // `lifetime_unlocked_stakes + lifetime_rewards - lifetime_liquidated_stakes`
+        cryptonote::reward_money amount;
 
-    // Returns the amount (in atomic OXEN) that has been accrued to the Oxen wallet `address` as of
-    // the given recent block height `at_height`.  Returns nullopt if `at_height` is higher than the
-    // known height, or lower than the stored recent heights (see network_config's
-    // STORE_RECENT_REWARDS); otherwise returns the balance.
-    std::optional<uint64_t> get_accrued_rewards(
-            const account_public_address& address, uint64_t height);
+        // For ETH addresses _only_, the total amount of tokens that were locked by this wallet and
+        // so forth for lifetime unlocked, rewards and liquidated amounts.
+        cryptonote::reward_money lifetime_locked_stakes;
+        cryptonote::reward_money lifetime_unlocked_stakes;
+        cryptonote::reward_money lifetime_rewards;
+        cryptonote::reward_money lifetime_liquidated_stakes;
 
-    // get_all_accrued_rewards -> queries the database for all the amount that has been accrued to
-    // service nodes will return 2 vectors corresponding to the addresses and the atomic value in
-    // oxen that the service nodes are owed.
-    std::pair<std::vector<std::string>, std::vector<uint64_t>> get_all_accrued_rewards();
+        // For ETH addresses _only_, the amount of tokens currently locked in the network (e.g.
+        // staked in a node). This is defined as `lifetime locked - lifetimed unlocked` and
+        // precalculated for convenience. This number includes `timelocked_stakes`.
+        cryptonote::reward_money locked_stakes;
+
+        // For ETH addresses _only_, the amount of tokens awaiting to be unlocked from the network
+        // (e.g. an exit has been processed and the stake is under a time lock before being
+        // claimable by the address)
+        cryptonote::reward_money timelocked_stakes;
+
+        wallet_info() = default;
+        wallet_info(
+                BlockchainSQLite& db,
+                std::span<const unsigned char> addr_bytes,
+                std::optional<std::tuple<int64_t, int64_t, int64_t, int64_t, int64_t>> metadata,
+                std::optional<hf> hf_version = std::nullopt);
+        wallet_info(uint64_t height, bool found);
+    };
+
+    // See `wallet_info`
+    wallet_info get_accrued_rewards(
+            const eth::address& address, std::optional<hf> hf_version = std::nullopt);
+
+    // See `wallet_info`
+    wallet_info get_accrued_rewards(const account_public_address& address);
+
+    // Returns `found` as `false` if `at_height` is higher than the current block height, or lower
+    // than the oldest stored recent height (see network_config's STORE_RECENT_REWARDS;, otherwise
+    // returns the balance.
+    wallet_info get_accrued_rewards(const eth::address& address, uint64_t at_height);
+
+    // Returns `found` as `false` if `at_height` is higher than the known height, or lower than the
+    // stored recent heights (see network_config's STORE_RECENT_REWARDS); otherwise returns the
+    // wallet info.
+    wallet_info get_accrued_rewards(const account_public_address& address, uint64_t at_height);
+
+    // get_all_accrued_rewards -> queries the database for all the amounts that have been accrued to
+    // nodes and will return a of addresses and wallet info pairs.
+    std::vector<
+            std::pair<std::variant<eth::address, cryptonote::account_public_address>, wallet_info>>
+    get_all_accrued_rewards();
 
     // get_payments -> passing a block height will return an array of payments that should be
     // created in a coinbase transaction on that block given the current batching DB state.
@@ -140,7 +219,7 @@ class BlockchainSQLite : public db::Database {
     // Note that distribution_amount here is passed as milli-atomic OXEN for extra precision.
     void add_rewards(
             hf hf_version,
-            uint64_t distribution_amount,
+            cryptonote::reward_money distribution_amount,
             const service_nodes::service_node_info& sn_info,
             block_payments& payments) const;
 
@@ -152,21 +231,17 @@ class BlockchainSQLite : public db::Database {
     // database. Each accepted block should call this passing in the SN list structure.
     bool add_block(
             const cryptonote::block& block,
-            const service_nodes::service_node_list::state_t& service_nodes_state);
-
-    struct exit_stake {
-        eth::address addr;
-        cryptonote::reward_money amount;
-        uint32_t block_height;  // Block that the exit event was mined in
-        uint32_t tx_index;  // Index of transaction in the block that the exit event was mined in
-        uint32_t contributor_index;  // Index of the contributor in the event the exit stake is for
-    };
+            const service_nodes::service_node_list::state_t& service_nodes_state,
+            const service_nodes::block_add_result& block_add,
+            const std::optional<service_nodes::rescan_context>& rescan = std::nullopt);
 
     // Add a payment to the delayed_payments table. 'at_height' should be greater than or equal to
     // the height of the table or otherwise the payments may be deleted without taking effect. This
     // function asserts if 'at_height' does not meet this criteria.
     bool add_delayed_payments(
-            std::span<const exit_stake> payments, uint64_t at_height, uint64_t delay_blocks);
+            std::span<const service_nodes::eth_stake> payments,
+            uint64_t at_height,
+            uint64_t delay_blocks);
 
     // validate_batch_payment -> used to make sure that list of miner_tx_vouts is correct. Compares
     // the miner_tx_vouts with a list previously extracted payments to make sure that the correct
@@ -174,19 +249,35 @@ class BlockchainSQLite : public db::Database {
     bool validate_batch_payment(
             const std::vector<std::pair<crypto::public_key, uint64_t>>& miner_tx_vouts,
             const std::vector<cryptonote::batch_sn_payment>& calculated_payments_from_batching_db,
-            uint64_t block_height);
+            uint64_t block_height,
+            const std::optional<service_nodes::rescan_context>& rescan = std::nullopt);
 
     // these keep track of payments made to SN operators after then payment has been made. Allows
     // for popping blocks back and knowing who got paid in those blocks. passing in a list of people
     // to be marked as paid in the paid_amounts vector. Block height will be added to the
     // batched_payments_paid database as height_paid.
-    bool save_payments(uint64_t block_height, const std::vector<batch_sn_payment>& paid_amounts);
-    bool delete_block_payments(uint64_t block_height);
+    bool save_payments(uint64_t block_height, std::span<const batch_sn_payment> paid_amounts);
+
+    // Applies the subatomic -> atomic value conversion of amount and lifetime_reward values; this
+    // must be called once (and only once!) at the HF22 fork height to convert milli-atomic values
+    // (for HF21 and earlier blocks) into atomics (expected for HF22+ blocks).
+    void convert_hf22();
+
+    // Checks the database for any needed fixes and applies them, returning an optional detach
+    // block number that should be applied to rescan the chain if non-nullopt.
+    //
+    // NB: the returned value is the block number of the block that we want to *keep*, that is,
+    // after the detach, the "lmdb blockchain height" should be that number plus 1.
+    //
+    // `recheck` is used to confirm that the fixups worked as expected, after a detach induced by a
+    // first call to fixup() that returns a non-nullopt value.  If fixup(recheck=true) returns
+    // nullopt then all is good; if it returns a value then that means the rescan did *not* resolve
+    // the problem it was supposed to resolve!  (The actual value returned by such a failed recheck
+    // call is meaningless).
+    std::optional<uint64_t> fixup(bool recheck = false);
 
     uint64_t height;
-
-  protected:
-    cryptonote::network_type m_nettype;
+    const cryptonote::network_type nettype;
 };
 
 }  // namespace cryptonote

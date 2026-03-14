@@ -88,9 +88,9 @@ enum struct mapping_record_column {
 };
 
 static constexpr unsigned char OLD_ENCRYPTION_NONCE[crypto_secretbox_NONCEBYTES] = {};
-std::pair<std::basic_string_view<unsigned char>, std::basic_string_view<unsigned char>>
+std::pair<std::span<const unsigned char>, std::span<const unsigned char>>
 ons::mapping_value::value_nonce(mapping_type type) const {
-    std::pair<std::basic_string_view<unsigned char>, std::basic_string_view<unsigned char>> result;
+    std::pair<std::span<const unsigned char>, std::span<const unsigned char>> result;
     auto& [head, tail] = result;
     head = {buffer.data(), len};
     if ((type == mapping_type::session &&
@@ -99,8 +99,8 @@ ons::mapping_value::value_nonce(mapping_type type) const {
         len < crypto_aead_xchacha20poly1305_ietf_NPUBBYTES /* shouldn't occur, but just in case */)
         tail = {OLD_ENCRYPTION_NONCE, sizeof(OLD_ENCRYPTION_NONCE)};
     else {
-        tail = head.substr(len - crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-        head.remove_suffix(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+        tail = head.last(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+        head = head.first(len - crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     }
     return result;
 }
@@ -235,7 +235,7 @@ namespace {
     // Binds a variant of bindable types; calls one of the above according to the contained type
     template <typename... T>
     bool bind(sql_compiled_statement& s, int index, const std::variant<T...>& v) {
-        return var::visit([&](const auto& val) { return ons::bind(s, index, val); }, v);
+        return std::visit([&](const auto& val) { return ons::bind(s, index, val); }, v);
     }
 
     template <typename T>
@@ -554,15 +554,18 @@ static constexpr std::array ons_str_type_mappings = {
         stringtypemap{"lokinet_5years"sv, mapping_type::lokinet_5years},
         stringtypemap{"lokinet_10years"sv, mapping_type::lokinet_10years}};
 
-std::optional<mapping_type> parse_ons_type(std::string input) {
+std::optional<mapping_type> parse_ons_type(std::string input, bool queryable_types_only) {
     // Lower-case the input:
     for (auto& c : input)
         if (c >= 'A' && c <= 'Z')
             c += ('A' - 'a');
 
     for (const auto& [str, map] : ons_str_type_mappings)
-        if (str == input)
+        if (str == input) {
+            if (queryable_types_only && is_lokinet_type(map) && map != mapping_type::lokinet)
+                return std::nullopt;
             return map;
+        }
 
     return std::nullopt;
 }
@@ -575,10 +578,13 @@ static constexpr std::array ons_int_type_mappings = {
         inttypemap{2, mapping_type::lokinet},
         inttypemap{1, mapping_type::wallet},
         inttypemap{0, mapping_type::session}};
-std::optional<mapping_type> parse_ons_type(uint16_t input) {
+std::optional<mapping_type> parse_ons_type(uint16_t input, bool queryable_types_only) {
     for (const auto& [inttype, map] : ons_int_type_mappings)
-        if (inttype == input)
+        if (inttype == input) {
+            if (queryable_types_only && is_lokinet_type(map) && map != mapping_type::lokinet)
+                return std::nullopt;
             return map;
+        }
 
     return std::nullopt;
 }
@@ -637,7 +643,7 @@ sqlite3* init_oxen_name_system(const fs::path& file_path, bool read_only) {
     }
 
     int const flags = read_only ? SQLITE_OPEN_READONLY : SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE;
-    auto utf8_path = tools::convert_str<char>(file_path.u8string());
+    auto utf8_path = tools::path_to_str(file_path);
     int sql_open = sqlite3_open_v2(utf8_path.c_str(), &result, flags, nullptr);
     if (sql_open != SQLITE_OK) {
         log::error(
@@ -827,33 +833,34 @@ static bool check_condition(
 
 bool validate_ons_name(mapping_type type, std::string name, std::string* reason) {
     bool const is_lokinet = is_lokinet_type(type);
-    size_t max_name_len = 0;
+    size_t min_name_len = 1, max_name_len = 0;
 
-    if (is_lokinet)
+    if (is_lokinet) {
+        min_name_len = "a.loki"sv.size();
         max_name_len = name.find('-') != std::string::npos ? LOKINET_DOMAIN_NAME_MAX
                                                            : LOKINET_DOMAIN_NAME_MAX_NOHYPHEN;
-    else if (type == mapping_type::session)
+    } else if (type == mapping_type::session)
         max_name_len = ons::SESSION_DISPLAY_NAME_MAX;
     else if (type == mapping_type::wallet)
         max_name_len = ons::WALLET_NAME_MAX;
     else {
         if (reason)
-            *reason =
-                    "ONS type={} specifies unhandled mapping type in name validation"_format(type);
+            *reason = "ONS type '{}' is not supported"_format(type);
         return false;
     }
 
     // NOTE: Validate name length
     name = tools::lowercase_ascii_string(name);
     if (check_condition(
-                (name.empty() || name.size() > max_name_len),
+                name.size() < min_name_len || name.size() > max_name_len,
                 reason,
-                "ONS type={} specifies mapping from name->value where the name's length={} is 0 or "
-                "exceeds the maximum length={}, given name={}",
+                "ONS {0} name '{1}' (length={2}) is invalid: {0} names must be between {3} and {4} "
+                "characters long",
                 type,
+                name,
                 name.size(),
-                max_name_len,
-                name))
+                min_name_len,
+                max_name_len))
         return false;
 
     std::string_view name_view{name};  // Will chop this down as we validate each part
@@ -877,34 +884,22 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
             if (check_condition(
                         name == reserved,
                         reason,
-                        "ONS type={} specifies mapping from name->value using protocol reserved "
-                        "name={}",
+                        "ONS {} name '{}' is a reserved name that cannot be registered",
                         type,
                         name))
                 return false;
-
-        auto constexpr SHORTEST_DOMAIN = "a.loki"sv;
-        if (check_condition(
-                    name.size() < SHORTEST_DOMAIN.size(),
-                    reason,
-                    "ONS type={} specifies mapping from name->value where the name is shorter than "
-                    "the shortest possible name={}, given name={}",
-                    type,
-                    SHORTEST_DOMAIN,
-                    name))
-            return false;
 
         // Must end with .loki
         auto constexpr SUFFIX = ".loki"sv;
         if (check_condition(
                     !name_view.ends_with(SUFFIX),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name does not end "
-                    "with the domain .loki, name={}",
+                    "ONS {0} name '{1}' is invalid: {0} names must end with '.loki'",
                     type,
                     name))
             return false;
 
+        assert(name_view.size() > SUFFIX.size());  // Implied by min_name_len check
         name_view.remove_suffix(SUFFIX.size());
 
         // All domains containing '--' as 3rd/4th letter are reserved except for xn-- punycode
@@ -913,7 +908,9 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
                     name_view.size() >= 4 && name_view.substr(2, 2) == "--"sv &&
                             !name_view.starts_with("xn--"sv),
                     reason,
-                    "ONS type={} specifies reserved name `?\?--*.loki': {}",
+                    // This \? looks stupid, but is to suppress a trigraph warning
+                    "ONS {} name '{}' is invalid: names matching '?\?--*' are reserved (other than "
+                    "punycode xn--*)",
                     type,
                     name))
             return false;
@@ -922,8 +919,7 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         if (check_condition(
                     !char_is_alphanum(name_view.front()),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name does not start "
-                    "with an alphanumeric character, name={}",
+                    "ONS {} name '{}' is invalid: names must start with a-z or 0-9",
                     type,
                     name))
             return false;
@@ -935,10 +931,9 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
             if (check_condition(
                         !char_is_alphanum(name_view.back()),
                         reason,
-                        "ONS type={} specifies mapping from name->value where the character "
-                        "preceding the .loki is not alphanumeric, char={}, name={}",
+                        "ONS {} name '{}' is invalid: the name before '.loki' must end with a-z or "
+                        "0-9",
                         type,
-                        name_view.back(),
                         name))
                 return false;
             name_view.remove_suffix(1);
@@ -948,8 +943,7 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         if (check_condition(
                     !std::all_of(name_view.begin(), name_view.end(), char_is_alphanum_or<'-'>),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the domain name contains "
-                    "more than the permitted alphanumeric or hyphen characters, name={}",
+                    "ONS {} name '{}' is invalid: names may only contain a-z, 0-9, and '-'",
                     type,
                     name))
             return false;
@@ -959,40 +953,25 @@ bool validate_ons_name(mapping_type type, std::string name, std::string* reason)
         // hyphens or underscores) in between and must end with a (alphanumeric or underscore)
         // ^[a-z0-9_]([a-z0-9-_]*[a-z0-9_])?$
 
-        // Must start with (alphanumeric or underscore)
-        if (check_condition(
-                    !char_is_alphanum_or<'_'>(name_view.front()),
-                    reason,
-                    "ONS type={} specifies mapping from name->value where the name does not start "
-                    "with an alphanumeric or underscore character, name={}",
-                    type,
-                    name))
-            return false;
-        name_view.remove_prefix(1);
-
-        if (!name_view.empty()) {
-            // Must NOT end with a hyphen '-'
-            if (check_condition(
-                        !char_is_alphanum_or<'_'>(name_view.back()),
-                        reason,
-                        "ONS type={} specifies mapping from name->value where the last character "
-                        "is a hyphen '-' which is disallowed, name={}",
-                        type,
-                        name))
-                return false;
-            name_view.remove_suffix(1);
-        }
-
         // Inbetween start and preceding suffix, (alphanumeric, hyphen or underscore) characters
         // permitted
         if (check_condition(
                     !std::all_of(name_view.begin(), name_view.end(), char_is_alphanum_or<'-', '_'>),
                     reason,
-                    "ONS type={} specifies mapping from name->value where the name contains more "
-                    "than the permitted alphanumeric, underscore or hyphen characters, name={}",
+                    "Invalid ONS {} name '{}': only a-z, 0-9, _, and - are permitted",
                     type,
                     name))
             return false;
+
+        // Must start with (alphanumeric or underscore)
+        if (check_condition(
+                    name_view.front() == '-' || name_view.back() == '-',
+                    reason,
+                    "Invalid ONS {} name '{}': names may not begin or end with a hyphen ('-')",
+                    type,
+                    name))
+            return false;
+
     } else {
         log::error(logcat, "Type not implemented");
         return false;
@@ -1576,7 +1555,7 @@ bool name_system_db::validate_ons_tx(
     {
         uint64_t burn = cryptonote::get_burned_amount_from_tx_extra(tx.extra);
         uint64_t const burn_required = (ons_extra.is_buying() || ons_extra.is_renewing())
-                                             ? burn_needed(hf_version, ons_extra.type)
+                                             ? burn_needed(hf_version, nettype, ons_extra.type)
                                              : 0;
         if (hf_version == hf::hf18 && burn > burn_required && blockchain_height < 524'000) {
             // Testnet sync fix: PR #1433 merged that lowered fees for HF18 while testnet was
@@ -2145,7 +2124,7 @@ WHERE type = ? AND name_hash = ? AND)" +
     constexpr auto GET_OWNER_BY_KEY_STR = "SELECT * FROM owner WHERE address = ?"sv;
 
     // Prune queries used when we need to rollback to remove records added after the detach point:
-    constexpr auto PRUNE_MAPPINGS_STR = "DELETE FROM mappings WHERE update_height >= ?"sv;
+    constexpr auto PRUNE_MAPPINGS_STR = "DELETE FROM mappings WHERE update_height > ?"sv;
     constexpr auto PRUNE_OWNERS_STR = R"(
 DELETE FROM owner
 WHERE NOT EXISTS (SELECT * FROM mappings WHERE owner.id = mappings.owner_id)
@@ -2551,9 +2530,11 @@ bool name_system_db::add_block(
 
     last_processed_height = height;
     last_processed_hash = cryptonote::get_block_hash(block);
-    if (ons_parsed_from_block) {
+
+    bool do_commit = (height % 16384 == 0) || ons_parsed_from_block;
+    if (do_commit) {
         save_settings(last_processed_height, last_processed_hash, static_cast<int>(DB_VERSION));
-        db_transaction.commit = ons_parsed_from_block;
+        db_transaction.commit = true;
     }
     return true;
 }
@@ -2639,22 +2620,25 @@ bool name_system_db::save_settings(uint64_t top_height, crypto::hash const& top_
     return result;
 }
 
-bool name_system_db::prune_db(uint64_t height) {
+bool name_system_db::prune_db(uint64_t top_height, const crypto::hash& top_hash) {
     bool result = false;
     if (db) {
-        if (bind_and_run(ons_sql_type::pruning, prune_mappings_sql, nullptr, height))
+        if (bind_and_run(ons_sql_type::pruning, prune_mappings_sql, nullptr, top_height))
             if (sql_run_statement(ons_sql_type::pruning, prune_owners_sql, nullptr))
                 result = true;
 
         log::debug(
                 logcat,
-                "Detach request for ONS (last processed is {}), {} to {}",
+                "Detach request for ONS (last processed was {}), {} to {} ({})",
                 last_processed_height,
                 result ? "detached" : "failed to detach",
-                height);
+                top_height,
+                top_hash);
 
-        if (result && height <= last_processed_height)
-            last_processed_height = height - 1;
+        if (result && top_height < last_processed_height) {
+            last_processed_height = top_height;
+            last_processed_hash = top_hash;
+        }
     }
     return result;
 }
@@ -2730,14 +2714,12 @@ std::optional<mapping_value> name_system_db::resolve(
 }
 
 std::vector<mapping_record> name_system_db::get_mappings(
-        std::vector<mapping_type> const& types,
         std::string_view name_base64_hash,
-        std::optional<uint64_t> blockchain_height) {
+        std::optional<uint64_t> blockchain_height,
+        const std::unordered_set<mapping_type>& only_types) {
     assert(name_base64_hash.size() == 44 && name_base64_hash.back() == '=' &&
            oxenc::is_base64(name_base64_hash));
     std::vector<mapping_record> result;
-    if (types.empty())
-        return result;
 
     std::string sql_statement;
     std::vector<std::variant<uint16_t, uint64_t, std::string_view>> bind;
@@ -2748,15 +2730,13 @@ std::vector<mapping_record> name_system_db::get_mappings(
     sql_statement += "WHERE name_hash = ?";
     bind.emplace_back(name_base64_hash);
 
-    // Generate string statement
-    if (types.size()) {
-        sql_statement += " AND type IN (";
-
-        for (size_t i = 0; i < types.size(); i++) {
-            sql_statement += i > 0 ? ", ?" : "?";
-            bind.emplace_back(db_mapping_type(types[i]));
-        }
-        sql_statement += ")";
+    if (!only_types.empty()) {
+        fmt::format_to(
+                std::back_inserter(sql_statement),
+                " AND type IN ({})",
+                fmt::join(std::string(only_types.size(), '?'), ", "));
+        for (auto t : only_types)
+            bind.emplace_back(db_mapping_type(t));
     }
 
     if (blockchain_height) {

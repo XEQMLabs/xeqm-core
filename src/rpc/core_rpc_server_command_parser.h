@@ -13,12 +13,14 @@ using rpc_input = std::variant<std::monostate, nlohmann::json, oxenc::bt_dict_co
 inline void parse_request(NO_ARGS&, rpc_input) {}
 
 void parse_request(BANNED& banned, rpc_input in);
+void parse_request(BLS_EXIT_LIQUIDATION_LIST& cmd, rpc_input in);
 void parse_request(BLS_EXIT_LIQUIDATION_REQUEST& cmd, rpc_input in);
 void parse_request(BLS_REWARDS_REQUEST& cmd, rpc_input in);
 void parse_request(CONTRACT_REGISTRATION& reg, rpc_input in);
 void parse_request(FLUSH_CACHE& flush_cache, rpc_input in);
 void parse_request(FLUSH_TRANSACTION_POOL& flush_transaction_pool, rpc_input in);
 void parse_request(GET_ACCRUED_REWARDS& rpc, rpc_input in);
+void parse_request(GET_ACCRUED_BATCHED_EARNINGS& rpc, rpc_input in);
 void parse_request(GET_BLOCK& get_block, rpc_input in);
 void parse_request(GET_BLOCK_HASH& bh, rpc_input in);
 void parse_request(GET_BLOCK_HEADERS_RANGE& get_block_headers_range, rpc_input in);
@@ -37,6 +39,7 @@ void parse_request(GET_SERVICE_NODES& sns, rpc_input in);
 void parse_request(GET_SERVICE_NODE_REGISTRATION_CMD& cmd, rpc_input in);
 void parse_request(GET_SERVICE_NODE_REGISTRATION_CMD_RAW& cmd, rpc_input in);
 void parse_request(GET_SN_STATE_CHANGES& get_sn_state_changes, rpc_input in);
+void parse_request(GET_L2_TRACKER_STATE& l2, rpc_input in);
 void parse_request(GET_TRANSACTIONS& get, rpc_input in);
 void parse_request(GET_TRANSACTION_POOL& get, rpc_input in);
 void parse_request(GET_TRANSACTION_POOL_STATS& pstats, rpc_input in);
@@ -44,13 +47,14 @@ void parse_request(HARD_FORK_INFO& hfinfo, rpc_input in);
 void parse_request(IN_PEERS& in_peers, rpc_input in);
 void parse_request(IS_KEY_IMAGE_SPENT& spent, rpc_input in);
 void parse_request(LOKINET_PING& lokinet_ping, rpc_input in);
-void parse_request(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_input in);
+void parse_request(ONS_INFO& info, rpc_input in);
 void parse_request(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_input in);
 void parse_request(ONS_RESOLVE& ons, rpc_input in);
 void parse_request(OUT_PEERS& out_peers, rpc_input in);
 void parse_request(POP_BLOCKS& pop_blocks, rpc_input in);
 void parse_request(PRUNE_BLOCKCHAIN& prune_blockchain, rpc_input in);
 void parse_request(REPORT_PEER_STATUS& report_peer_status, rpc_input in);
+void parse_request(SESSION_ROUTER_PING& ping, rpc_input in);
 void parse_request(SET_BANS& set_bans, rpc_input in);
 void parse_request(SET_LIMIT& limit, rpc_input in);
 void parse_request(SET_LOG_LEVEL& set_log_level, rpc_input in);

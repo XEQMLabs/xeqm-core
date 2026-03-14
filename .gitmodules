@@ -37,13 +37,16 @@
 	branch = stable
 [submodule "external/ethyl"]
 	path = external/ethyl
-	url = https://github.com/oxen-io/ethyl.git
+	url = https://github.com/session-foundation/ethyl.git
 [submodule "external/oxen-encoding"]
 	path = external/oxen-encoding
-	url = https://github.com/oxen-io/oxen-encoding.git
+	url = https://github.com/session-foundation/oxen-encoding.git
 [submodule "external/cpptrace"]
 	path = external/cpptrace
 	url = https://github.com/jeremy-rifkin/cpptrace
 [submodule "external/bn256"]
 	path = external/bn256
 	url = https://github.com/oxen-io/bn256.git
+[submodule "external/tracy"]
+	path = external/tracy
+	url = https://github.com/wolfpld/tracy

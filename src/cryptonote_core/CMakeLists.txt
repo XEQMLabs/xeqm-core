@@ -27,11 +27,15 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+add_subdirectory(sesh_transition)
+
 oxen_add_library(cryptonote_core
   blockchain.cpp
   cryptonote_core.cpp
+  sesh_transition/sesh_transition.cpp
   service_node_rules.cpp
   service_node_list.cpp
+  service_node_fixes.cpp
   service_node_voting.cpp
   service_node_quorum_cop.cpp
   service_node_swarm.cpp
@@ -56,12 +60,15 @@ target_link_libraries(cryptonote_core
     SQLite::SQLite3
     bls_aggregator
     l2_tracker
+    sesh_transition_data
     ethyl
+    network_config
   PRIVATE
     SQLiteCpp
     systemd
     logging
-    extra)
+    extra
+    zstd::zstd)
 
 if (PER_BLOCK_CHECKPOINT)
   target_compile_definitions(cryptonote_core PUBLIC PER_BLOCK_CHECKPOINT)

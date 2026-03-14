@@ -251,10 +251,10 @@ event::StateChangeVariant get_log_event(const uint64_t chain_id, const ethyl::Lo
 
             // NOTE: Decode fee and that it is within acceptable range
             item.fee = tools::decode_integer_be(fee256);
-            if (item.fee > cryptonote::STAKING_FEE_BASIS)
+            if (item.fee > cryptonote::MAX_OPERATOR_FEE_BASIS)
                 throw oxen::traced<std::invalid_argument>{
                         "Invalid NewServiceNodeV2 data: fee must be in [0, {}]"_format(
-                                cryptonote::STAKING_FEE_BASIS)};
+                                cryptonote::MAX_OPERATOR_FEE_BASIS)};
 
             // NOTE: Verify that the number of contributors in the blob is
             // within maximum range

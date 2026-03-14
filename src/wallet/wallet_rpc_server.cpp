@@ -225,10 +225,21 @@ void wallet_rpc_server::handle_json_rpc_request(HttpResponse& res, HttpRequest& 
         if (!ps.load_from_json(body))
             return jsonrpc_error_response(res, -32700, "Parse error", {});
 
-        epee::serialization::storage_entry epee_id{std::string{}};
-        ps.get_value("id", epee_id, nullptr);
-
-        nlohmann::json id = var::get<std::string>(epee_id);
+        nlohmann::json id;
+        epee::serialization::storage_entry epee_id;
+        if (std::string str_val; ps.get_value("id", str_val, nullptr)) {
+            epee_id = str_val;
+            id = std::move(str_val);
+        } else if (int64_t i64_val; ps.get_value("id", i64_val, nullptr)) {
+            epee_id = i64_val;
+            id = i64_val;
+        } else {
+            return jsonrpc_error_response(
+                    res,
+                    -32700,
+                    "Parse error, missing a valid (string or integer) JSON RPC 'id'",
+                    {});
+        }
 
         std::string method;
         if (!ps.get_value("method", method, nullptr)) {
@@ -328,7 +339,7 @@ void wallet_rpc_server::handle_json_rpc_request(HttpResponse& res, HttpRequest& 
         }
 
         if (json_error.code != 0)
-            return jsonrpc_error_response(res, json_error.code, std::move(json_error.message), {});
+            return jsonrpc_error_response(res, json_error.code, std::move(json_error.message), id);
 
         res.writeHeader("Server", server_header());
         res.writeHeader("Content-Type", "application/json");
@@ -799,7 +810,7 @@ CREATE_ADDRESS::response wallet_rpc_server::invoke(CREATE_ADDRESS::request&& req
 LABEL_ADDRESS::response wallet_rpc_server::invoke(LABEL_ADDRESS::request&& req) {
     require_open();
     LABEL_ADDRESS::response res{};
-    { m_wallet->set_subaddress_label(req.index, req.label); }
+    m_wallet->set_subaddress_label(req.index, req.label);
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -850,7 +861,7 @@ CREATE_ACCOUNT::response wallet_rpc_server::invoke(CREATE_ACCOUNT::request&& req
 LABEL_ACCOUNT::response wallet_rpc_server::invoke(LABEL_ACCOUNT::request&& req) {
     require_open();
     LABEL_ACCOUNT::response res{};
-    { m_wallet->set_subaddress_label({req.account_index, 0}, req.label); }
+    m_wallet->set_subaddress_label({req.account_index, 0}, req.label);
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -875,14 +886,14 @@ GET_ACCOUNT_TAGS::response wallet_rpc_server::invoke(GET_ACCOUNT_TAGS::request&&
 TAG_ACCOUNTS::response wallet_rpc_server::invoke(TAG_ACCOUNTS::request&& req) {
     require_open();
     TAG_ACCOUNTS::response res{};
-    { m_wallet->set_account_tag(req.accounts, req.tag); }
+    m_wallet->set_account_tag(req.accounts, req.tag);
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
 UNTAG_ACCOUNTS::response wallet_rpc_server::invoke(UNTAG_ACCOUNTS::request&& req) {
     require_open();
     UNTAG_ACCOUNTS::response res{};
-    { m_wallet->set_account_tag(req.accounts, ""); }
+    m_wallet->set_account_tag(req.accounts, "");
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -890,7 +901,7 @@ SET_ACCOUNT_TAG_DESCRIPTION::response wallet_rpc_server::invoke(
         SET_ACCOUNT_TAG_DESCRIPTION::request&& req) {
     require_open();
     SET_ACCOUNT_TAG_DESCRIPTION::response res{};
-    { m_wallet->set_account_tag_description(req.tag, req.description); }
+    m_wallet->set_account_tag_description(req.tag, req.description);
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -1102,8 +1113,8 @@ TRANSFER::response wallet_rpc_server::invoke(TRANSFER::request&& req) {
             throw wallet_rpc_error{
                     error_code::HF_QUERY_FAILED,
                     tools::wallet2::ERR_MSG_NETWORK_VERSION_QUERY_FAILED};
-        cryptonote::oxen_construct_tx_params tx_params = tools::wallet2::construct_params(
-                *hf_version, cryptonote::txtype::standard, priority);
+        cryptonote::oxen_construct_tx_params tx_params =
+                m_wallet->construct_params(*hf_version, cryptonote::txtype::standard, priority);
         std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(
                 dsts,
                 cryptonote::TX_OUTPUT_DECOYS,
@@ -1163,8 +1174,8 @@ TRANSFER_SPLIT::response wallet_rpc_server::invoke(TRANSFER_SPLIT::request&& req
                     error_code::HF_QUERY_FAILED,
                     tools::wallet2::ERR_MSG_NETWORK_VERSION_QUERY_FAILED};
 
-        cryptonote::oxen_construct_tx_params tx_params = tools::wallet2::construct_params(
-                *hf_version, cryptonote::txtype::standard, priority);
+        cryptonote::oxen_construct_tx_params tx_params =
+                m_wallet->construct_params(*hf_version, cryptonote::txtype::standard, priority);
         log::debug(logcat, "on_transfer_split calling create_transactions_2");
         std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(
                 dsts,
@@ -3091,9 +3102,7 @@ SET_DAEMON::response wallet_rpc_server::invoke(SET_DAEMON::request&& req) {
 SET_LOG_LEVEL::response wallet_rpc_server::invoke(SET_LOG_LEVEL::request&& req) {
     if (req.level < 0 || req.level > 4)
         throw wallet_rpc_error{error_code::INVALID_LOG_LEVEL, "Error: log level not valid"};
-    auto log_level = oxen::logging::parse_level(req.level);
-    if (log_level.has_value())
-        log::reset_level(*log_level);
+    log::reset_level(oxen::logging::parse_level(req.level));
     return {};
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -3105,7 +3114,7 @@ SET_LOG_CATEGORIES::response wallet_rpc_server::invoke(SET_LOG_CATEGORIES::reque
 //------------------------------------------------------------------------------------------------------------------------------
 GET_VERSION::response wallet_rpc_server::invoke(GET_VERSION::request&& req) {
     GET_VERSION::response res{};
-    res.version = WALLET_RPC_VERSION;
+    res.version = RPC_VERSION_CODE;
     return res;
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -3433,70 +3442,64 @@ ONS_KNOWN_NAMES::response wallet_rpc_server::invoke(ONS_KNOWN_NAMES::request&& r
     require_open();
     ONS_KNOWN_NAMES::response res{};
 
-    std::vector<ons::mapping_type> entry_types;
-    auto cache = m_wallet->get_ons_cache();
-    res.known_names.reserve(cache.size());
-    entry_types.reserve(cache.size());
-    for (auto& [name, details] : m_wallet->get_ons_cache()) {
-        auto& entry = res.known_names.emplace_back();
-        auto& type = entry_types.emplace_back(details.type);
-        if (type > ons::mapping_type::lokinet && type <= ons::mapping_type::lokinet_10years)
-            type = ons::mapping_type::lokinet;
-        entry.type = ons::mapping_type_str(type);
-        entry.hashed = details.hashed_name;
-        entry.name = details.name;
-    }
-
     auto nettype = m_wallet->nettype();
-    nlohmann::json req_params{{"include_expired", req.include_expired}, {"entries", {}}};
+    nlohmann::json req_params{{"include_expired", req.include_expired}};
+    auto& name_hash = (req_params["name_hash"] = nlohmann::json::array());
+    name_hash.get_ref<nlohmann::json::array_t&>().reserve(
+            std::min(rpc::ONS_INFO::MAX_REQUEST_ENTRIES, res.known_names.size()));
 
-    uint64_t curr_height = req.include_expired ? m_wallet->get_blockchain_current_height() : 0;
+    // Tracks seen name hashes, and maps them to actual record names:
+    std::unordered_map<std::string, std::string_view> seen;
 
-    // Query oxend for the full record info
-    for (auto it = res.known_names.begin(); it != res.known_names.end();) {
-        const size_t num_entries = std::distance(it, res.known_names.end());
-        const auto end = num_entries < rpc::ONS_NAMES_TO_OWNERS::MAX_REQUEST_ENTRIES
-                               ? res.known_names.end()
-                               : it + rpc::ONS_NAMES_TO_OWNERS::MAX_REQUEST_ENTRIES;
-        for (auto it2 = it; it2 != end; it2++) {
-            auto& e = req_params["entries"].emplace_back(nlohmann::json{
-                    {"name_hash", it2->hashed},
-                    {"types",
-                     static_cast<uint16_t>(
-                             entry_types[std::distance(res.known_names.begin(), it2)])}});
+    const auto cache = m_wallet->get_ons_cache();
+    for (auto it = cache.begin(); it != cache.end();) {
+        name_hash.clear();
+        // Fill up to the next request limit:
+        for (; it != cache.end() && name_hash.size() < rpc::ONS_INFO::MAX_REQUEST_ENTRIES; ++it) {
+            const auto& [hashed_name, details] = *it;
+            if (!seen.emplace(hashed_name, details.name).second)
+                continue;  // Don't lookup duplicate entries
+            name_hash.push_back(hashed_name);
         }
 
-        if (auto [success, records] = m_wallet->ons_names_to_owners(req_params); success) {
-            size_t type_offset = std::distance(res.known_names.begin(), it);
-            for (auto& rec : records) {
-                if (rec["entry_index"].get<size_t>() >= num_entries) {
-                    log::warning(
-                            logcat,
-                            "Got back invalid entry_index {} for a request for {} entries",
-                            rec["entry_index"].get<size_t>(),
-                            num_entries);
-                    continue;
+        auto [success, records] = m_wallet->ons_info(req_params);
+        if (!success)
+            // Something deeper in wallet2 should have already logged an error
+            throw wallet_rpc_error{
+                    error_code::UNKNOWN_ERROR, "Error looking up ONS records via daemon"};
+
+        for (const auto& [nhash, recs] : records.items()) {
+            for (const auto& rec : recs) {
+                auto& res_e = res.known_names.emplace_back();
+                res_e.hashed = nhash;
+                res_e.name = seen[nhash];
+                auto type = ons::parse_ons_type(rec["type"].get<uint16_t>());
+                if (type)
+                    res_e.type = ons::mapping_type_str(*type);
+                else
+                    res_e.type = "unknown";
+
+                res_e.owner = rec["owner"].get<std::string>();
+                if (auto it = rec.find("backup_owner"); it != rec.end())
+                    res_e.backup_owner = it->get<std::string>();
+                res_e.encrypted_value = rec["encrypted_value"].get<std::string>();
+                res_e.update_height = rec["update_height"].get<uint64_t>();
+                if (auto it = rec.find("expiration_height"); it != rec.end()) {
+                    if (auto height = it->get<uint64_t>(); height > 0) {
+                        res_e.expiration_height = height;
+                        res_e.expired = rec["expired"].get<bool>();
+                    }
                 }
+                res_e.txid = rec["txid"].get<std::string>();
 
-                auto& res_e = *(it + rec["entry_index"].get<int64_t>());
-                res_e.owner = std::move(rec["owner"]);
-                res_e.backup_owner = std::move(rec["backup_owner"]);
-                res_e.encrypted_value = std::move(rec["encrypted_value"]);
-                res_e.update_height = rec["update_height"];
-                res_e.expiration_height = rec["expiration_height"];
-                if (req.include_expired && res_e.expiration_height)
-                    res_e.expired = *res_e.expiration_height < curr_height;
-                res_e.txid = std::move(rec["txid"]);
-
-                if (req.decrypt && !res_e.encrypted_value.empty() &&
+                if (req.decrypt && type && !res_e.encrypted_value.empty() &&
                     oxenc::is_hex(res_e.encrypted_value)) {
                     ons::mapping_value value;
-                    const auto type = entry_types[type_offset + rec["entry_index"].get<int64_t>()];
                     std::string errmsg;
                     if (ons::mapping_value::validate_encrypted(
-                                type, oxenc::from_hex(res_e.encrypted_value), &value, &errmsg) &&
-                        value.decrypt(res_e.name, type))
-                        res_e.value = value.to_readable_value(nettype, type);
+                                *type, oxenc::from_hex(res_e.encrypted_value), &value, &errmsg) &&
+                        value.decrypt(res_e.name, *type))
+                        res_e.value = value.to_readable_value(nettype, *type);
                     else
                         log::warning(
                                 logcat,
@@ -3506,17 +3509,7 @@ ONS_KNOWN_NAMES::response wallet_rpc_server::invoke(ONS_KNOWN_NAMES::request&& r
                 }
             }
         }
-
-        it = end;
     }
-
-    // Erase anything we didn't get a response for (it will have update_height of 0)
-    res.known_names.erase(
-            std::remove_if(
-                    res.known_names.begin(),
-                    res.known_names.end(),
-                    [](const auto& n) { return n.update_height == 0; }),
-            res.known_names.end());
 
     // Now sort whatever we got back
     std::sort(res.known_names.begin(), res.known_names.end(), [](const auto& a, const auto& b) {

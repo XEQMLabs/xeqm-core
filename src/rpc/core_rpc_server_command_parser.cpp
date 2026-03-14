@@ -40,6 +40,20 @@ void parse_request(GET_SERVICE_NODES& sns, rpc_input in) {
                     sns.request.fields.insert(k);
                 }
             }
+            // Compatibility fix for Oxen 10 wallets: Oxen 10 did not support asking for
+            // locked_contributions at all, so never sends it, but expects to get them back, so if
+            // locked_contributions (nor the -locked_contributions negated version, for Oxen 11+
+            // aware requestors) is in the input but contributors *is* asked for then implicitly set
+            // locked_contributions.
+            if (!sns.request.fields.empty() && !fit->count("locked_contributions") &&
+                !sns.request.fields.count("-locked_contributions") &&
+                sns.request.fields.count("contributors"))
+                sns.request.fields.insert("locked_contributions");
+
+            // Session clients do not handle missing "public_ip", "storage_lmq_port",
+            // "storage_server_version" values, so if the deprecated fields are requested, we
+            // include Oxen 10 compatible "0" values.
+            sns.request.oxen10_compat_fields = true;
         }
     }
     if (!fields_dict) {
@@ -220,7 +234,7 @@ void parse_request(SUBMIT_TRANSACTION& tx, rpc_input in) {
 }
 
 void parse_request(GET_BLOCK_HASH& bh, rpc_input in) {
-    get_values(in, "heights", bh.request.heights);
+    get_values(in, "heights", required{bh.request.heights});
 
     if (bh.request.heights.size() > bh.MAX_HEIGHTS)
         throw std::domain_error{"Error: too many block heights requested at once"};
@@ -284,6 +298,17 @@ void parse_request(LOKINET_PING& lokinet_ping, rpc_input in) {
             required{lokinet_ping.request.version});
 }
 
+void parse_request(SESSION_ROUTER_PING& ping, rpc_input in) {
+    get_values(
+            in,
+            "error",
+            ping.request.error,
+            "pubkey_ed25519",
+            ping.request.pubkey_ed25519,
+            "version",
+            required{ping.request.version});
+}
+
 void parse_request(STORAGE_SERVER_PING& storage_server_ping, rpc_input in) {
     get_values(
             in,
@@ -310,6 +335,10 @@ void parse_request(GET_SN_STATE_CHANGES& get_sn_state_changes, rpc_input in) {
             get_sn_state_changes.request.end_height,
             "start_height",
             required{get_sn_state_changes.request.start_height});
+}
+
+void parse_request(GET_L2_TRACKER_STATE& l2, rpc_input in) {
+    get_values(in, "include_purge_state", l2.request.include_purge_state);
 }
 
 void parse_request(REPORT_PEER_STATUS& report_peer_status, rpc_input in) {
@@ -352,6 +381,13 @@ void parse_request(GET_BLOCK_HEADER_BY_HASH& get_block_header_by_hash, rpc_input
             get_block_header_by_hash.request.hash,
             "hashes",
             get_block_header_by_hash.request.hashes);
+
+    if (get_block_header_by_hash.request.hash.empty() &&
+        get_block_header_by_hash.request.hashes.empty())
+        throw std::invalid_argument{"Error: No hash/hashes parameter given"};
+    if (get_block_header_by_hash.request.hashes.size() > GET_BLOCK_HEADERS_RANGE::MAX_COUNT)
+        throw std::invalid_argument{
+                "Error: no more than 1000 block headers may be requested at once"};
 }
 
 void parse_request(SET_BANS& set_bans, rpc_input in) {
@@ -365,17 +401,17 @@ void parse_request(SET_BANS& set_bans, rpc_input in) {
             required{set_bans.request.seconds});
 }
 
-void parse_request(GET_BLOCK_HEADERS_RANGE& get_block_headers_range, rpc_input in) {
+void parse_request(GET_BLOCK_HEADERS_RANGE& gbhr, rpc_input in) {
     get_values(
             in,
             "end_height",
-            get_block_headers_range.request.end_height,
+            required{gbhr.request.end_height},
             "fill_pow_hash",
-            get_block_headers_range.request.fill_pow_hash,
+            gbhr.request.fill_pow_hash,
             "get_tx_hashes",
-            get_block_headers_range.request.get_tx_hashes,
+            gbhr.request.get_tx_hashes,
             "start_height",
-            get_block_headers_range.request.start_height);
+            required{gbhr.request.start_height});
 }
 
 void parse_request(GET_BLOCK_HEADER_BY_HEIGHT& get_block_header_by_height, rpc_input in) {
@@ -389,6 +425,14 @@ void parse_request(GET_BLOCK_HEADER_BY_HEIGHT& get_block_header_by_height, rpc_i
             get_block_header_by_height.request.height,
             "heights",
             get_block_header_by_height.request.heights);
+
+    if (!get_block_header_by_height.request.height &&
+        get_block_header_by_height.request.heights.empty())
+        throw std::invalid_argument{
+                "Error: Either height or heights parameter must be given but are missing"};
+    if (get_block_header_by_height.request.heights.size() > GET_BLOCK_HEADERS_RANGE::MAX_COUNT)
+        throw std::invalid_argument{
+                "Error: no more than 1000 block headers may be requested at once"};
 }
 
 void parse_request(GET_BLOCK& get_block, rpc_input in) {
@@ -400,6 +444,8 @@ void parse_request(GET_BLOCK& get_block, rpc_input in) {
             get_block.request.hash,
             "height",
             get_block.request.height);
+    if (!get_block.request.hash.empty() == get_block.request.height.has_value())
+        throw std::invalid_argument{"Error: Exactly one of hash or height must be specified"};
 }
 
 void parse_request(GET_OUTPUT_HISTOGRAM& get_output_histogram, rpc_input in) {
@@ -421,6 +467,11 @@ void parse_request(GET_ACCRUED_REWARDS& rpc, rpc_input in) {
     get_values(in, "addresses", rpc.request.addresses);
 }
 
+void parse_request(GET_ACCRUED_BATCHED_EARNINGS& rpc, rpc_input in) {
+    rpc.request.oxen10_compat = true;
+    get_values(in, "addresses", rpc.request.addresses);
+}
+
 void parse_request(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_input in) {
     get_values(
             in,
@@ -430,13 +481,20 @@ void parse_request(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_input in) {
             ons_owners_to_names.request.include_expired);
 }
 
-void parse_request(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_input in) {
+void parse_request(ONS_INFO& info, rpc_input in) {
+    std::variant<std::string, std::vector<std::string>> name_hashes;
     get_values(
             in,
+            "include_expired",
+            info.request.include_expired,
             "name_hash",
-            required{ons_names_to_owners.request.name_hash},
+            required{name_hashes},
             "type",
-            ons_names_to_owners.request.type);
+            info.request.type);
+    if (auto* single = std::get_if<0>(&name_hashes))
+        info.request.name_hash.push_back(std::move(*single));
+    else
+        info.request.name_hash = std::move(std::get<1>(name_hashes));
 }
 
 void parse_request(GET_QUORUM_STATE& qs, rpc_input in) {
@@ -495,6 +553,16 @@ void parse_request(GET_SERVICE_NODE_REGISTRATION_CMD& cmd, rpc_input in) {
 
 void parse_request(BLS_REWARDS_REQUEST& cmd, rpc_input in) {
     get_values(in, "address", required{cmd.request.address}, "height", cmd.request.height);
+}
+
+void parse_request(BLS_EXIT_LIQUIDATION_LIST& cmd, rpc_input in) {
+    std::vector<std::string_view> fields;
+    get_values(in, "fields", fields);
+    for (const auto& f : fields)
+        cmd.request.fields.emplace(f);
+    // If the only thing given is "all" then just clear it (as a small optimization):
+    if (cmd.request.fields.size() == 1 && *cmd.request.fields.begin() == "all")
+        cmd.request.fields.clear();
 }
 
 void parse_request(BLS_EXIT_LIQUIDATION_REQUEST& cmd, rpc_input in) {

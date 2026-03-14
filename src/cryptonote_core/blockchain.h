@@ -29,32 +29,32 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/version.hpp>
 
 // Workaround for boost::serialization issue #219
 #include <boost/version.hpp>
-#include <type_traits>
 #if BOOST_VERSION == 107400
 #include <boost/serialization/library_version_type.hpp>
 #endif
 
+namespace boost::asio {
+using io_service = io_context;
+}
+
 #include <atomic>
-#include <boost/multi_index/global_fun.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index_container.hpp>
 #include <boost/serialization/list.hpp>
-#include <ethyl/provider.hpp>
 #include <functional>
+#include <set>
+#include <span>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "blockchain_db/blockchain_db.h"
 #include "checkpoints/checkpoints.h"
-#include "common/util.h"
 #include "crypto/eth.h"
 #include "crypto/hash.h"
 #include "cryptonote_basic/cryptonote_basic.h"
@@ -64,12 +64,9 @@
 #include "cryptonote_protocol/cryptonote_protocol_defs.h"
 #include "cryptonote_tx_utils.h"
 #include "epee/rolling_median.h"
-#include "epee/span.h"
-#include "epee/string_tools.h"
 #include "l2_tracker/l2_tracker.h"
 #include "pulse.h"
 #include "rpc/core_rpc_server_binary_commands.h"
-#include "rpc/core_rpc_server_commands_defs.h"
 
 struct sqlite3;
 namespace service_nodes {
@@ -144,6 +141,14 @@ class Blockchain {
     ~Blockchain();
 
     /**
+     * @brief Extend system watchdog timeout (for long rescans)
+     *
+     * If we're using a watchdog to monitor the process, this will tell the system
+     * watchdog (currently only systemd supported) to give us more time for startup
+     */
+    void extend_watchdog_timeout(uint64_t height = 0);
+
+    /**
      * @brief Initialize the Blockchain state.
      *
      * @param db a pointer to the backing store to use for the blockchain.
@@ -157,7 +162,6 @@ class Blockchain {
      * @param l2_tracker a pointer to the L2Tracker instance; this pointer is *not* managed by the
      * Blockchain object, but must remain alive at least as long as the Blockchain object does.
      * Should be nullptr if this node does not track L2 state.
-     * @param offline true if running offline, else false
      * @param test_options test parameters
      * @param fixed_difficulty fixed difficulty for testing purposes; 0 means disabled
      * @param get_checkpoints if set, will be called to get checkpoints data
@@ -172,7 +176,6 @@ class Blockchain {
             sqlite3* ons_db = nullptr,
             cryptonote::BlockchainSQLite* sqlite_db = nullptr,
             eth::L2Tracker* l2_tracker = nullptr,
-            bool offline = false,
             const cryptonote::test_options* test_options = nullptr,
             difficulty_type fixed_difficulty = 0,
             const GetCheckpointsCallback& get_checkpoints = nullptr,
@@ -184,13 +187,7 @@ class Blockchain {
             const cryptonote::test_options& test_options,
             cryptonote::BlockchainSQLite* sqlite_db = nullptr) {
         return init(
-                std::move(db),
-                network_type::FAKECHAIN,
-                nullptr,
-                sqlite_db,
-                nullptr,
-                true,
-                &test_options);
+                std::move(db), network_type::FAKECHAIN, nullptr, sqlite_db, nullptr, &test_options);
     }
 
     /**
@@ -452,7 +449,12 @@ class Blockchain {
      * @param round the current pulse round the block is being generated for
      * @param validator_bitset the bitset indicating which validators in the quorum are
      * participating in constructing the block.
-     * @param ex_nonce extra data to be added to the miner transaction's extra
+     * @param height will be set to the block's height
+     * @param state_change_txes (if provided) will be filled with any state change txes that should
+     * be sent along to the pulse quorum to avoid failures where validators have equivalent but
+     * different versions (i.e. with different signature subsets) of the state change.  Without it
+     * being sent along, any validator with such a different version would be unable to add it to
+     * the chain or broadcast it.
      *
      * @return true if block template filled in successfully, else false
      */
@@ -461,7 +463,8 @@ class Blockchain {
             const service_nodes::payout& block_producer,
             uint8_t round,
             uint16_t validator_bitset,
-            uint64_t& height);
+            uint64_t& height,
+            std::vector<std::string>* state_change_txes = nullptr);
 
     /**
      * @brief checks if a block is known about with a given hash
@@ -891,7 +894,7 @@ class Blockchain {
   private:
     // Private, non-lock-obtaining implementing code of get_transactions()
     bool _get_transactions(
-            const std::vector<crypto::hash>& txs_ids,
+            std::span<const crypto::hash> txs_ids,
             std::vector<transaction>& txs,
             std::unordered_set<crypto::hash>* missed_txs,
             size_t* total_size) const;
@@ -1078,7 +1081,7 @@ class Blockchain {
      */
     void block_longhash_worker(
             uint64_t height,
-            const epee::span<const block>& blocks,
+            const std::span<const block>& blocks,
             std::unordered_map<crypto::hash, crypto::hash>& map) const;
 
     /**
@@ -1265,6 +1268,11 @@ class Blockchain {
     bool load_missing_blocks_into_oxen_subsystems(
             const std::atomic<bool>* abort = nullptr, bool use_threaded_load = false);
 
+    /** DEBUG.  Sets a max sync height; the blockchain object will reject any incoming blocks with a
+     *   sync height above the given value.  0 disables.
+     */
+    void max_sync_height(uint64_t max_height);
+
 #ifndef IN_UNIT_TESTS
   private:
 #endif
@@ -1298,7 +1306,8 @@ class Blockchain {
             difficulty_type& di,
             uint64_t& height,
             uint64_t& expected_reward,
-            const std::string& ex_nonce);
+            const std::string& ex_nonce,
+            std::vector<std::string>* state_change_txes = nullptr);
 
     // TODO: evaluate whether or not each of these typedefs are left over from blockchain_storage
     typedef std::unordered_set<crypto::key_image> key_images_container;
@@ -1341,6 +1350,9 @@ class Blockchain {
     std::chrono::nanoseconds m_fake_scan_time;
     uint64_t m_sync_counter;
     uint64_t m_bytes_to_sync;
+    uint64_t m_max_sync_height = 0;
+    std::chrono::steady_clock::time_point m_max_sync_last_log =
+            std::chrono::steady_clock::now() - 1h;
 
     uint64_t m_long_term_block_weights_window;
     uint64_t m_long_term_effective_median_block_weight;
@@ -1368,7 +1380,8 @@ class Blockchain {
 
     boost::asio::io_service m_async_service;
     std::thread m_async_thread;
-    std::unique_ptr<boost::asio::io_service::work> m_async_work_idle;
+    using work_type = boost::asio::executor_work_guard<decltype(m_async_service.get_executor())>;
+    std::unique_ptr<work_type> m_async_work_idle;
 
     // some invalid blocks
     std::set<crypto::hash> m_invalid_blocks;
@@ -1384,7 +1397,6 @@ class Blockchain {
 
     eth::L2Tracker* m_l2_tracker;
     network_type m_nettype;
-    bool m_offline;
     difficulty_type m_fixed_difficulty;
 
     std::atomic<bool> m_cancel;

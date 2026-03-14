@@ -504,7 +504,10 @@ struct MINING_STATUS : LEGACY, NO_ARGS {
 ///
 /// - `status` -- General RPC status string. `"OK"` means everything looks good.
 /// - `height` -- Current length of longest chain known to daemon.
-/// - `l2_height` -- Current Arbitrum height that the network is synchronized to
+/// - `l2_height` -- Current Arbitrum height that the network is synchronized to, i.e. in the
+///   current top block.
+/// - `l2_tracker_height` -- The current L2 height known by this node's L2 tracker.  Omitted if this
+///   node does not have an L2 tracker.
 /// - `target_height` -- The height of the next block in the chain.
 /// - `immutable_height` -- The latest height in the blockchain that can not be reorganized (i.e.
 ///   is backed by at least 2 Service Node, or 1 hardcoded checkpoint, 0 if N/A).  Omitted if it
@@ -552,9 +555,12 @@ struct MINING_STATUS : LEGACY, NO_ARGS {
 /// - `grey_peerlist_size` -- Grey Peerlist Size
 /// - `service_node` -- Will be true if the node is running in --service-node mode.
 /// - `start_time` -- Start time of the daemon, as UNIX time.
-/// - `last_storage_server_ping` -- Last ping time of the storage server (0 if never or not running
-///   as a service node)
-/// - `last_lokinet_ping` -- Last ping time of lokinet (0 if never or not running as a service node)
+/// - `last_storage_server_ping` -- Last ping time of the storage server (0 if never; omitted if not
+///   running as a service node)
+/// - `last_lokinet_ping` -- Last ping time of lokinet (0 if never; omitted if not running as a
+///   service node)
+/// - `last_session_router_ping` -- Last ping time of the Session Router server (0 if never; omitted
+///   if not running as a service node)
 /// - `free_space` -- Available disk space on the node.
 ///
 /// Example-JSON-Fetch
@@ -661,8 +667,8 @@ struct GET_BLOCK_HASH : PUBLIC {
 ///
 /// Inputs:
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -721,8 +727,8 @@ struct GET_LAST_BLOCK_HEADER : PUBLIC {
 /// - `hash` -- The block's hash.
 /// - `hashes` -- Request multiple blocks via an array of hashes
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -752,8 +758,8 @@ struct GET_BLOCK_HEADER_BY_HASH : PUBLIC {
 /// - `height` -- A block height to look up; returned in `block_header`
 /// - `heights` -- Block heights to retrieve; returned in `block_headers`
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -806,7 +812,7 @@ struct GET_BLOCK : PUBLIC {
 
     struct request_parameters {
         std::string hash;
-        uint64_t height;
+        std::optional<uint64_t> height;
         bool fill_pow_hash;
     } request;
 };
@@ -1056,11 +1062,14 @@ struct GET_CONNECTIONS : NO_ARGS {
 ///
 /// Inputs:
 ///
-/// - `start_height` -- The starting block's height.
-/// - `end_height` -- The ending block's height.
+/// - `start_height` -- The starting block's height.  If negative then the value means relative to
+///   the current chain height (e.g. "start_height": -10, "end_height": -1 would request the last 10
+///   blocks).
+/// - `end_height` -- The ending block's height (inclusive).  Must be less than start_height + 1000.
+///   Negative values are relative to the current chain height.
 /// - `fill_pow_hash` -- Tell the daemon if it should fill out pow_hash field.
-/// - `get_tx_hashes` -- If true (default false) then include the hashes of non-coinbase
-///   transactions
+/// - `get_tx_hashes` -- If true (default false) then include some extra info: hashes of
+///   non-coinbase transactions, and pulse quorum block signatures.
 ///
 /// Outputs:
 ///
@@ -1079,9 +1088,12 @@ struct GET_BLOCK_HEADERS_RANGE : PUBLIC {
         return NAMES("get_block_headers_range", "getblockheadersrange");
     }
 
+    // Used for this endpoint as well as the by_hash/by_height versions.
+    static constexpr int64_t MAX_COUNT = 1000;
+
     struct request_parameters {
-        uint64_t start_height;
-        uint64_t end_height;
+        int64_t start_height;
+        int64_t end_height;
         bool fill_pow_hash;
         bool get_tx_hashes;
     } request;
@@ -1972,6 +1984,8 @@ struct GET_SERVICE_PRIVKEYS : NO_ARGS {
 ///     - `"timesync"`
 ///     - `"lokinet"`
 ///     - other values are reserved for future use.
+///   - `last_ip_change_height` -- The last height at which the network applied an IP change penalty
+///     to this service node.  Omitted if an IP change penalty has never been applied.
 ///   - `earned_downtime_blocks` -- The number of blocks earned towards decommissioning (if
 ///     currently active), or the number of blocks remaining until the service node is eligible
 ///     for deregistration (if currently decommissioned).
@@ -2097,7 +2111,12 @@ struct GET_SERVICE_NODES : PUBLIC {
         bool active_only = false;
         int limit = 0;
         crypto::hash poll_block_hash{};
+        bool oxen10_compat_fields = false;
     } request;
+};
+
+struct GET_ALL_UPTIME_PROOFS : PUBLIC, NO_ARGS {
+    static constexpr auto names() { return NAMES("get_all_uptime_proofs"); }
 };
 
 /// RPC: service_node/get_service_node_status
@@ -2163,7 +2182,7 @@ struct GET_SERVICE_NODE_STATUS : NO_ARGS {
 ///   communicating service nodes that have been removed from the contract.  Once confirmed, these
 ///   also remove and unlock contributors' stakes.  Each element contains fields:
 ///   - `bls_pubkey` -- BLS pubkey of the node removed from the smart contract
-///   - `returned_amount` -- amount of SENT that is returned to contributors.  For normal unlocks
+///   - `returned_amount` -- amount of SESH that is returned to contributors.  For normal unlocks
 ///     (i.e. nodes that completed an unlock without getting deregistered) this is the full service
 ///     node stake; for deregistrations this will have a small penalty removed (which is incurred by
 ///     the operator in the returned stakes).
@@ -2183,9 +2202,9 @@ struct GET_SERVICE_NODE_STATUS : NO_ARGS {
 ///   the rare event that the staking requirement in the contract is changing; it is rare to see
 ///   this non-empty at all, and rarer still to see multiple events in it.  Each element contains
 ///   fields:
-///   - `new_staking_requirement` -- the new staking requirement, in atomic SENT.
+///   - `new_staking_requirement` -- the new staking requirement, in atomic SESH.
 ///   - `current_staking_requirement` -- the current oxen chain staking requirement (at the time of
-///     the rpc call), in atomic SENT.
+///     the rpc call), in atomic SESH.
 ///   - common fields (see below)
 ///
 /// - SN info fields, included for events including a BLS public key (basically everything except
@@ -2237,23 +2256,63 @@ struct GET_PENDING_EVENTS : PUBLIC {
 /// RPC: blockchain/get_accrued_rewards
 ///
 /// Retrieve the current "balance" of accrued service node rewards for the given addresses.  Before
-/// SENT, the returned balances are accumulated OXEN amounts to go into the next reward payout;
-/// after SENT these are the lifetime earnings of the given address.
+/// SESH, the returned balances are accumulated OXEN amounts to go into the next reward payout;
+/// after SESH these are the lifetime earnings of the given address.
 ///
 /// Inputs:
 ///  - `addresses` -- a set of addresses about which to query.  If omitted/empty then all addresses
 ///    with balances are returned.
 ///
 /// Outputs:
-///  - `balances` -- a dict where keys are the wallet addresses and values are the balance (in
-///    atomic SENT units).
+///  - `balances` -- an array of objects containing the reward metadata for the associated addresses
+///    in the same order as specified in the input `addresses`, irrespective of if the wallet exists
+///    or not. Each object contains the following fields:
+///    - `address` -- the address of the wallet this object is for. This matches 1:1 with the given
+///    requested addresses in input. If no addresses were specified then all addresses are returned
+///    and this field identifies said address it's describing.
+///    - `amount` -- the total amount of claimable tokens for the given address. This includes the
+///    earnt rewards as well as unlocked stakes that are available to be claimed.
+///    - `found` -- flag that indicates if the address has ever participated in the network. When
+///    false, all rewards metadata values will be 0.
+///    - `lifetime_liquidated_stakes` -- the total amount of tokens in the lifetime of the network
+///    that have been liquidated from the stakes for this address.
+///    - `lifetime_locked_stakes` -- the total amount of tokens in the lifetime of the network that
+///    has been staked into nodes for this address.
+///    - `lifetime_rewards` -- the total amount of tokens in the lifetime of the network that has
+///    been earnt from staking into nodes for this address.
+///    - `lifetime_unlocked_stakes` -- the total amount of tokens in the lifetime of the network
+///    that has been unlocked from the nodes this address has staked into.
+///    - `locked_stakes` -- the amount of tokens currently locked into nodes on the network. This is
+///    defined as `lifetime locked - lifetime unlocked`.
+///    - `timelocked_stakes` -- the amount of tokens that have been unstaked from nodes but cannot
+//     be claimed until the time lock on those individual stakes have been unlocked.
+
 struct GET_ACCRUED_REWARDS : PUBLIC {
-    static constexpr auto names() {
-        return NAMES("get_accrued_rewards", "get_accrued_batched_earnings");
-    }
+    static constexpr auto names() { return NAMES("get_accrued_rewards"); }
     struct request_parameters {
         std::vector<std::string> addresses;
+        bool oxen10_compat = false;
     } request;
+};
+
+/// RPC: blockchain/get_accrued_batched_earnings
+///
+/// Deprecated version of GET_ACCRUED_REWARDS that returns results as two lists where element `[i]`
+/// of the "addresses" array maps to element [i] of the "amounts" array.
+///
+/// Do not use: this is only provided for Oxen 10.x wallet compatibility, and will be removed once
+/// all supported wallets are upgraded to use the Oxen 11.x code base.
+///
+/// Inputs:
+///  - `addresses` -- a set of addresses about which to query.  If omitted/empty then all addresses
+///    with balances are returned.
+///
+/// Outputs:
+///  - `addresses` -- the resulting array of addresses.
+///  - `amounts` -- the resulting array of amounts indicating the pending (unpaid) reward amount in
+///    atomic OXEN units.
+struct GET_ACCRUED_BATCHED_EARNINGS : GET_ACCRUED_REWARDS {
+    static constexpr auto names() { return NAMES("get_accrued_batched_earnings"); }
 };
 
 /// Dev-RPC: service_node/storage_server_ping
@@ -2318,6 +2377,34 @@ struct LOKINET_PING : RPC_COMMAND {
     } request;
 };
 
+/// Dev-RPC: service_node/session_router_ping
+///
+/// Endpoint to receive an uptime ping from the connected Session Router server. This is used to
+/// record whether session-router is ready before the service node starts sending uptime proofs.
+/// This is generally called internally from Session Router itself and not invoked directly.
+///
+/// Inputs:
+///
+/// - `version` -- Session Router version (as an array of three integers).
+/// - `pubkey_ed25519` -- Service node Ed25519 pubkey for verifying that session router is running
+///   with the correct service node keys.
+/// - `error` -- If given and non-empty then this is an error message telling oxend to *not* submit
+///   an uptime proof and to report the given (critical) error in the logs instead.  Oxend won't
+///   send proofs after receiving such an error until it gets another ping *without* an error set.
+///
+/// Outputs:
+///
+/// - `status` -- generic RPC error code; "OK" means the request was successful.
+struct SESSION_ROUTER_PING : RPC_COMMAND {
+    static constexpr auto names() { return NAMES("session_router_ping"); }
+
+    struct request_parameters {
+        std::array<uint16_t, 3> version;
+        std::string pubkey_ed25519;
+        std::string error;
+    } request;
+};
+
 /// RPC: service_node/get_staking_requirement
 ///
 /// Get the required amount of Oxen to become a Service Node at the queried height.
@@ -2359,11 +2446,27 @@ struct GET_SERVICE_NODE_BLACKLISTED_KEY_IMAGES : PUBLIC, NO_ARGS {
 /// Get the list of nodes that are eligible to be removed or liquidated from the network using an
 /// aggregated signature. This request can never fail.
 ///
+/// Inputs:
+/// - `fields` -- specifies a list of service node info keys to return (see get_service_nodes).
+///   Note that this only takes an array of keys, not the backwards compatible dict of fields that
+///   older get_service_nodes used.
+///
 /// Outputs:
 ///
-/// - `list` -- The list of nodes that can be removed or liquidated
-struct BLS_EXIT_LIQUIDATION_LIST : PUBLIC, NO_ARGS {
+/// - `list` -- The list of nodes that can be removed or liquidated.  Contains keys:
+///   - `height` -- the height at which this node left the active service node list.
+///   - `liquidation_height` -- the earliest height at which this node may be liquidated.
+///   - `service_node_pubkey` -- the service node pubkey of the node
+///   - `type` -- string indicating how this node left the service node list: `"exit"` if it
+///     successfully completed an unlock gracefully, or `"deregister"` if the node was deregistered.
+///   - `info` -- the service node details; this is the same data that would be returned in the
+///     get_service_nodes call for this node.
+struct BLS_EXIT_LIQUIDATION_LIST : PUBLIC {
     static constexpr auto names() { return NAMES("bls_exit_liquidation_list"); }
+
+    struct request_parameters {
+        std::unordered_set<std::string> fields;
+    } request;
 };
 
 /// RPC: service_node/bls_rewards_request
@@ -2561,6 +2664,45 @@ struct GET_SN_STATE_CHANGES : RPC_COMMAND {
     } request;
 };
 
+/// RPC: service_node/l2_tracker_state
+///
+/// Queries the detailed current L2 tracker state of this service node.
+///
+/// Inputs:
+/// - `include_purge_state` -- If provided and true, include the most recently purge state,
+///   containing fetched contract pubkeys.  Note that this list is only updated about once/hour by
+///   oxend and so can be somewhat out of date, and is usually less useful than the bls pubkeys
+///   included in the get_service_node calls.  The primary purpose of this list is for the oxen
+///   network to identify and self-correct service nodes that for some unknown reason are on the
+///   oxend chain but not the L2 contract (such as could occur after a significant Oxen or L2
+///   reorg).
+///
+/// Outputs:
+///
+/// - `status` -- RPC status code. "OK" is the success value.
+/// - `chain_id` -- the configured chain_id of the L2 provider
+/// - `rewards_contract` -- the rewards contract address being queried
+/// - `latest_height` -- the latest L2 height retrieved
+/// - `synced_height` -- the L2 height up to which L2 events have been processed.
+/// - `registrations` -- recently observed L2 registration events
+/// - `unlocks` -- recently observed L2 unlock events
+/// - `exits` -- recently observed L2 exit events (both regular and liquidations)
+/// - `req_changes` -- recently objected L2 staking requirement changes.  This is typically empty,
+///   but in the event of a staking requirement change initated by the contract owner, this will
+///   contain the details of that update.
+/// - `purge_state` -- only included if requested.  Contains contract pubkeys of the most recent
+///   purge list update.
+/// - `reward_rate` -- the contract reward rate expressed as a per-block payout, calculated for
+///   periodic recent L2 heights.  This is a list of values such as {"height": 12345600,
+///   "block_reward": 22983257229} indicating the L2 reward pool payout rate at that height.
+struct GET_L2_TRACKER_STATE : RPC_COMMAND {
+    static constexpr auto names() { return NAMES("get_l2_tracker_state"); }
+
+    struct request_parameters {
+        bool include_purge_state;
+    } request;
+};
+
 /// Dev-RPC: service_node/report_peer_status
 ///
 /// Reports service node peer status (success/fail) from lokinet and storage server.
@@ -2615,26 +2757,6 @@ struct TEST_TRIGGER_P2P_RESYNC : NO_ARGS {
 /// - `status` -- Generic RPC error code. "OK" is the success value.
 struct TEST_TRIGGER_UPTIME_PROOF : NO_ARGS {
     static constexpr auto names() { return NAMES("test_trigger_uptime_proof"); }
-};
-
-OXEN_RPC_DOC_INTROSPECT
-// Get the name mapping for an Oxen Name Service entry. Oxen currently supports mappings
-// for Session, Wallet and Lokinet.
-struct ONS_NAMES_TO_OWNERS : PUBLIC {
-    static constexpr auto names() { return NAMES("ons_names_to_owners", "lns_names_to_owners"); }
-
-    static constexpr size_t MAX_REQUEST_ENTRIES = 256;
-    static constexpr size_t MAX_TYPE_REQUEST_ENTRIES = 8;
-
-    struct request_parameters {
-        std::vector<std::string> name_hash;  // The 32-byte BLAKE2b hash of the name to resolve to a
-                                             // public key via Oxen Name Service. The value must be
-                                             // provided either in hex (64 hex digits) or base64 (44
-                                             // characters with padding, or 43 characters without).
-        std::vector<uint16_t> type;  // If empty, query all types. Currently supported types are 0
-                                     // (session), 1 (wallet) and 2 (lokinet). In future updates
-                                     // more mapping types will be available.
-    } request;
 };
 
 /// RPC: ons/ons_owners_to_names
@@ -2697,7 +2819,7 @@ void to_json(nlohmann::json& j, const ONS_OWNERS_TO_NAMES::response_entry& r);
 ///
 /// Performs a simple ONS lookup of a BLAKE2b-hashed name.  This RPC method is meant for simple,
 /// single-value resolutions that do not care about registration details, etc.; if you need more
-/// information use ONS_NAMES_TO_OWNERS instead.
+/// information use `ons_info` instead.
 ///
 /// Inputs:
 ///
@@ -2721,7 +2843,7 @@ void to_json(nlohmann::json& j, const ONS_OWNERS_TO_NAMES::response_entry& r);
 ///
 /// 1. Lower-case the name.
 /// 2. Calculate the name hash as a null-key, 32-byte BLAKE2b hash of the lower-case name.
-/// 3. Obtain the encrypted value and the nonce from this RPC call (or ONS_NAMES_TO_OWNERS); when
+/// 3. Obtain the encrypted value and the nonce from this RPC call (or `ons_info`); when
 ///    using json encode the name hash using either hex or base64.
 /// 4. Calculate the decryption key as a 32-byte BLAKE2b *keyed* hash of the name using the
 ///    (unkeyed) name hash calculated above (in step 2) as the hash key.
@@ -2827,6 +2949,56 @@ struct ONS_RESOLVE : PUBLIC {
     } request;
 };
 
+/// RPC: ons/ons_info
+///
+/// Get the name mapping(s) for an Oxen Name Service entry, including metadata about the
+/// registration.  Oxen currently supports mappings for Session, Wallet and Lokinet.  Any types with
+/// a matching name hash are returned.
+///
+/// To simply resolve a record of a single type without metadata, see `ons_resolve` instead.
+///
+/// Inputs:
+///
+/// - `name_hash` -- A single hashed name to look up.  Either this or `name_hashes` must be
+///   specified (but not both).  See ons_resolve for details on how to properly construct these
+///   hashed name values.  The value(s) can be provided as either hex or base64.
+/// - `name_hashes` -- An array of hashed names to look up multiple names at once.
+/// - `type` -- Optional record type to restrict lookups, where 0 = session, 1 = wallet, 2 =
+///   lokinet.  If omitted (or null) then all matching name_hash entries, regardless of type, will
+///   be returned, otherwise only records of the given type are returned.
+/// - `include_expired` -- Optional bool; if provided and true then expired records will be
+///   included, otherwise they will not be.
+///
+/// Outputs:
+///
+/// - `status` -- Generic RPC error code. "OK" is the success value.
+/// - `result` -- Object of results, with one key per unique input name_hash.  The key is a
+///   name_hash that was looked up (in the same hex or base64 encoding that was provided), and each
+///   value is an array of match results (which will be empty if there was no match), returned as
+///   objects containing keys:
+///   - `type` -- the record type value (0 - session, 1 - wallet, 2 - lokinet)
+///   - `owner` -- the record owner, which is usually an Oxen wallet address
+///   - `backup_owner` -- a second owner; omitted if there is no backup owner.
+///   - `encrypted_value` -- the encrypted ONS record.  (See `ons_resolve`)
+///   - `expiration_height` -- if this record has an expiration, this is the height.  Omitted for
+///     non-expiring records.
+///   - `expired` -- true if this record is expired (i.e. we are past `expiration_height`), false
+///     otherwise.  Omitted for non-expiring records.
+///   - `update_height` -- the height at which this record was last modified, renewed, or created.
+///   - `txid` -- the transaction id that last modified, renewed, or created this ONS record.
+///
+struct ONS_INFO : PUBLIC {
+    static constexpr auto names() { return NAMES("ons_info"); }
+
+    static constexpr size_t MAX_REQUEST_ENTRIES = 256;
+
+    struct request_parameters {
+        std::vector<std::string> name_hash;
+        std::optional<uint16_t> type;
+        bool include_expired = false;
+    } request;
+};
+
 /// RPC: daemon/flush_cache
 ///
 /// Clear TXs from the daemon cache, currently only the cache storing TX hashes that were
@@ -2858,6 +3030,7 @@ using core_rpc_types = tools::type_list<
         FLUSH_CACHE,
         FLUSH_TRANSACTION_POOL,
         GET_ACCRUED_REWARDS,
+        GET_ACCRUED_BATCHED_EARNINGS,
         GET_ALTERNATE_CHAINS,
         GET_BANS,
         GET_FEE_ESTIMATE,
@@ -2873,6 +3046,7 @@ using core_rpc_types = tools::type_list<
         GET_HEIGHT,
         GET_INFO,
         GET_LAST_BLOCK_HEADER,
+        GET_L2_TRACKER_STATE,
         GET_LIMIT,
         GET_NET_STATS,
         GET_OUTPUTS,
@@ -2882,6 +3056,7 @@ using core_rpc_types = tools::type_list<
         GET_QUORUM_STATE,
         GET_SERVICE_KEYS,
         GET_SERVICE_NODES,
+        GET_ALL_UPTIME_PROOFS,
         GET_SERVICE_NODE_BLACKLISTED_KEY_IMAGES,
         BLS_REWARDS_REQUEST,
         BLS_EXIT_LIQUIDATION_LIST,
@@ -2905,11 +3080,13 @@ using core_rpc_types = tools::type_list<
         MINING_STATUS,
         ONS_OWNERS_TO_NAMES,
         ONS_RESOLVE,
+        ONS_INFO,
         OUT_PEERS,
         POP_BLOCKS,
         PRUNE_BLOCKCHAIN,
         REPORT_PEER_STATUS,
         SAVE_BC,
+        SESSION_ROUTER_PING,
         SET_BANS,
         SET_LIMIT,
         SET_LOG_LEVEL,
@@ -2920,8 +3097,7 @@ using core_rpc_types = tools::type_list<
         SUBMIT_TRANSACTION,
         SYNC_INFO,
         TEST_TRIGGER_P2P_RESYNC,
-        TEST_TRIGGER_UPTIME_PROOF,
-        ONS_NAMES_TO_OWNERS>;
+        TEST_TRIGGER_UPTIME_PROOF>;
 
 using FIXME_old_rpc_types = tools::type_list<RELAY_TX, GET_OUTPUT_DISTRIBUTION>;
 

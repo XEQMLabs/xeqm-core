@@ -60,6 +60,7 @@
 #include "crypto/eth.h"
 #include "crypto/hash.h"
 #include "cryptonote_basic/account.h"
+#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_basic/hardfork.h"
@@ -73,6 +74,7 @@
 #include "epee/net/network_throttle.hpp"
 #include "epee/string_tools.h"
 #include "l2_tracker/events.h"
+#include "l2_tracker/l2_tracker_proxy.h"
 #include "logging/oxen_logger.h"
 #include "net/parse.h"
 #include "oxen/log.hpp"
@@ -161,14 +163,6 @@ namespace {
     constexpr uint64_t round_up(uint64_t value, uint64_t quantum) {
         return (value + quantum - 1) / quantum * quantum;
     }
-
-    void rename_key(nlohmann::json& obj, std::string_view old_key, std::string_view new_key) {
-        if (auto it = obj.find(old_key); it != obj.end()) {
-            auto val = std::move(*it);
-            obj.erase(it);
-            obj[std::string{new_key}] = std::move(val);
-        }
-    }
 }  // namespace
 
 const std::unordered_map<std::string, std::shared_ptr<const rpc_command>> rpc_commands =
@@ -224,18 +218,23 @@ void core_rpc_server::invoke(GET_INFO& info, rpc_context context) {
 
     info.response["height"] = height;
     info.response["l2_height"] = top_block.l2_height;
+    if (auto* l2 = bs.maybe_l2_tracker()) {
+        eth::L2Tracker::L2Heights heights = l2->get_l2_heights();
+        info.response["l2_tracker_height"] = heights.latest;
+        info.response["l2_tracker_synced_height"] = heights.synced;
+    }
     info.response_hex["top_block_hash"] = get_block_hash(top_block);
     info.response["target_height"] = m_core.get_target_blockchain_height();
 
     info.response["hard_fork"] = m_core.blockchain.get_network_version();
 
     bool next_block_is_pulse = false;
-    if (pulse::timings t; pulse::get_round_timings(bs, height, top_block.timestamp, t)) {
+    if (auto t = pulse::get_round_timings(bs, height, top_block.timestamp)) {
         info.response["pulse_ideal_timestamp"] =
-                tools::to_seconds(t.ideal_timestamp.time_since_epoch());
+                tools::to_seconds(t->ideal_timestamp.time_since_epoch());
         info.response["pulse_target_timestamp"] =
-                tools::to_seconds(t.r0_timestamp.time_since_epoch());
-        next_block_is_pulse = pulse::clock::now() < t.miner_fallback_timestamp;
+                tools::to_seconds(t->r0_timestamp.time_since_epoch());
+        next_block_is_pulse = pulse::clock::now() < t->miner_fallback_timestamp;
     }
 
     if (cryptonote::checkpoint_t checkpoint; db.get_immutable_checkpoint(&checkpoint, top_height)) {
@@ -293,6 +292,7 @@ void core_rpc_server::invoke(GET_INFO& info, rpc_context context) {
         if (sn) {
             info.response["last_storage_server_ping"] = m_core.m_last_storage_server_ping.load();
             info.response["last_lokinet_ping"] = m_core.m_last_lokinet_ping.load();
+            info.response["last_session_router_ping"] = m_core.m_last_srouter_ping.load();
         }
         info.response["free_space"] = m_core.get_free_space();
     }
@@ -653,7 +653,7 @@ namespace {
                     // We aren't given info on whether this is testnet/mainnet, but we can guess by
                     // looking at the operator amount, which has to be <= 100 on testnet, but >=
                     // 3750 on mainnet.
-                    auto nettype = x.amounts[0] > oxen::SENT_STAKING_REQUIREMENT_TESTNET
+                    auto nettype = x.amounts[0] > oxen::SESH_STAKING_REQUIREMENT_TESTNET
                                          ? network_type::MAINNET
                                          : network_type::TESTNET;
                     portion = std::lround(
@@ -680,12 +680,18 @@ namespace {
         auto& _state_change(const T& x) {
             // Common loading code for nearly-identical state_change and deregister_old variables:
             auto voters = json::array();
-            for (auto& v : x.votes)
+            auto sigs = json::array();
+            json_binary_proxy sigs_hex{sigs, format};
+
+            for (auto& v : x.votes) {
                 voters.push_back(v.validator_index);
+                sigs_hex.push_back(v.signature);
+            }
 
             json sc{{"height", x.block_height},
                     {"index", x.service_node_index},
-                    {"voters", std::move(voters)}};
+                    {"voters", std::move(voters)},
+                    {"signatures", std::move(sigs)}};
             return set("sn_state_change", std::move(sc));
         }
         void operator()(const tx_extra_service_node_deregister_old& x) {
@@ -817,7 +823,7 @@ namespace {
         extra_extractor visitor{
                 e, nettype, is_bt ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex};
         for (const auto& extra : extras)
-            var::visit(visitor, extra);
+            std::visit(visitor, extra);
     }
 }  // namespace
 
@@ -1369,7 +1375,7 @@ void core_rpc_server::invoke(GET_PEER_LIST& pl, rpc_context) {
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(SET_LOG_LEVEL& set_log_level, rpc_context) {
-    auto cats = oxen::logging::extract_categories(set_log_level.request.categories);
+    auto cats = oxen::log::extract_categories(set_log_level.request.categories);
     if (cats.empty()) {
         log::error(
                 logcat,
@@ -1379,7 +1385,7 @@ void core_rpc_server::invoke(SET_LOG_LEVEL& set_log_level, rpc_context) {
         return;
     }
 
-    auto applied = cats.apply();
+    auto applied = cats.apply(oxen::logging::set_additional_log_categories);
 
     set_log_level.response["applied"] = std::move(applied);
     set_log_level.response["status"] = STATUS_OK;
@@ -1487,27 +1493,27 @@ static void fill_block_header_response(
         std::optional<uint64_t> maybe_height,
         const crypto::hash& hash,
         bool fill_pow_hash,
-        bool get_tx_hashes,
+        bool tx_hashes_and_sigs,
         nlohmann::json& response,
         bool is_bt,
         cryptonote::core& core) {
 
     auto& db = core.blockchain.db();
 
-    tools::json_binary_proxy response_hex{
-            response,
-            is_bt ? tools::json_binary_proxy::fmt::bt : tools::json_binary_proxy::fmt::hex};
+    auto binfmt = is_bt ? tools::json_binary_proxy::fmt::bt : tools::json_binary_proxy::fmt::hex;
+
+    serialization::json_archiver ar{binfmt};
+    serialize(ar, const_cast<block&>(blk));
+    response = std::move(ar).json();
+    tools::json_binary_proxy response_hex{response, binfmt};
 
     uint64_t height = maybe_height ? *maybe_height : blk.get_height();
-
-    response["major_version"] = static_cast<uint8_t>(blk.major_version);
-    response["minor_version"] = static_cast<uint8_t>(blk.minor_version);
-    response["timestamp"] = blk.timestamp;
-    response_hex["prev_hash"] = blk.prev_id;
-    response["nonce"] = blk.nonce;
-    response["orphan_status"] = orphan_status;
-    response["height"] = height;
+    if (!response.count("height"))
+        response["height"] = height;
     response["depth"] = core.blockchain.get_current_blockchain_height() - height - 1;
+    response["prev_hash"] = std::move(response["prev_id"]);
+    response.erase("prev_id");
+    response["orphan_status"] = orphan_status;
     response_hex["hash"] = hash;
     response["difficulty"] = core.blockchain.block_difficulty(height);
     response["cumulative_difficulty"] = db.get_block_cumulative_difficulty(height);
@@ -1515,9 +1521,10 @@ static void fill_block_header_response(
     response["block_weight"] = weight;
     response["block_size"] = block_size + weight;
     auto coinbase = get_block_coinbase_payouts(blk);
-    response["coinbase_payouts"] = coinbase;
-    response["reward"] =
-            blk.major_version >= cryptonote::hf::hf19_reward_batching ? blk.reward : coinbase;
+    if (blk.major_version < cryptonote::hf::hf21_eth)
+        response["coinbase_payouts"] = coinbase;
+    if (blk.major_version < cryptonote::hf::hf19_reward_batching)
+        response["reward"] = coinbase;
     response["num_txes"] = blk.tx_hashes.size();
     if (fill_pow_hash)
         response_hex["pow_hash"] = get_block_longhash_w_blockchain(
@@ -1526,20 +1533,19 @@ static void fill_block_header_response(
     if (blk.major_version < feature::ETH_BLS)
         response_hex["service_node_winner"] =
                 cryptonote::get_service_node_winner_from_tx_extra(blk.miner_tx.value().extra);
-    else
-        response_hex["service_node_winner_tail"] = blk.sn_winner_tail;
-    if (blk.major_version >= cryptonote::feature::ETH_BLS) {
-        response["l2_height"] = blk.l2_height;
-        response["l2_reward"] = blk.l2_reward;
-        response["l2_votes"] = blk.l2_votes;
+    else {
+        response["service_node_winner_tail"] = std::move(response["sn_winner_tail"]);
+        response.erase("sn_winner_tail");
     }
+    response.erase("miner_tx");
     if (blk.miner_tx) {
         response_hex["miner_tx_hash"] = cryptonote::get_transaction_hash(*blk.miner_tx);
         response["miner_tx_outs"] = blk.miner_tx->vout.size();
     }
-    if (get_tx_hashes)
-        for (const auto& tx_hash : blk.tx_hashes)
-            response_hex["tx_hashes"].push_back(tx_hash);
+    if (!tx_hashes_and_sigs) {
+        response.erase("tx_hashes");
+        response.erase("signatures");
+    }
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(GET_LAST_BLOCK_HEADER& get_last_block_header, rpc_context context) {
@@ -1616,12 +1622,35 @@ void core_rpc_server::invoke(GET_BLOCK_HEADER_BY_HASH& gbh, rpc_context context)
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(
         GET_BLOCK_HEADERS_RANGE& get_block_headers_range, rpc_context context) {
-    const uint64_t bc_height = m_core.blockchain.get_current_blockchain_height();
-    uint64_t start_height = get_block_headers_range.request.start_height;
-    uint64_t end_height = get_block_headers_range.request.end_height;
-    if (start_height >= bc_height || end_height >= bc_height || start_height > end_height)
-        throw rpc_error{ERROR_TOO_BIG_HEIGHT, "Invalid start/end heights."};
-    for (uint64_t h = start_height; h <= end_height; ++h) {
+    const int64_t bc_height =
+            static_cast<int64_t>(m_core.blockchain.get_current_blockchain_height());
+    const auto& req = get_block_headers_range.request;
+    int64_t start_height = req.start_height;
+    int64_t end_height = req.end_height;
+    if (start_height >= bc_height || -start_height > bc_height)
+        throw rpc_error{
+                ERROR_TOO_BIG_HEIGHT,
+                "Invalid start_height: {} exceeds top block height {}"_format(
+                        start_height, bc_height - 1)};
+    if (start_height < 0)
+        start_height = bc_height + start_height;
+    if (end_height >= bc_height || -end_height > bc_height)
+        throw rpc_error{
+                ERROR_TOO_BIG_HEIGHT,
+                "Invalid end_height: {} exceeds top block height {}"_format(
+                        end_height, bc_height - 1)};
+    if (end_height < 0)
+        end_height = bc_height + end_height;
+    if (start_height > end_height)
+        throw rpc_error{
+                ERROR_TOO_BIG_HEIGHT,
+                "Invalid start/end heights: end_height cannot be less than start_height."};
+    if (end_height - start_height >= GET_BLOCK_HEADERS_RANGE::MAX_COUNT)
+        throw rpc_error{
+                ERROR_TOO_BIG_HEIGHT,
+                "Invalid start/end heights: requested range of {} blocks exceeds limit {}"_format(
+                        end_height - start_height + 1, GET_BLOCK_HEADERS_RANGE::MAX_COUNT)};
+    for (int64_t h = start_height; h <= end_height; ++h) {
         block blk;
         size_t block_size;
         bool have_block = m_core.blockchain.get_block_by_height(h, blk, &block_size);
@@ -1635,8 +1664,8 @@ void core_rpc_server::invoke(
                 false,
                 std::nullopt,
                 get_block_hash(blk),
-                get_block_headers_range.request.fill_pow_hash && context.admin,
-                get_block_headers_range.request.get_tx_hashes,
+                req.fill_pow_hash && context.admin,
+                req.get_tx_hashes,
                 get_block_headers_range.response["headers"].emplace_back(),
                 get_block_headers_range.is_bt(),
                 m_core);
@@ -1701,21 +1730,20 @@ void core_rpc_server::invoke(GET_BLOCK& get_block, rpc_context context) {
                             get_block.request.hash)};
         if (!m_core.blockchain.get_block_by_hash(block_hash, blk, &block_size, &orphan))
             throw rpc_error{
-                    ERROR_INTERNAL,
-                    "Internal error: can't get block by hash. Hash = {}."_format(
-                            get_block.request.hash)};
+                    ERROR_ID_NOT_FOUND,
+                    "Requested block hash: {} not found"_format(get_block.request.hash)};
     } else {
+        auto req_height = get_block.request.height.value();
         if (auto curr_height = m_core.blockchain.get_current_blockchain_height();
-            get_block.request.height >= curr_height)
+            req_height >= curr_height)
             throw rpc_error{
                     ERROR_TOO_BIG_HEIGHT,
                     "Requested block height: {} greater than current top block height: {}"_format(
-                            get_block.request.height, curr_height - 1)};
-        if (!m_core.blockchain.get_block_by_height(get_block.request.height, blk, &block_size))
+                            req_height, curr_height - 1)};
+        if (!m_core.blockchain.get_block_by_height(*get_block.request.height, blk, &block_size))
             throw rpc_error{
                     ERROR_INTERNAL,
-                    "Internal error: can't get block by height. Height = {}."_format(
-                            get_block.request.height)};
+                    "Internal error: can't get block by height. Height = {}."_format(req_height)};
         block_hash = get_block_hash(blk);
         block_height = get_block.request.height;
     }
@@ -1726,11 +1754,12 @@ void core_rpc_server::invoke(GET_BLOCK& get_block, rpc_context context) {
             block_height,
             block_hash,
             get_block.request.fill_pow_hash && context.admin,
-            false /*tx hashes*/,
+            true /*tx hashes*/,
             get_block.response["block_header"],
             get_block.is_bt(),
             m_core);
-    get_block.response_hex["tx_hashes"] = blk.tx_hashes;
+    get_block.response["tx_hashes"] = std::move(get_block.response["block_header"]["tx_hashes"]);
+    get_block.response["block_header"].erase("tx_hashes");
     get_block.response_hex["blob"] = t_serializable_object_to_blob(blk);
     get_block.response["json"] = obj_to_json_str(blk);
     get_block.response["status"] = STATUS_OK;
@@ -2434,11 +2463,12 @@ void core_rpc_server::invoke(GET_QUORUM_STATE& get_quorum_state, rpc_context con
         const auto& blockchain = m_core.blockchain;
         const auto& top_header = blockchain.db().get_block_header_from_height(curr_height - 1);
 
-        pulse::timings next_timings{};
         uint8_t pulse_round = 0;
-        if (pulse::get_round_timings(blockchain, curr_height, top_header.timestamp, next_timings) &&
+        if (auto next_timings =
+                    pulse::get_round_timings(blockchain, curr_height, top_header.timestamp);
+            next_timings &&
             pulse::convert_time_to_round(
-                    nettype(), pulse::clock::now(), next_timings.r0_timestamp, &pulse_round)) {
+                    nettype(), pulse::clock::now(), next_timings->r0_timestamp, &pulse_round)) {
             auto entropy =
                     service_nodes::get_pulse_entropy_for_next_block(blockchain.db(), pulse_round);
             auto& sn_list = m_core.service_node_list;
@@ -2448,7 +2478,8 @@ void core_rpc_server::invoke(GET_QUORUM_STATE& get_quorum_state, rpc_context con
                     hf_version,
                     sn_list.active_service_nodes_infos(),
                     entropy,
-                    pulse_round);
+                    pulse_round,
+                    curr_height - 1);
             if (verify_pulse_quorum_sizes(quorum)) {
                 auto& entry = quorums.emplace_back();
                 entry.height = curr_height;
@@ -2670,63 +2701,30 @@ void core_rpc_server::invoke(
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(BLS_EXIT_LIQUIDATION_LIST& rpc, rpc_context) {
-    auto list = nlohmann::json::array();
+    rpc.response = json::array();
     using node_t = service_nodes::service_node_list::recently_removed_node;
-    m_core.service_node_list.for_each_recently_removed_node([&list, is_bt = rpc.is_bt()](
-                                                                    const node_t& elem) {
-        // NOTE: Serialise to JSON
-        serialization::json_archiver ar{
-                is_bt ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex};
-        serialize(ar, const_cast<node_t&>(elem));
-        nlohmann::json serialized = std::move(ar).json();
-        nlohmann::json& sn_info = serialized["info"];
+    const auto removable = m_core.blockchain.get_removable_nodes();
+    m_core.service_node_list.for_each_recently_removed_node(
+            [this, &rpc, &removable](const node_t& elem) {
+                rpc.response.push_back(json{
+                        {"height", elem.height},
+                        {"liquidation_height", elem.liquidation_height},
+                        {"type",
+                         elem.type == node_t::type_t::voluntary_exit ? "exit"
+                         : elem.type == node_t::type_t::deregister   ? "deregister"
+                                                                     : "unknown"},
+                });
+                rpc.response_hex.back()["service_node_pubkey"] = elem.service_node_pubkey;
 
-        // NOTE: Remove implementation details from the contributor JSON
-        for (auto& contrib_it : sn_info["contributors"]) {
-            constexpr std::string_view ERASE_FIELDS_CONTRIBUTOR[] = {
-                    "address",  // Cryptonote address  (not used in L2, use ETH addresses)
-                    "locked_contributions",  // $OXEN contributions (not used in L2, use $SENT)
-            };
-
-            for (const auto& field : ERASE_FIELDS_CONTRIBUTOR) {
-                auto it = contrib_it.find(field);
-                assert(it != contrib_it.end());
-                contrib_it.erase(it);
-            }
-
-            // NOTE: Remove operator cryptonote address and replace with ethereum address
-            rename_key(contrib_it, "ethereum_address", "address");
-        }
-
-        // NOTE: Remove operator cryptonote address and replace with ethereum address
-        rename_key(sn_info, "operator_ethereum_address", "operator_address");
-
-        // NOTE: Remove implementation details from the output JSON
-        constexpr std::string_view ERASE_FIELDS[] = {
-                "public_ip",
-                "qnet_port",
-                "type",
-        };
-
-        for (const auto& field : ERASE_FIELDS) {
-            auto it = serialized.find(field);
-            assert(it != serialized.end());
-            serialized.erase(it);
-        }
-
-        // NOTE: Assign the type
-        switch (elem.type) {
-            case node_t::type_t::voluntary_exit: serialized["type"] = "exit"; break;
-            case node_t::type_t::deregister: serialized["type"] = "deregister"; break;
-            case node_t::type_t::purged:
-                assert(!"Internal error: found invalid purged node in recently_removed_nodes");
-        }
-
-        // NOTE: Store the object into the RPC response array
-        list.push_back(std::move(serialized));
-    });
-
-    rpc.response = std::move(list);
+                fill_sn_response_entry(
+                        rpc.response.back()["info"] = json::object(),
+                        rpc.is_bt(),
+                        rpc.request.fields,
+                        elem.service_node_pubkey,
+                        elem.info,
+                        m_core.blockchain.get_tail_id().first,
+                        &removable);
+            });
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(
@@ -2791,11 +2789,11 @@ void core_rpc_server::invoke(GET_SERVICE_PRIVKEYS& get_service_privkeys, rpc_con
     const auto& keys = m_core.get_service_keys();
     if (keys.key)
         get_service_privkeys.response_hex["service_node_privkey"] =
-                tools::view_guts<std::byte>(keys.key);
+                tools::span_guts<const std::byte>(keys.key);
     get_service_privkeys.response_hex["service_node_ed25519_privkey"] =
-            tools::view_guts<std::byte>(keys.key_ed25519);
+            tools::span_guts<const std::byte>(keys.key_ed25519);
     get_service_privkeys.response_hex["service_node_x25519_privkey"] =
-            tools::view_guts<std::byte>(keys.key_x25519);
+            tools::span_guts<const std::byte>(keys.key_x25519);
     get_service_privkeys.response["status"] = STATUS_OK;
 }
 
@@ -2836,9 +2834,11 @@ void core_rpc_server::fill_sn_response_entry(
         const crypto::public_key& sn_pubkey,
         const service_nodes::service_node_info& info,
         uint64_t top_height,
-        const std::unordered_map<eth::bls_public_key, bool>* removable) {
+        const std::unordered_map<eth::bls_public_key, bool>* removable,
+        bool oxen10_compat_fields) {
 
-    auto binary_format = is_bt ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
+    auto binary_format = (is_bt && !oxen10_compat_fields) ? json_binary_proxy::fmt::bt
+                                                          : json_binary_proxy::fmt::hex;
     json_binary_proxy binary{entry, binary_format};
 
     set_if_requested(reqed, binary, "service_node_pubkey", sn_pubkey);
@@ -2935,6 +2935,8 @@ void core_rpc_server::fill_sn_response_entry(
                 reasons["some"] = std::move(some);
         }
     }
+    if (info.last_ip_change_height > info.registration_height)
+        set_if_requested(reqed, entry, "last_ip_change_height", info.last_ip_change_height);
 
     auto& netconf = m_core.get_net_config();
     std::pair<hf, uint8_t> network_rev = get_network_version_revision(nettype(), top_height);
@@ -2965,6 +2967,8 @@ void core_rpc_server::fill_sn_response_entry(
                     m_core.lokinet_version,
                     "storage_server_version",
                     m_core.ss_version,
+                    "session_router_version",
+                    m_core.srouter_version,
                     "version_tag",
                     OXEN_VERSION_TAG,
                     "public_ip",
@@ -2984,7 +2988,7 @@ void core_rpc_server::fill_sn_response_entry(
                     m_core.get_service_keys().pub_x25519);
             set_if_requested(reqed, binary, "pubkey_bls", m_core.get_service_keys().pub_bls);
         } else {
-            if (proof.proof->public_ip != 0)
+            if (proof.proof->public_ip != 0 || oxen10_compat_fields)
                 set_if_requested(
                         reqed,
                         entry,
@@ -2994,8 +2998,8 @@ void core_rpc_server::fill_sn_response_entry(
                         proof.proof->lokinet_version,
                         "storage_server_version",
                         proof.proof->storage_server_version,
-                        "version_tag",
-                        proof.proof->version_tag,
+                        "session_router_version",
+                        proof.proof->session_router_version,
                         "public_ip",
                         epee::string_tools::get_ip_string_from_int32(proof.proof->public_ip),
                         "storage_port",
@@ -3004,6 +3008,8 @@ void core_rpc_server::fill_sn_response_entry(
                         proof.proof->storage_omq_port,
                         "quorumnet_port",
                         proof.proof->qnet_port);
+            if (requested(reqed, "version_tag") && !proof.proof->version_tag.empty())
+                entry["version_tag"] = proof.proof->version_tag;
             if (hf < feature::SN_PK_IS_ED25519 && proof.proof->pubkey_ed25519)
                 set_if_requested(
                         reqed,
@@ -3024,41 +3030,35 @@ void core_rpc_server::fill_sn_response_entry(
         auto steady_now = std::chrono::steady_clock::now();
         set_if_requested(reqed, entry, "last_uptime_proof", proof.timestamp);
         if (m_core.service_node()) {
-            set_if_requested(
-                    reqed,
-                    entry,
-                    "storage_server_reachable",
-                    !proof.ss_reachable.unreachable_for(
-                            netconf.UPTIME_PROOF_VALIDITY - netconf.UPTIME_PROOF_FREQUENCY,
-                            steady_now),
-                    "lokinet_reachable",
-                    !proof.lokinet_reachable.unreachable_for(
-                            netconf.UPTIME_PROOF_VALIDITY - netconf.UPTIME_PROOF_FREQUENCY,
-                            steady_now));
-            if (proof.ss_reachable.first_unreachable != service_nodes::NEVER &&
-                requested(reqed, "storage_server_first_unreachable"))
-                entry["storage_server_first_unreachable"] = reachable_to_time_t(
-                        proof.ss_reachable.first_unreachable, system_now, steady_now);
-            if (proof.ss_reachable.last_unreachable != service_nodes::NEVER &&
-                requested(reqed, "storage_server_last_unreachable"))
-                entry["storage_server_last_unreachable"] = reachable_to_time_t(
-                        proof.ss_reachable.last_unreachable, system_now, steady_now);
-            if (proof.ss_reachable.last_reachable != service_nodes::NEVER &&
-                requested(reqed, "storage_server_last_reachable"))
-                entry["storage_server_last_reachable"] = reachable_to_time_t(
-                        proof.ss_reachable.last_reachable, system_now, steady_now);
-            if (proof.lokinet_reachable.first_unreachable != service_nodes::NEVER &&
-                requested(reqed, "lokinet_first_unreachable"))
-                entry["lokinet_first_unreachable"] = reachable_to_time_t(
-                        proof.lokinet_reachable.first_unreachable, system_now, steady_now);
-            if (proof.lokinet_reachable.last_unreachable != service_nodes::NEVER &&
-                requested(reqed, "lokinet_last_unreachable"))
-                entry["lokinet_last_unreachable"] = reachable_to_time_t(
-                        proof.lokinet_reachable.last_unreachable, system_now, steady_now);
-            if (proof.lokinet_reachable.last_reachable != service_nodes::NEVER &&
-                requested(reqed, "lokinet_last_reachable"))
-                entry["lokinet_last_reachable"] = reachable_to_time_t(
-                        proof.lokinet_reachable.last_reachable, system_now, steady_now);
+            auto set_reach_info = [&](std::string_view key_prefix,
+                                      const service_nodes::proof_info::reachable_stats& reachable) {
+                set_if_requested(
+                        reqed,
+                        entry,
+                        "{}_reachable"_format(key_prefix),
+                        !reachable.unreachable_for(
+                                netconf.UPTIME_PROOF_VALIDITY - netconf.UPTIME_PROOF_FREQUENCY,
+                                steady_now));
+
+                if (auto k = "{}_first_unreachable"_format(key_prefix);
+                    reachable.first_unreachable != service_nodes::NEVER && requested(reqed, k))
+                    entry[k] = reachable_to_time_t(
+                            reachable.first_unreachable, system_now, steady_now);
+                if (auto k = "{}_last_unreachable"_format(key_prefix);
+                    reachable.last_unreachable != service_nodes::NEVER && requested(reqed, k))
+                    entry[k] =
+                            reachable_to_time_t(reachable.last_unreachable, system_now, steady_now);
+                if (auto k = "{}_last_reachable"_format(key_prefix);
+                    reachable.last_reachable != service_nodes::NEVER && requested(reqed, k))
+                    entry[k] =
+                            reachable_to_time_t(reachable.last_reachable, system_now, steady_now);
+            };
+            if (netconf.HAVE_STORAGE_SERVER)
+                set_reach_info("storage_server", proof.ss_reachable);
+            if (netconf.HAVE_SESSION_ROUTER)
+                set_reach_info("session_router", proof.sr_reachable);
+            if (netconf.HAVE_LOKINET)
+                set_reach_info("lokinet", proof.lokinet_reachable);
         }
 
         if (requested(reqed, "checkpoint_votes") && !proof.checkpoint_participation.empty()) {
@@ -3097,18 +3097,19 @@ void core_rpc_server::fill_sn_response_entry(
             if (contributor.ethereum_address) {
                 c["address"] = "{}"_format(contributor.ethereum_address);
                 c["beneficiary"] = "{}"_format(contributor.ethereum_beneficiary);
-            } else
+            } else {
                 c["address"] = cryptonote::get_account_address_as_str(
                         m_core.get_nettype(), false /*subaddress*/, contributor.address);
-            if (contributor.reserved != contributor.amount)
-                c["reserved"] = contributor.reserved;
-            if (want_locked_c) {
-                auto& locked = (c["locked_contributions"] = json::array());
-                for (const auto& src : contributor.locked_contributions) {
-                    auto& lc = locked.emplace_back(json{{"amount", src.amount}});
-                    json_binary_proxy lc_binary{lc, binary_format};
-                    lc_binary["key_image"] = src.key_image;
-                    lc_binary["key_image_pub_key"] = src.key_image_pub_key;
+                if (contributor.reserved && contributor.reserved != contributor.amount)
+                    c["reserved"] = contributor.reserved;
+                if (want_locked_c) {
+                    auto& locked = (c["locked_contributions"] = json::array());
+                    for (const auto& src : contributor.locked_contributions) {
+                        auto& lc = locked.emplace_back(json{{"amount", src.amount}});
+                        json_binary_proxy lc_binary{lc, binary_format};
+                        lc_binary["key_image"] = src.key_image;
+                        lc_binary["key_image_pub_key"] = src.key_image_pub_key;
+                    }
                 }
             }
         }
@@ -3197,7 +3198,42 @@ void core_rpc_server::invoke(GET_SERVICE_NODES& sns, rpc_context) {
                 pubkey_info.pubkey,
                 *pubkey_info.info,
                 top_height,
-                &removable);
+                &removable,
+                sns.request.oxen10_compat_fields);
+}
+
+void core_rpc_server::invoke(GET_ALL_UPTIME_PROOFS& req, rpc_context) {
+    req.response["status"] = STATUS_OK;
+    req.response["proofs"] = json::array();
+
+    m_core.service_node_list.for_each_proof(
+            [&req, this](const service_nodes::proof_info& proof_info) {
+                const auto& proof = *proof_info.proof;
+                if (!m_core.service_node_list.is_funded_service_node(proof.pubkey())) {
+                    log::debug(
+                            logcat,
+                            "have proof for non-funded service node {}, ignoring",
+                            proof.pubkey_ed25519);
+                    return;
+                }
+
+                if (proof.serialized_proof.empty()) {
+                    log::debug(
+                            logcat,
+                            "have yet to receive (and keep serialized) proof for {}",
+                            proof.pubkey_ed25519);
+                    return;
+                }
+                auto entry = json::object();
+                tools::json_binary_proxy entry_hex{entry, tools::json_binary_proxy::fmt::hex};
+                entry_hex["proof"] = proof.serialized_proof;
+                entry_hex["pubkey"] = proof.pubkey_ed25519;
+                entry_hex["pubkey_ed25519"] = proof.pubkey_ed25519;
+                entry_hex["sig_ed25519"] = proof.sig_ed25519;
+                entry_hex["pubkey_bls"] = proof.pubkey_bls;
+                entry_hex["pop_bls"] = proof.pop_bls;
+                req.response["proofs"].push_back(std::move(entry));
+            });
 }
 
 // Sets the "registered" or "recently_removed" key to the SN info or recently removed info,
@@ -3456,6 +3492,23 @@ void core_rpc_server::invoke(LOKINET_PING& lokinet_ping, rpc_context) {
             });
 }
 //------------------------------------------------------------------------------------------------------------------------------
+void core_rpc_server::invoke(SESSION_ROUTER_PING& ping, rpc_context) {
+    m_core.srouter_version = ping.request.version;
+    ping.response["status"] = handle_ping(
+            m_core,
+            ping.request.version,
+            service_nodes::MIN_SESSION_ROUTER_VERSION,
+            ping.request.pubkey_ed25519,
+            ping.request.error,
+            "Session Router",
+            m_core.m_last_srouter_ping,
+            m_core.get_net_config().UPTIME_PROOF_FREQUENCY,
+            [this](bool significant) {
+                if (significant)
+                    m_core.reset_proof_interval();
+            });
+}
+//------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(GET_STAKING_REQUIREMENT& get, rpc_context) {
     get.response = {
             {"height", m_core.blockchain.get_current_blockchain_height()},
@@ -3593,6 +3646,42 @@ void core_rpc_server::invoke(GET_SN_STATE_CHANGES& get_sn_state_changes, rpc_con
     get_sn_state_changes.response["total_unlock"] = total_unlock;
     get_sn_state_changes.response["status"] = STATUS_OK;
 }
+
+void core_rpc_server::invoke(GET_L2_TRACKER_STATE& req, rpc_context) {
+    if (!m_core.have_l2_tracker())
+        throw rpc_error{
+                ERROR_NO_L2_TRACKER, "This oxend does not currently have an active L2 tracker"};
+
+    auto state = m_core.l2_tracker().get_state();
+    serialization::json_archiver ja{
+            req.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex};
+
+    serialize(ja, state);
+    req.response.update(std::move(ja).json());
+    if (auto rit = req.response.find("reward_rate");
+        rit != req.response.end() && rit->size() % 2 == 0) {
+        json reward_rate = json::array();
+        for (auto it = rit->begin(); it != rit->end(); it += 2)
+            reward_rate.push_back(
+                    json{{"height", it->get<uint64_t>()},
+                         {"block_reward", std::next(it)->get<uint64_t>()}});
+        *rit = std::move(reward_rate);
+    }
+    req.response.erase("#");
+
+    if (req.request.include_purge_state) {
+        serialization::json_archiver ja_p{
+                req.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex};
+        auto pstate = m_core.l2_tracker().get_purge_state();
+        serialize(ja_p, pstate);
+        auto pjson = std::move(ja_p).json();
+        pjson.erase("#");
+        req.response["purge_state"] = std::move(pjson);
+    }
+
+    req.response["status"] = STATUS_OK;
+}
+
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(REPORT_PEER_STATUS& report_peer_status, rpc_context) {
     crypto::public_key pubkey;
@@ -3602,14 +3691,14 @@ void core_rpc_server::invoke(REPORT_PEER_STATUS& report_peer_status, rpc_context
     }
 
     bool success = false;
-    if (report_peer_status.request.type == "lokinet")
-        success = m_core.service_node_list.set_lokinet_peer_reachable(
-                pubkey, report_peer_status.request.passed);
-    else if (
-            report_peer_status.request.type == "storage" ||
-            report_peer_status.request.type ==
-                    "reachability" /* TODO: old name, can be removed once SS no longer uses it */)
+    if (report_peer_status.request.type == "storage")
         success = m_core.service_node_list.set_storage_server_peer_reachable(
+                pubkey, report_peer_status.request.passed);
+    else if (report_peer_status.request.type == "srouter")
+        success = m_core.service_node_list.set_session_router_peer_reachable(
+                pubkey, report_peer_status.request.passed);
+    else if (report_peer_status.request.type == "lokinet")
+        success = m_core.service_node_list.set_lokinet_peer_reachable(
                 pubkey, report_peer_status.request.passed);
     else
         throw rpc_error{ERROR_WRONG_PARAM, "Unknown status type"};
@@ -3631,68 +3720,67 @@ void core_rpc_server::invoke(TEST_TRIGGER_UPTIME_PROOF& test_trigger_uptime_proo
     test_trigger_uptime_proof.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-void core_rpc_server::invoke(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_context context) {
+void core_rpc_server::invoke(ONS_INFO& info, rpc_context context) {
 
-    if (!context.admin) {
+    if (!context.admin)
         check_quantity_limit(
-                ons_names_to_owners.request.name_hash.size(),
-                ONS_NAMES_TO_OWNERS::MAX_REQUEST_ENTRIES);
-        check_quantity_limit(
-                ons_names_to_owners.request.type.size(),
-                ONS_NAMES_TO_OWNERS::MAX_TYPE_REQUEST_ENTRIES,
-                "types");
+                info.request.name_hash.size(), ONS_INFO::MAX_REQUEST_ENTRIES, "name_hash");
+
+    auto binary_format = info.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
+
+    auto height = m_core.blockchain.get_current_blockchain_height();
+    std::optional<uint64_t> req_height;
+    if (!info.request.include_expired)
+        req_height = height;
+
+    auto& db = m_core.blockchain.name_system_db();
+
+    std::unordered_set<ons::mapping_type> type_filter;
+    if (info.request.type) {
+        if (auto t = ons::parse_ons_type(*info.request.type, /*queryable_type_only=*/true))
+            type_filter.insert(*t);
+        else
+            throw rpc_error{
+                    ERROR_WRONG_PARAM,
+                    "Invalid type: expected 0 (session), 1 (wallet), or 2 (lokinet), not: {}"_format(
+                            *info.request.type)};
     }
 
-    std::optional<uint64_t> height = m_core.blockchain.get_current_blockchain_height();
-    std::vector<ons::mapping_type> types;
-    types.clear();
-    if (types.capacity() < ons_names_to_owners.request.type.size())
-        types.reserve(ons_names_to_owners.request.type.size());
-    for (const auto type_str : ons_names_to_owners.request.type) {
-        const auto maybe_type = ons::parse_ons_type(type_str);
-        if (!maybe_type.has_value()) {
-            ons_names_to_owners.response["status"] = "invalid type provided";
-            return;
-        }
-        types.push_back(*maybe_type);
-    }
-    ons_names_to_owners.response["type"] = ons_names_to_owners.request.type;
+    auto& result = (info.response["result"] = json::object());
 
-    auto binary_format =
-            ons_names_to_owners.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
+    for (const auto& name_in : info.request.name_hash) {
+        auto& name_res = result[name_in];
+        if (name_res.is_array())
+            continue;  // Duplicate that we've already looked up
+        name_res = json::array();
 
-    ons::name_system_db& db = m_core.blockchain.name_system_db();
-    for (size_t request_index = 0; request_index < ons_names_to_owners.request.name_hash.size();
-         request_index++) {
-        const auto& request = ons_names_to_owners.request.name_hash[request_index];
         // This also takes 32 raw bytes, but that is undocumented (because it is painful to pass
         // through json).
-        auto name_hash = ons::name_hash_input_to_base64(request);
+        auto name_hash = ons::name_hash_input_to_base64(name_in);
         if (!name_hash)
             throw rpc_error{
                     ERROR_WRONG_PARAM,
                     "Invalid name_hash: expected hash as 64 hex digits or 43/44 base64 characters"};
 
-        std::vector<ons::mapping_record> record = db.get_mappings(types, *name_hash, height);
-        for (size_t type_index = 0; type_index < ons_names_to_owners.request.type.size();
-             type_index++) {
-            auto& elem = ons_names_to_owners.response["result"].emplace_back();
-            elem["type"] = record[type_index].type;
-            elem["name_hash"] = record[type_index].name_hash;
-            elem["owner"] = record[type_index].owner.to_string(nettype());
-            if (record[type_index].backup_owner)
-                elem["backup_owner"] = record[type_index].backup_owner.to_string(nettype());
+        for (const auto& record : db.get_mappings(*name_hash, req_height, type_filter)) {
+            auto& elem = name_res.emplace_back();
+            elem["type"] = record.type;
+            elem["owner"] = record.owner.to_string(nettype());
+            if (record.backup_owner)
+                elem["backup_owner"] = record.backup_owner.to_string(nettype());
 
             json_binary_proxy elem_hex{elem, binary_format};
-            elem_hex["encrypted_value"] = record[type_index].encrypted_value.to_view();
-            if (record[0].expiration_height)
-                elem["expiration_height"] = *(record[type_index].expiration_height);
-            elem["update_height"] = record[type_index].update_height;
-            elem_hex["txid"] = record[type_index].txid;
+            elem_hex["encrypted_value"] = record.encrypted_value.to_view();
+            if (record.expiration_height) {
+                elem["expiration_height"] = *record.expiration_height;
+                elem["expired"] = *record.expiration_height < height;
+            }
+            elem["update_height"] = record.update_height;
+            elem_hex["txid"] = record.txid;
         }
     }
 
-    ons_names_to_owners.response["status"] = STATUS_OK;
+    info.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_context context) {
@@ -3700,6 +3788,9 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
         check_quantity_limit(
                 ons_owners_to_names.request.entries.size(),
                 ONS_OWNERS_TO_NAMES::MAX_REQUEST_ENTRIES);
+
+    auto binary_format =
+            ons_owners_to_names.is_bt() ? json_binary_proxy::fmt::bt : json_binary_proxy::fmt::hex;
 
     std::unordered_map<ons::generic_owner, size_t> owner_to_request_index;
     std::vector<ons::generic_owner> owners;
@@ -3726,9 +3817,8 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
     if (!ons_owners_to_names.request.include_expired)
         height = m_core.blockchain.get_current_blockchain_height();
 
-    std::vector<ONS_OWNERS_TO_NAMES::response_entry> entries;
-    std::vector<ons::mapping_record> records = db.get_mappings_by_owners(owners, height);
-    for (auto& record : records) {
+    auto entries = nlohmann::json::array();
+    for (auto& record : db.get_mappings_by_owners(owners, height)) {
         auto it = owner_to_request_index.end();
         if (record.owner)
             it = owner_to_request_index.find(record.owner);
@@ -3744,23 +3834,22 @@ void core_rpc_server::invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_conte
                             " could not be mapped back a index in the request 'entries' array"};
 
         auto& entry = entries.emplace_back();
-        entry.request_index = it->second;
-        entry.type = record.type;
-        entry.name_hash = std::move(record.name_hash);
+        entry["request_index"] = it->second;
+        entry["type"] = static_cast<uint16_t>(record.type);
+        entry["name_hash"] = std::move(record.name_hash);
         if (record.owner)
-            entry.owner = record.owner.to_string(nettype());
+            entry["owner"] = record.owner.to_string(nettype());
         if (record.backup_owner)
-            entry.backup_owner = record.backup_owner.to_string(nettype());
-        // FIXME: binary proxy
-        entry.encrypted_value = oxenc::to_hex(record.encrypted_value.to_view());
-        entry.update_height = record.update_height;
-        entry.expiration_height = record.expiration_height;
-        // FIXME: binary proxy
-        entry.txid = tools::hex_guts(record.txid);
+            entry["backup_owner"] = record.backup_owner.to_string(nettype());
+        json_binary_proxy entry_hex{entry, binary_format};
+        entry_hex["encrypted_value"] = record.encrypted_value.to_view();
+        entry["update_height"] = record.update_height;
+        if (record.expiration_height)
+            entry["expiration_height"] = *record.expiration_height;
+        entry_hex["txid"] = record.txid;
     }
 
-    // FIXME: this seems broken; how can this vector of some random struct magically become json?
-    ons_owners_to_names.response["entries"] = entries;
+    ons_owners_to_names.response["entries"] = std::move(entries);
     ons_owners_to_names.response["status"] = STATUS_OK;
 }
 
@@ -3792,34 +3881,94 @@ void core_rpc_server::invoke(ONS_RESOLVE& resolve, rpc_context) {
     }
 }
 
+static std::string address_str(
+        cryptonote::network_type nettype,
+        const std::variant<eth::address, cryptonote::account_public_address>& addr) {
+    std::string address;
+    if (auto* eth = std::get_if<eth::address>(&addr))
+        return "{}"_format(*eth);
+    return get_account_address_as_str(
+            nettype, false, std::get<cryptonote::account_public_address>(addr));
+}
+
+static nlohmann::json wallet_info_to_json(
+        std::string address, const BlockchainSQLite::wallet_info& wallet_info) {
+    return nlohmann::json{
+            {"found", wallet_info.found},
+            {"address", std::move(address)},
+            {"amount", wallet_info.amount.to_coin()},
+            {"lifetime_locked_stakes", wallet_info.lifetime_locked_stakes.to_coin()},
+            {"lifetime_unlocked_stakes", wallet_info.lifetime_unlocked_stakes.to_coin()},
+            {"lifetime_rewards", wallet_info.lifetime_rewards.to_coin()},
+            {"lifetime_liquidated_stakes", wallet_info.lifetime_liquidated_stakes.to_coin()},
+            {"locked_stakes", wallet_info.locked_stakes.to_coin()},
+            {"timelocked_stakes", wallet_info.timelocked_stakes.to_coin()},
+    };
+}
+
 void core_rpc_server::invoke(GET_ACCRUED_REWARDS& rpc, rpc_context) {
     auto& balances = rpc.response["balances"];
-    balances = json::object();
+    balances = json::array();
 
-    const auto& req = rpc.request;
+    auto& req = rpc.request;
     auto net = nettype();
     BlockchainSQLite& sql_db = m_core.blockchain.sqlite_db();
 
+    nlohmann::json::array_t& array = balances.get_ref<nlohmann::json::array_t&>();
+    uint64_t height = 0;
     if (req.addresses.size() > 0) {
-        for (const auto& address : req.addresses) {
-            uint64_t amount = 0;
-            if (eth::address eth_address{};
-                tools::try_load_from_hex_guts<eth::address>(address, eth_address)) {
-                std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(eth_address);
-            } else if (address_parse_info parse_info{};
-                       get_account_address_from_str(parse_info, net, address)) {
-                std::tie(std::ignore, amount) = sql_db.get_accrued_rewards(parse_info.address);
+        array.reserve(req.addresses.size());
+        for (auto& address : req.addresses) {
+            BlockchainSQLite::wallet_info wallet_info = {};
+            if (eth::address eth{}; tools::try_load_from_hex_guts<eth::address>(address, eth)) {
+                address = "{}"_format(eth);  // Reformat so that we use the proper checksum even if
+                                             // a non-checksummed value was in the request.
+                wallet_info = sql_db.get_accrued_rewards(eth);
+            } else if (address_parse_info oxen{};
+                       get_account_address_from_str(oxen, net, address)) {
+                wallet_info = sql_db.get_accrued_rewards(oxen.address);
             }
-            balances[address] = amount;
+            array.push_back(wallet_info_to_json(std::move(address), wallet_info));
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
     } else {
-        auto [addresses, amounts] = sql_db.get_all_accrued_rewards();
-        for (size_t i = 0; i < addresses.size(); i++) {
-            balances[addresses[i]] = amounts[i];
+        auto accrued = sql_db.get_all_accrued_rewards();
+        array.reserve(accrued.size());
+        for (const auto& [addr, wallet_info] : accrued) {
+            array.push_back(wallet_info_to_json(address_str(nettype(), addr), wallet_info));
+
+            if (height == 0)
+                height = wallet_info.height;
+            assert(wallet_info.height == height);
         }
+    }
+
+    if (rpc.request.oxen10_compat) {
+        // Oxen 10.x wallets expect `"addresses": [...], "amounts": [...]`
+        // serialization didn't support dicts, so rewrite it if this came through the old endpoint
+        // name to maintain compatibility.
+        auto& addrs = rpc.response["addresses"];
+        auto& amts = rpc.response["amounts"];
+        for (auto& it : array) {
+            nlohmann::json::iterator address = it.find("address");
+            nlohmann::json::iterator amount = it.find("amount");
+            if (address == it.end() || amount == it.end()) {
+                assert(address != it.end());
+                assert(amount != it.end());
+            } else {
+                assert(address->is_string());
+                assert(amount->is_number_unsigned());
+                addrs.emplace_back(address->get<std::string>());
+                amts.emplace_back(amount->get<uint64_t>());
+            }
+        }
+        rpc.response.erase("balances");
+    } else {
+        rpc.response["height"] = height;
     }
 
     rpc.response["status"] = STATUS_OK;
 }
-
 }  // namespace cryptonote::rpc

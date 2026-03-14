@@ -5,6 +5,7 @@
 #include <common/exception.h>
 #include <common/guts.h>
 #include <common/string_util.h>
+#include <common/tracy_shim.h>
 #include <crypto/crypto.h>
 #include <cryptonote_core/cryptonote_core.h>
 #include <l2_tracker/contracts.h>
@@ -13,7 +14,6 @@
 #include <oxenmq/oxenmq.h>
 
 #include <chrono>
-#include <ethyl/utils.hpp>
 #include <memory>
 
 #include "bls_crypto.h"
@@ -47,8 +47,8 @@ static constexpr std::string_view to_string(bls_exit_type type) {
 
 std::string bytes_to_hex_dot_truncate_middle(std::span<const unsigned char> bytes) {
     size_t dot_size = 3;  // How many dots to show in the middle
-    size_t head_hex = 6;  // How many hex characters to preserve from head of string
-    size_t tail_hex = 6;  // How many hex characters to preserve from tail of string
+    size_t head_hex = 3;  // How many hex characters to preserve from head of string
+    size_t tail_hex = 3;  // How many hex characters to preserve from tail of string
 
     std::string hex = oxenc::to_hex(bytes.begin(), bytes.end());
 
@@ -56,7 +56,7 @@ std::string bytes_to_hex_dot_truncate_middle(std::span<const unsigned char> byte
     std::string_view head = tools::string_safe_substr(hex, 0, head_hex);
 
     tail_hex = std::min(tail_hex, head.size());
-    std::string_view tail = tools::string_safe_substr(head, head.size() - tail_hex, tail_hex);
+    std::string_view tail = tools::string_safe_substr(hex, hex.size() - tail_hex, tail_hex);
 
     std::string result = fmt::format("{}{:.>{}}{}", head, "", dot_size, tail);
     return result;
@@ -309,11 +309,22 @@ namespace {
                 continue;
 
             fmt::format_to(
-                    std::back_inserter(buffer), "{} runs:\n", success ? "Successful" : "Failed");
-            for (const auto& item : list) {
+                    std::back_inserter(buffer),
+                    "{} runs ({}):\n",
+                    success ? "Successful" : "Failed",
+                    list.size());
+            for (size_t index = 0; index < list.size(); index++) {
+                const auto& item = list[index];
+
+                const std::array<uint16_t, 3>& ver = item.addr.version;
+                std::string ver_str = ver == std::array<uint16_t, 3>{0, 0, 0}
+                                            ? "Unknown"
+                                            : "{}.{}.{}"_format(ver[0], ver[1], ver[2]);
                 fmt::format_to(
                         std::back_inserter(buffer),
-                        "  - SN {} BLS {} XKEY {} @ {:<21} => {}\n",
+                        "  {:<4d} SN {} {} BLS {} XKEY {} @ {:<21} => {}\n",
+                        index,
+                        ver_str,
                         bytes_to_hex_dot_truncate_middle(item.addr.sn_pubkey),
                         bytes_to_hex_dot_truncate_middle(item.addr.bls_pubkey),
                         bytes_to_hex_dot_truncate_middle(item.addr.x_pubkey),
@@ -483,8 +494,20 @@ namespace {
                 single_callback{std::move(callback)},
                 final_callback{std::move(final_callback)} {
 
-            core.service_node_list.copy_reachable_service_node_addresses(
-                    std::back_inserter(snodes), core.get_nettype());
+            std::lock_guard lock{bad_signer_mutex};
+            const auto expiry = std::chrono::steady_clock::now() - BAD_SIGNER_TIMEOUT;
+            for (auto it = recent_bad_signers.begin(); it != recent_bad_signers.end();)
+                if (it->second < expiry)
+                    it = recent_bad_signers.erase(it);
+                else
+                    ++it;
+
+            core.service_node_list.for_each_reachable_service_node_address(
+                    [this](service_nodes::service_node_address&& addr) {
+                        if (!recent_bad_signers.contains(addr.bls_pubkey))
+                            snodes.push_back(std::move(addr));
+                    },
+                    core.get_nettype());
         }
 
         cryptonote::core& core;
@@ -518,11 +541,20 @@ namespace {
         // of reachable nodes at the time the request was initiated).
         size_t snode_count() { return snodes.size(); }
 
+        // Stores the pubkeys of nodes that have given us bad BLS signatures recently, so that we
+        // can skip them if we do another signature.  We retry them if at least 5 mins has passed
+        // since the last time they gave us a bad signature.
+        inline static std::unordered_map<eth::bls_public_key, std::chrono::steady_clock::time_point>
+                recent_bad_signers{};
+        constexpr static auto BAD_SIGNER_TIMEOUT = 5min;
+        inline static std::mutex bad_signer_mutex{};
+
       private:
         void send_requests(
                 std::string_view endpoint,
                 std::string_view message,
                 std::chrono::milliseconds timeout) {
+            ZoneScoped;
             ++active_requests;  // Dummy "request" to avoid potential races with responses arriving
                                 // before we're done sending requests.
 
@@ -655,6 +687,11 @@ namespace {
                         sig);
                 agg_sig.subtract(sig);
                 agg_pub.subtract(blspk);
+                {
+                    std::lock_guard lock{nodes_request_data::bad_signer_mutex};
+                    nodes_request_data::recent_bad_signers[blspk] =
+                            std::chrono::steady_clock::now();
+                }
 
                 result.signature = agg_sig.get();
                 result.aggregate_pubkey = agg_pub.get();
@@ -780,28 +817,29 @@ void bls_aggregator::get_rewards(oxenmq::Message& m) const {
         return;
     }
 
-    auto maybe_amount = core.blockchain.sqlite_db().get_accrued_rewards(eth_addr, height);
-    if (!maybe_amount) {
+    cryptonote::BlockchainSQLite::wallet_info wallet_info =
+            core.blockchain.sqlite_db().get_accrued_rewards(eth_addr, height);
+    if (!wallet_info.found) {
         m.send_reply("410", "Balances for height {} are not available"_format(height));
         return;
     }
-    auto amount = *maybe_amount;
 
     // We sign H(H(rewardTag || chainid || contract) || recipientAddress ||
     // recipientAmount),
     // where everything is in bytes, and recipientAmount is a 32-byte big
     // endian integer value.
-    std::array<std::byte, 32> amount_be = tools::encode_integer_be<32>(amount);
+    std::array<std::byte, 32> amount_be =
+            tools::encode_integer_be<32>(wallet_info.amount.to_coin());
 
     std::vector<uint8_t> msg =
             get_reward_balance_msg_to_sign(core.get_nettype(), eth_addr, amount_be);
     bls_signature sig = eth::sign(core.get_nettype(), core.get_service_keys().key_bls, msg);
 
     oxenc::bt_dict_producer d;
-    d.append("address", tools::view_guts(eth_addr));  // Address requesting balance
-    d.append("amount", amount);                       // Balance
-    d.append("height", height);                       // Height of balance
-    d.append("signature", tools::view_guts(sig));     // Signature of addr + balance
+    d.append("address", tools::view_guts(eth_addr));   // Address requesting balance
+    d.append("amount", wallet_info.amount.to_coin());  // Balance
+    d.append("height", height);                        // Height of balance
+    d.append("signature", tools::view_guts(sig));      // Signature of addr + balance
 
     m.send_reply("200", std::move(d).str());
 }
@@ -810,19 +848,19 @@ void bls_aggregator::rewards_request(
         const address& addr,
         uint64_t height,
         std::function<void(std::shared_ptr<const bls_rewards_response>)> callback) {
-
-    auto maybe_amount = core.blockchain.sqlite_db().get_accrued_rewards(addr, height);
-    auto amount = maybe_amount.value_or(0);
+    ZoneScoped;
+    cryptonote::BlockchainSQLite::wallet_info wallet_info =
+            core.blockchain.sqlite_db().get_accrued_rewards(addr, height);
 
     // FIXME: make this async
     oxen::log::trace(
             logcat,
-            "Initiating rewards request of {} SENT for {} at height {}",
-            amount,
+            "Initiating rewards request of {} SESH for {} at height {}",
+            wallet_info.amount,
             addr,
             height);
 
-    if (!maybe_amount)
+    if (!wallet_info.found)
         throw oxen::traced<std::invalid_argument>(fmt::format(
                 "Aggregating a rewards request for '{}' at height {} is invalid because "
                 "reward data is not available for that height. Request rejected.",
@@ -832,14 +870,17 @@ void bls_aggregator::rewards_request(
     // NOTE: Validate the arguments
     if (!addr) {
         throw oxen::traced<std::invalid_argument>(
-                "Aggregating a rewards request for the zero address for {} SENT at height {} is "
+                "Aggregating a rewards request for the zero address for {} SESH at height {} is "
                 "invalid. Request rejected"_format(
-                        addr, amount, height, core.service_node_list.height()));
+                        addr,
+                        wallet_info.amount.to_coin(),
+                        height,
+                        core.service_node_list.height()));
     }
 
-    if (amount == 0) {
+    if (wallet_info.amount.to_coin() == 0) {
         throw oxen::traced<std::invalid_argument>(
-                "Aggregating a rewards request for '{}' for 0 SENT at height {} is invalid because "
+                "Aggregating a rewards request for '{}' for 0 SESH at height {} is invalid because "
                 "no rewards are available. Request rejected."_format(addr, height));
     }
 
@@ -849,14 +890,15 @@ void bls_aggregator::rewards_request(
         auto cache_it = rewards_response_cache.find(addr);
         if (cache_it != rewards_response_cache.end()) {
             auto cache_response = cache_it->second;
-            if (cache_response->height == height && cache_response->amount == amount) {
+            if (cache_response->height == height &&
+                cache_response->amount == wallet_info.amount.to_coin()) {
                 log::trace(
                         logcat,
                         "Serving rewards request from cache for address {} at height {} with "
                         "rewards {} amount",
                         addr,
                         height,
-                        amount);
+                        wallet_info.amount.to_coin());
                 callback(cache_response);
                 return;
             }
@@ -866,10 +908,12 @@ void bls_aggregator::rewards_request(
     auto result_data = std::make_shared<aggregate_result<bls_rewards_response>>();
     auto& result = *result_data->result;
     result.addr = std::move(addr);
-    result.amount = amount;
+    result.amount = wallet_info.amount.to_coin();
     result.height = height;
     result.msg_to_sign = get_reward_balance_msg_to_sign(
-            core.get_nettype(), result.addr, tools::encode_integer_be<32>(amount));
+            core.get_nettype(),
+            result.addr,
+            tools::encode_integer_be<32>(wallet_info.amount.to_coin()));
 
     oxenc::bt_dict_producer d;
     d.append("address", tools::view_guts(result.addr));
@@ -1046,7 +1090,7 @@ void bls_aggregator::exit_liquidation_request(
         const std::variant<crypto::public_key, eth::bls_public_key>& pubkey,
         bls_exit_type type,
         std::function<void(std::shared_ptr<const bls_exit_liquidation_response>)> callback) {
-
+    ZoneScoped;
     const auto* sn_pubkey = std::get_if<crypto::public_key>(&pubkey);
     const auto* bls_pubkey = std::get_if<eth::bls_public_key>(&pubkey);
 

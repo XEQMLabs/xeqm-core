@@ -32,6 +32,7 @@ inline constexpr network_config config{
         .RPC_DEFAULT_PORT = devnet::config.RPC_DEFAULT_PORT,
         .QNET_DEFAULT_PORT = devnet::config.QNET_DEFAULT_PORT,
         .NETWORK_ID = devnet::config.NETWORK_ID,
+        .P2P_SEED_NODES = {},
         .GENESIS_TX = devnet::config.GENESIS_TX,
         .GENESIS_NONCE = devnet::config.GENESIS_NONCE,
         .GOVERNANCE_REWARD_INTERVAL = mainnet::config.GOVERNANCE_REWARD_INTERVAL,
@@ -41,7 +42,10 @@ inline constexpr network_config config{
         .UPTIME_PROOF_CHECK_INTERVAL = mainnet::config.UPTIME_PROOF_CHECK_INTERVAL,
         .UPTIME_PROOF_FREQUENCY = testnet::config.UPTIME_PROOF_FREQUENCY,
         .UPTIME_PROOF_VALIDITY = testnet::config.UPTIME_PROOF_VALIDITY,
-        .HAVE_STORAGE_AND_LOKINET = false,
+        .MAX_DEACTIVATE_PER_BLOCK = testnet::config.MAX_DEACTIVATE_PER_BLOCK,
+        .HAVE_STORAGE_SERVER = false,
+        .HAVE_SESSION_ROUTER = false,
+        .HAVE_LOKINET = false,
         .TARGET_BLOCK_TIME = TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = 3s,
         .PULSE_ROUND_TIMEOUT = 4s,
@@ -65,6 +69,7 @@ inline constexpr network_config config{
         // locally and pulse quorums take time to create blocks which bloat the
         // test duration.
         .ETH_EXIT_BUFFER = 1,
+        .ETH_DEREG_BUFFER = 1,
         .ETHEREUM_CHAIN_ID = 31337,
         .ETHEREUM_REWARDS_CONTRACT = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"sv,
         .ETHEREUM_POOL_CONTRACT = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"sv,

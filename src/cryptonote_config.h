@@ -46,7 +46,7 @@ namespace cryptonote {
 inline constexpr uint64_t MAX_BLOCK_NUMBER = 500000000;
 inline constexpr size_t MAX_TX_SIZE = 1000000;
 inline constexpr uint64_t MAX_TX_PER_BLOCK = 0x10000000;
-inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 0;
+inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 30;
 inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 6;
 inline constexpr uint64_t TX_OUTPUT_DECOYS = 11;
 inline constexpr size_t TX_BULLETPROOF_MAX_OUTPUTS = 16;
@@ -86,7 +86,10 @@ inline constexpr auto ETH_L2_DEFAULT_REQUEST_TIMEOUT = 5s;
 // contract state in a single request.  If more than this are required multiple requests will be
 // used to retrieve the logs.  Can be adjusted at runtime using the --l2-max-logs command
 // line/config file setting.
-inline constexpr auto ETH_L2_DEFAULT_MAX_LOGS = 1000;
+inline constexpr auto ETH_L2_DEFAULT_MAX_LOGS = 500;
+// The default value for the minimum time between ethereum log update requests.  Can be adjusted
+// at runtime using the --l2-update-cooldown command line/config file setting.
+inline constexpr auto ETH_L2_DEFAULT_UPDATE_COOLDOWN = 1250ms;
 // When refreshing, this controls how often we get heights from *all* configured L2 providers
 // (instead of just the primary one) to check whether L2 providers are in sync.  (This only applies
 // when multiple L2 providers are in use).
@@ -167,9 +170,12 @@ using MAXIMUM_ACCEPTABLE_STAKE = std::ratio<101, 100>;
 // precision of HF19+ registrations (i.e. to a percentage with two decimal places of precision).
 inline constexpr uint64_t STAKING_FEE_BASIS = 10'000;
 
-// We calculate and store batch rewards in thousanths of atomic OXEN/SENT, to reduce the size of
+// Equilibria Horizon: Maximum operator fee is 10% (1,000 basis points out of 10,000)
+inline constexpr uint64_t MAX_OPERATOR_FEE_BASIS = 1'000;
+
+// We calculate and store batch rewards in thousanths of atomic OXEN/SESH, to reduce the size of
 // errors from integer division of rewards.
-constexpr uint64_t BATCH_REWARD_FACTOR = 1000;
+constexpr int64_t BATCH_REWARD_FACTOR = 1000;
 
 // If we don't hear any SS ping/lokinet session test failures for more than this long then we
 // start considering the SN as passing for the purpose of obligation testing until we get
@@ -256,6 +262,7 @@ enum class hf : uint8_t {
     hf19_reward_batching,
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
+    hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
 
     _next,
     none = 0
@@ -271,7 +278,7 @@ constexpr auto hf_prev(hf x) {
 
 // This is here to make sure the numeric value of the top hf enum value is correct (i.e.
 // hf21_sent == 21 numerically); bump this when adding a new hf.
-static_assert(static_cast<uint8_t>(hf_max) == 21);
+static_assert(static_cast<uint8_t>(hf_max) == 22);
 
 // Constants for which hardfork activates various features:
 namespace feature {
@@ -288,7 +295,7 @@ namespace feature {
     constexpr auto ENFORCE_MIN_AGE = hf::hf16_pulse;
     constexpr auto EFFECTIVE_SHORT_TERM_MEDIAN_IN_PENALTY = hf::hf16_pulse;
     constexpr auto PULSE = hf::hf16_pulse;
-    constexpr auto CLSAG = hf::hf16_pulse;
+    constexpr auto CLSAG = hf::hf7;
     constexpr auto PROOF_BTENC = hf::hf18;
     constexpr auto ETH_TRANSITION = hf::hf20_eth_transition;
     constexpr auto ETH_BLS = hf::hf21_eth;

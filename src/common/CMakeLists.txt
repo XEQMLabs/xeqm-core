@@ -34,7 +34,7 @@ oxen_add_library(common
   command_line.cpp
   error.cpp
   expect.cpp
-  $<$<CONFIG:Debug>:exception.cpp>
+  exception.cpp
   file.cpp
   i18n.cpp
   json_binary_proxy.cpp
@@ -56,6 +56,10 @@ oxen_add_library(common
 set_source_files_properties(${PROJECT_BINARY_DIR}/translations/translation_files.cpp PROPERTIES GENERATED 1)
 add_dependencies(common generate_translation_data)
 
+option(WITH_STACKTRACE "Enable stacktraces on exceptions" OFF)
+if (WITH_STACKTRACE)
+  target_compile_definitions(common PUBLIC WITH_STACKTRACE)
+endif()
 
 if (BACKCOMPAT)
   target_sources(common PRIVATE compat/glibc_compat.cpp)
@@ -65,6 +69,7 @@ target_link_libraries(common
   PUBLIC
     $<$<CONFIG:Debug>:cpptrace::cpptrace>
     cncrypto
+    oxenc::oxenc
     oxenmq::oxenmq
     oxen::logging
     nlohmann_json::nlohmann_json
@@ -73,3 +78,8 @@ target_link_libraries(common
     sodium
     logging
     extra)
+
+if (TRACY_ENABLE)
+  target_link_libraries(common PUBLIC Tracy::TracyClient)
+endif()
+

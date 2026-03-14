@@ -17,9 +17,9 @@ inline constexpr size_t PULSE_QUORUM_ENTROPY_LAG =
         21;  // How many blocks back from the tip of the Blockchain to source entropy for the Pulse
              // quorums.
 
-inline constexpr size_t PULSE_QUORUM_NUM_VALIDATORS = 11;
-inline constexpr size_t PULSE_QUORUM_SIZE = PULSE_QUORUM_NUM_VALIDATORS + 1 /*Leader*/;
-inline constexpr size_t PULSE_BLOCK_REQUIRED_SIGNATURES =
+inline constexpr int PULSE_QUORUM_NUM_VALIDATORS = 11;
+inline constexpr int PULSE_QUORUM_SIZE = PULSE_QUORUM_NUM_VALIDATORS + 1 /*Leader*/;
+inline constexpr int PULSE_BLOCK_REQUIRED_SIGNATURES =
         7;  // A block must have exactly N signatures to be considered properly
 
 static_assert(PULSE_QUORUM_NUM_VALIDATORS >= PULSE_BLOCK_REQUIRED_SIGNATURES);
@@ -31,8 +31,7 @@ static_assert(
 
 constexpr uint16_t pulse_validator_bit_mask() {
     uint16_t result = 0;
-    for (size_t validator_index = 0; validator_index < PULSE_QUORUM_NUM_VALIDATORS;
-         validator_index++)
+    for (int validator_index = 0; validator_index < PULSE_QUORUM_NUM_VALIDATORS; validator_index++)
         result |= 1 << validator_index;
     return result;
 }
@@ -193,8 +192,9 @@ inline constexpr size_t STEALING_SWARM_UPPER_PERCENTILE = 75;
 inline constexpr uint64_t VOTE_OR_TX_VERIFY_HEIGHT_BUFFER = 5;
 
 // The minimum versions that we accept for local oxend pings from our *own* companion services:
-inline constexpr std::array<uint16_t, 3> MIN_STORAGE_SERVER_VERSION{{2, 8, 0}};
-inline constexpr std::array<uint16_t, 3> MIN_LOKINET_VERSION{{0, 9, 11}};
+inline constexpr std::array<uint16_t, 3> MIN_STORAGE_SERVER_VERSION{{2, 11, 0}};
+inline constexpr std::array<uint16_t, 3> MIN_LOKINET_VERSION{{0, 9, 14}};
+inline constexpr std::array<uint16_t, 3> MIN_SESSION_ROUTER_VERSION{{1, 0, 0}};
 
 // The minimum accepted version number, broadcasted by Service Nodes via uptime proofs for each
 // hardfork
@@ -203,12 +203,31 @@ struct proof_version {
     std::array<uint16_t, 3> oxend;
     std::array<uint16_t, 3> lokinet;
     std::array<uint16_t, 3> storage_server;
+    std::array<uint16_t, 3> session_router;
 };
 
-inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS = {
-        proof_version{{cryptonote::hf::hf19_reward_batching, 6}, {10, 6, 0}, {0, 9, 11}, {2, 8, 0}},
-        proof_version{{cryptonote::hf::hf21_eth, 0}, {11, 0, 7}, {0, 9, 11}, {2, 8, 0}},
+inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_MAINNET = {
+        proof_version{
+                {cryptonote::hf::hf22_eth_fixup, 0}, {11, 4, 0}, {0, 9, 13}, {2, 10, 0}, {0, 0, 0}},
+        proof_version{
+                {cryptonote::hf::hf22_eth_fixup, 1}, {11, 5, 0}, {0, 9, 14}, {2, 11, 0}, {0, 0, 0}},
 };
+inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_STAGENET = {
+        proof_version{{cryptonote::hf::hf21_eth, 0}, {11, 0, 7}, {0, 9, 13}, {2, 10, 0}, {0, 0, 0}},
+};
+inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_TESTNET = {
+        proof_version{
+                {cryptonote::hf::hf22_eth_fixup, 0}, {11, 6, 0}, {0, 0, 0}, {2, 11, 1}, {1, 0, 0}},
+};
+
+inline constexpr std::span<const proof_version> MIN_UPTIME_PROOF_VERSIONS(
+        cryptonote::network_type nettype) {
+    switch (nettype) {
+        case cryptonote::network_type::MAINNET: return MIN_UPTIME_PROOF_VERSIONS_MAINNET;
+        case cryptonote::network_type::STAGENET: return MIN_UPTIME_PROOF_VERSIONS_STAGENET;
+        default: return MIN_UPTIME_PROOF_VERSIONS_TESTNET;
+    }
+}
 
 using swarm_id_t = uint64_t;
 inline constexpr swarm_id_t UNASSIGNED_SWARM_ID = UINT64_MAX;

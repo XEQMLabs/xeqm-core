@@ -4,6 +4,11 @@
 #include "testnet.h"
 
 namespace cryptonote::config::stagenet {
+
+inline constexpr std::array seeds = {
+        "104.243.40.38:11020"sv,  // angus.oxen.io
+};
+
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::STAGENET,
         .DEFAULT_CONFIG_SUBDIR = "stagenet"sv,
@@ -36,7 +41,10 @@ inline constexpr network_config config{
         .UPTIME_PROOF_CHECK_INTERVAL = mainnet::config.UPTIME_PROOF_CHECK_INTERVAL,
         .UPTIME_PROOF_FREQUENCY = testnet::config.UPTIME_PROOF_FREQUENCY,
         .UPTIME_PROOF_VALIDITY = testnet::config.UPTIME_PROOF_VALIDITY,
-        .HAVE_STORAGE_AND_LOKINET = false,  // storage & lokinet
+        .MAX_DEACTIVATE_PER_BLOCK = testnet::config.MAX_DEACTIVATE_PER_BLOCK,
+        .HAVE_STORAGE_SERVER = false,
+        .HAVE_SESSION_ROUTER = false,
+        .HAVE_LOKINET = false,
         .TARGET_BLOCK_TIME = mainnet::TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
@@ -55,6 +63,7 @@ inline constexpr network_config config{
         .HISTORY_RECENT_KEEP_WINDOW = mainnet::config.HISTORY_RECENT_KEEP_WINDOW,
         // Much shorter than mainnet so that you can test this more easily.
         .ETH_EXIT_BUFFER = 2h / mainnet::config.TARGET_BLOCK_TIME,
+        .ETH_DEREG_BUFFER = 2h / mainnet::config.TARGET_BLOCK_TIME,
         .ETHEREUM_CHAIN_ID = 421614,
         .ETHEREUM_REWARDS_CONTRACT = "0x9d8aB00880CBBdc2Dcd29C179779469A82E7be35"sv,
         .ETHEREUM_POOL_CONTRACT = "0xaAD853fE7091728dac0DAa7b69990ee68abFC636"sv,
@@ -62,8 +71,6 @@ inline constexpr network_config config{
         .L2_TRACKER_SAFE_BLOCKS = mainnet::config.L2_TRACKER_SAFE_BLOCKS,
         .L2_NODE_LIST_PURGE_BLOCKS = testnet::config.L2_NODE_LIST_PURGE_BLOCKS,
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = testnet::config.L2_NODE_LIST_PURGE_MIN_OXEN_AGE,
-        // FIXME: once mainnet is close to launching this will move to an alternative
-        // stagenet-specific URL and stake.getsession.org will be used for mainnet staking:
-        .DEFAULT_STAKING_URL = "https://stake.getsession.org"sv,
+        .DEFAULT_STAKING_URL = "https://testnet.stake.getsession.org"sv,
 };
 }  // namespace cryptonote::config::stagenet

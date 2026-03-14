@@ -45,9 +45,6 @@
 #include "p2p/net_node.h"
 #include "rpc/common/rpc_command.h"
 
-#undef OXEN_DEFAULT_LOG_CATEGORY
-#define OXEN_DEFAULT_LOG_CATEGORY "daemon.rpc"
-
 namespace boost::program_options {
 class options_description;
 class variables_map;
@@ -159,6 +156,7 @@ class core_rpc_server {
     void invoke(SYNC_INFO& sync, rpc_context context);
     void invoke(GET_SERVICE_NODE_STATUS& sns, rpc_context context);
     void invoke(GET_SERVICE_NODES& sns, rpc_context context);
+    void invoke(GET_ALL_UPTIME_PROOFS& req, rpc_context context);
     void invoke(GET_PENDING_EVENTS& sns, rpc_context context);
     void invoke(GET_LIMIT& limit, rpc_context context);
     void invoke(SET_LIMIT& limit, rpc_context context);
@@ -177,8 +175,10 @@ class core_rpc_server {
     void invoke(POP_BLOCKS& pop_blocks, rpc_context context);
     void invoke(LOKINET_PING& lokinet_ping, rpc_context context);
     void invoke(STORAGE_SERVER_PING& storage_server_ping, rpc_context context);
+    void invoke(SESSION_ROUTER_PING& ping, rpc_context context);
     void invoke(PRUNE_BLOCKCHAIN& prune_blockchain, rpc_context context);
     void invoke(GET_SN_STATE_CHANGES& get_sn_state_changes, rpc_context context);
+    void invoke(GET_L2_TRACKER_STATE& req, rpc_context context);
     void invoke(TEST_TRIGGER_P2P_RESYNC& test_trigger_p2p_resync, rpc_context context);
     void invoke(TEST_TRIGGER_UPTIME_PROOF& test_trigger_uptime_proof, rpc_context context);
     void invoke(REPORT_PEER_STATUS& report_peer_status, rpc_context context);
@@ -217,7 +217,7 @@ class core_rpc_server {
     void invoke(GET_OUTPUT_HISTOGRAM& get_output_histogram, rpc_context context);
     void invoke(ONS_OWNERS_TO_NAMES& ons_owners_to_names, rpc_context context);
     void invoke(GET_ACCRUED_REWARDS& rpc, rpc_context context);
-    void invoke(ONS_NAMES_TO_OWNERS& ons_names_to_owners, rpc_context context);
+    void invoke(ONS_INFO& info, rpc_context context);
 
     // Deprecated Monero NIH binary endpoints:
     GET_ALT_BLOCKS_HASHES_BIN::response invoke(
@@ -248,7 +248,8 @@ class core_rpc_server {
             const crypto::public_key& sn_pubkey,
             const service_nodes::service_node_info& sn_info,
             uint64_t top_height,
-            const std::unordered_map<eth::bls_public_key, bool>* removable);
+            const std::unordered_map<eth::bls_public_key, bool>* removable,
+            bool oxen10_compat_fields = false);
 
     void add_event_sn_info(
             json& entry,

@@ -110,6 +110,6 @@ nbproject
 .texlipse
 .idea/
 
-/testnet
 
 __pycache__/
+.aider*

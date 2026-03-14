@@ -10,7 +10,9 @@ inline constexpr size_t DISPLAY_DECIMAL_POINT = 9;
 
 // total number coins to be generated (old curve)
 inline constexpr uint64_t MONEY_SUPPLY = ((uint64_t)(-1));
-inline constexpr uint64_t EMISSION_LINEAR_BASE = ((uint64_t)(1) << 58);
+// Increased from (1 << 58) to (1 << 61) to support up to 1.2B coin supply
+// (original supported ~150M max, new supports ~1.2B max)
+inline constexpr uint64_t EMISSION_LINEAR_BASE = ((uint64_t)(1) << 61);
 inline constexpr uint64_t EMISSION_SUPPLY_MULTIPLIER = 19;
 inline constexpr uint64_t EMISSION_SUPPLY_DIVISOR = 10;
 inline constexpr uint64_t EMISSION_DIVISOR = 2000000;
@@ -46,26 +48,26 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 //
 // -------------------------------------------------------------------------------------------------
 
-// Fixed (pre-SENT) OXEN staking requirement since HF16 (before that it was height dependent, see
-// service_node_rules.cpp):
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 15'000 * COIN;
+// Equilibria Horizon: Full stake requirement is 100,000 XEQ
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 100'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100 * COIN;
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 // Max contributors since HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// SENT staking requirement starting at HF20
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT = 25'000 * COIN;
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT_TESTNET = 20'000 * COIN;
-inline constexpr uint64_t SENT_STAKING_REQUIREMENT_LOCALDEV = 120 * COIN;
+// Equilibria Horizon: SESH staking requirement is also 100,000 XEQ
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 100'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 
-// Initial SENT reward for the first few blocks of HF21 (before there are L2_REWARD_CONSENSUS_BLOCKS
+// Initial SESH reward for the first few blocks of HF21 (before there are L2_REWARD_CONSENSUS_BLOCKS
 // blocks to achieve reward consensus).  This value is based on a 40M initial reward pool with 15.1%
 // annual simple payout rate (= 14% compounding rate).
 inline constexpr uint64_t ETH_BLS_INITIAL_REWARD = 40000000'000000000 * 151 / 1000 / 365 / 720;
 
+// Equilibria Horizon: Minimum operator contribution is 25% of staking requirement (25,000 XEQ)
 constexpr uint64_t MINIMUM_OPERATOR_CONTRIBUTION(uint64_t staking_requirement) {
     return staking_requirement / 4;
 }
@@ -123,14 +125,21 @@ constexpr bool is_lokinet_type(mapping_type t) {
 // days per registration "year" to allow for some blockchain time drift + leap years.
 constexpr uint64_t REGISTRATION_YEAR_DAYS = 368;
 
-constexpr uint64_t burn_needed(cryptonote::hf hf_version, mapping_type type) {
+constexpr uint64_t burn_needed(
+        cryptonote::hf hf_version, cryptonote::network_type nettype, mapping_type type) {
     uint64_t result = 0;
+
+    // TESTNET has HF21 ONS regs at the lower fee, so add this hack to make it still sync:
+    // FIXME: remove this when rebooting testnet!
+    const bool is_testnet_hf21 =
+            hf_version == cryptonote::hf::hf21_eth && nettype == cryptonote::network_type::TESTNET;
 
     // The base amount for session/wallet/lokinet-1year:
     const uint64_t basic_fee =
-            (hf_version >= cryptonote::hf::hf18         ? 7 * oxen::COIN
-             : hf_version >= cryptonote::hf::hf16_pulse ? 15 * oxen::COIN
-                                                        : 20 * oxen::COIN);
+            oxen::COIN * (hf_version >= cryptonote::hf::hf21_eth && !is_testnet_hf21 ? 100
+                          : hf_version >= cryptonote::hf::hf18                       ? 7
+                          : hf_version >= cryptonote::hf::hf16_pulse                 ? 15
+                                                                                     : 20);
     switch (type) {
         case mapping_type::update_record_internal: result = 0; break;
 

@@ -211,7 +211,7 @@ std::vector<std::string> WalletManagerImpl::findWallets(std::string_view path_) 
             filename.replace_extension();
             if (fs::exists(filename)) {
                 log::trace(logcat, "Found wallet: {}", filename.string());
-                result.push_back(tools::convert_str<char>(filename.u8string()));
+                result.push_back(tools::path_to_str(filename));
             }
         }
     }
@@ -283,9 +283,7 @@ WalletManagerBase* WalletManagerFactory::getWalletManager() {
 
 EXPORT
 void WalletManagerFactory::setLogLevel(int level) {
-    auto log_level = oxen::logging::parse_level(level);
-    if (log_level.has_value())
-        log::reset_level(*log_level);
+    log::reset_level(oxen::logging::parse_level(level));
 }
 
 EXPORT

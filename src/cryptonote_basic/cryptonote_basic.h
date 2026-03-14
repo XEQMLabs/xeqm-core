@@ -345,7 +345,7 @@ class transaction final : public transaction_prefix {
                             vin.size(),
                             vout.size(),
                             vin.size() > 0 && std::holds_alternative<txin_to_key>(vin[0])
-                                    ? var::get<txin_to_key>(vin[0]).key_offsets.size() - 1
+                                    ? std::get<txin_to_key>(vin[0]).key_offsets.size() - 1
                                     : 0);
                 }
             }
@@ -438,7 +438,7 @@ struct block_header {
     //        Does not affect the block hash as a result.
     // HF20 - same meaning as HF19, except that it is serialized as part of the block header instead
     //        of the block, and thus affects the block hash.
-    // HF21 - the current SENT per-block reward rate, with various rules imposed upon how it
+    // HF21 - the current SESH per-block reward rate, with various rules imposed upon how it
     //        can change from one block to the next.  This value is implicitly determined by the
     //        l2_reward value published in recent blocks.
     //

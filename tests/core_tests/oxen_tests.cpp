@@ -142,7 +142,7 @@ bool oxen_checkpointing_alt_chain_more_service_node_checkpoints_less_pow_overtak
 
   gen.add_blocks_until_next_checkpointable_height();
   oxen_chain_generator fork_with_more_checkpoints = gen;
-  gen.add_n_blocks(60); // Add blocks so that this chain has more PoW
+  gen.add_n_blocks(55); // Add blocks so that this chain has more PoW
 
   cryptonote::checkpoint_t checkpoint = fork_with_more_checkpoints.create_service_node_checkpoint(fork_with_more_checkpoints.height(), service_nodes::CHECKPOINT_MIN_VOTES);
   fork_with_more_checkpoints.create_and_add_next_block({}, &checkpoint);
@@ -795,7 +795,7 @@ bool oxen_core_test_deregister_preferred::generate(std::vector<test_event_entry>
       map_hash2tx_t mtx;
       {
       std::vector<cryptonote::block> chain;
-      CHECK_TEST_CONDITION(find_block_chain(events, chain, mtx, get_block_hash(var::get<cryptonote::block>(events[0]))));
+      CHECK_TEST_CONDITION(find_block_chain(events, chain, mtx, get_block_hash(std::get<cryptonote::block>(events[0]))));
       }
 
       const auto deregister_count =
@@ -1390,7 +1390,7 @@ bool oxen_name_system_get_mappings::generate(std::vector<test_event_entry> &even
       DEFINE_TESTS_ERROR_CONTEXT("check_ons_entries");
       ons::name_system_db &ons_db = c.blockchain.name_system_db();
       std::string session_name_hash = ons::name_to_base64_hash(tools::lowercase_ascii_string(session_name1));
-      std::vector<ons::mapping_record> records = ons_db.get_mappings({ons::mapping_type::session}, session_name_hash);
+      std::vector<ons::mapping_record> records = ons_db.get_mappings(session_name_hash, std::nullopt, {ons::mapping_type::session});
       CHECK_EQ(records.size(), 1);
       CHECK_TEST_CONDITION(verify_ons_mapping_record(perr_context, records[0], ons::mapping_type::session, session_name1, bob_key.session_value, session_height, std::nullopt, session_tx_hash, bob_key.owner, {} /*backup_owner*/));
       return true;
@@ -1532,7 +1532,7 @@ bool oxen_name_system_invalid_tx_extra_params::generate(std::vector<test_event_e
         char const *reason) -> void {
       uint64_t new_height    = gen.top().block.get_height() + 1;
       auto new_hf_version = gen.get_hf_version_at(new_height);
-      uint64_t burn_requirement = ons::burn_needed(new_hf_version, static_cast<ons::mapping_type>(data.type));
+      uint64_t burn_requirement = ons::burn_needed(new_hf_version, cryptonote::network_type::FAKECHAIN, static_cast<ons::mapping_type>(data.type));
 
       std::vector<uint8_t> extra;
       cryptonote::add_oxen_name_system_to_tx_extra(extra, data);
@@ -1956,7 +1956,7 @@ bool oxen_name_system_name_value_max_lengths::generate(std::vector<test_event_en
 
     uint64_t new_height    = gen.top().block.get_height() + 1;
     auto new_hf_version = gen.get_hf_version_at(new_height);
-    uint64_t burn_requirement = ons::burn_needed(new_hf_version, static_cast<ons::mapping_type>(data.type));
+    uint64_t burn_requirement = ons::burn_needed(new_hf_version, cryptonote::network_type::FAKECHAIN, static_cast<ons::mapping_type>(data.type));
     std::vector<uint8_t> extra;
     cryptonote::add_oxen_name_system_to_tx_extra(extra, data);
     cryptonote::add_burned_amount_to_tx_extra(extra, burn_requirement);
@@ -2092,7 +2092,7 @@ bool oxen_name_system_update_mapping::generate(std::vector<test_event_entry> &ev
     ons::name_system_db &ons_db = c.blockchain.name_system_db();
 
     std::string name_hash = ons::name_to_base64_hash(session_name1);
-    std::vector<ons::mapping_record> records = ons_db.get_mappings({ons::mapping_type::session}, name_hash);
+    std::vector<ons::mapping_record> records = ons_db.get_mappings(name_hash, std::nullopt, {ons::mapping_type::session});
 
     CHECK_EQ(records.size(), 1);
     CHECK_TEST_CONDITION(verify_ons_mapping_record(perr_context, records[0], ons::mapping_type::session, session_name1, miner_key.session_value, register_height, std::nullopt, session_tx_hash1, miner_key.owner, {} /*backup_owner*/));
@@ -2118,7 +2118,7 @@ bool oxen_name_system_update_mapping::generate(std::vector<test_event_entry> &ev
     ons::name_system_db &ons_db = c.blockchain.name_system_db();
 
     std::string name_hash = ons::name_to_base64_hash(session_name1);
-    std::vector<ons::mapping_record> records = ons_db.get_mappings({ons::mapping_type::session}, name_hash);
+    std::vector<ons::mapping_record> records = ons_db.get_mappings(name_hash, std::nullopt, {ons::mapping_type::session});
 
     CHECK_EQ(records.size(), 1);
     CHECK_TEST_CONDITION(verify_ons_mapping_record(perr_context, records[0], ons::mapping_type::session, session_name1, bob_key.session_value, blockchain_height, std::nullopt, session_tx_hash2, miner_key.owner, {} /*backup_owner*/));
@@ -2541,7 +2541,7 @@ bool oxen_name_system_wrong_burn::generate(std::vector<test_event_entry> &events
 
         uint64_t new_height      = gen.top().block.get_height() + 1;
         auto new_hf_version = gen.get_hf_version_at(new_height);
-        uint64_t burn            = ons::burn_needed(new_hf_version, type);
+        uint64_t burn            = ons::burn_needed(new_hf_version, cryptonote::network_type::FAKECHAIN, type);
         if (under_burn) burn -= 1;
         else            burn += 1;
 
@@ -2578,7 +2578,7 @@ bool oxen_name_system_wrong_version::generate(std::vector<test_event_entry> &eve
 
   uint64_t new_height       = gen.top().block.get_height() + 1;
   auto new_hf_version = gen.get_hf_version_at(new_height);
-  uint64_t burn_requirement = ons::burn_needed(new_hf_version, ons::mapping_type::session);
+  uint64_t burn_requirement = ons::burn_needed(new_hf_version, cryptonote::network_type::FAKECHAIN, ons::mapping_type::session);
 
   std::vector<uint8_t> extra;
   cryptonote::add_oxen_name_system_to_tx_extra(extra, data);
@@ -2799,7 +2799,7 @@ bool oxen_service_nodes_test_rollback::generate(std::vector<test_event_entry>& e
       /// obtain public key of node A
       const auto event_a = events.at(deregister_index);
       CHECK_TEST_CONDITION(std::holds_alternative<oxen_blockchain_addable<oxen_transaction>>(event_a));
-      const auto dereg_tx = var::get<oxen_blockchain_addable<oxen_transaction>>(event_a);
+      const auto dereg_tx = std::get<oxen_blockchain_addable<oxen_transaction>>(event_a);
       CHECK_TEST_CONDITION(dereg_tx.data.tx.type == cryptonote::txtype::state_change);
 
       cryptonote::tx_extra_service_node_state_change deregistration;
@@ -2820,7 +2820,7 @@ bool oxen_service_nodes_test_rollback::generate(std::vector<test_event_entry>& e
       /// obtain public key of node B
       const auto event_b = events.at(reg_evnt_idx);
       CHECK_TEST_CONDITION(std::holds_alternative<oxen_blockchain_addable<oxen_transaction>>(event_b));
-      const auto reg_tx = var::get<oxen_blockchain_addable<oxen_transaction>>(event_b);
+      const auto reg_tx = std::get<oxen_blockchain_addable<oxen_transaction>>(event_b);
 
       crypto::public_key pk_b;
       if (!cryptonote::get_service_node_pubkey_from_tx_extra(reg_tx.data.tx.extra, pk_b)) {
@@ -3327,7 +3327,7 @@ bool oxen_pulse_non_participating_validator::generate(std::vector<test_event_ent
     {
       std::vector<service_nodes::pubkey_and_sninfo> active_snode_list = params.prev.service_node_state.active_service_nodes_infos();
       std::vector<crypto::hash> entropy = service_nodes::get_pulse_entropy_for_next_block(gen.db_, params.prev.block, entry.block.pulse.round);
-      quorum = generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, entry.block.major_version, active_snode_list, entropy, entry.block.pulse.round);
+      quorum = generate_pulse_quorum(cryptonote::network_type::FAKECHAIN, params.block_leader.key, entry.block.major_version, active_snode_list, entropy, entry.block.pulse.round, entry.block.get_height());
       assert(quorum.validators.size() == service_nodes::PULSE_QUORUM_NUM_VALIDATORS);
       assert(quorum.workers.size() == 1);
     }
@@ -3829,8 +3829,8 @@ bool oxen_batch_sn_rewards_pop_blocks::generate(std::vector<test_event_entry> &e
       // Check that the database has a lower amount that does not include the popped block
       batched_rewards_earned = MK_COINS(1) * 16.5 * (more_blocks - conf.SERVICE_NODE_PAYABLE_AFTER_BLOCKS - 1);
       CHECK_EQ((*records)[0].amount,
-              cryptonote::reward_money::coin_amount(batched_rewards_earned));
-      CHECK_EQ(tools::view_guts((*records)[0].address_info.address), tools::view_guts(alice.get_keys().m_account_address));
+              cryptonote::reward_money::from_coin(batched_rewards_earned));
+      CHECK_EQ(tools::view_guts((*records)[0].address), tools::view_guts(alice.get_keys().m_account_address));
     }
     else
       CHECK_EQ((*records).size(), 0);
@@ -3916,8 +3916,8 @@ bool oxen_batch_sn_rewards_pop_blocks_after_big_cycle::generate(std::vector<test
 
     auto records = sqliteDB.get_sn_payments(curr_height);
     CHECK_EQ(records.size(), 1);
-    CHECK_EQ(records[0].amount, cryptonote::reward_money::coin_amount(amount));
-    CHECK_EQ(tools::view_guts(records[0].address_info.address), tools::view_guts(alice.get_keys().m_account_address));
+    CHECK_EQ(records[0].amount, cryptonote::reward_money::from_coin(amount));
+    CHECK_EQ(tools::view_guts(records[0].address), tools::view_guts(alice.get_keys().m_account_address));
 
     return true;
   });

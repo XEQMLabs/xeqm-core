@@ -14,6 +14,7 @@ local default_deps_nocxx = [
   'libunbound-dev',
   'libunwind8-dev',
   'libusb-1.0-0-dev',
+  'libzstd-dev',
   'nettle-dev',
   'pkg-config',
   'python3',
@@ -85,7 +86,7 @@ local debian_pipeline(name,
         'mkdir build',
         'cd build',
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fdiagnostics-color=always -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
-        '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps '
+        '-DLOCAL_MIRROR=https://oxen.rocks/deps '
         + cmake_options({ USE_LTO: lto, WARNINGS_AS_ERRORS: werror, BUILD_TESTS: build_tests || run_tests, BUILD_EVERYTHING: build_everything })
         + cmake_extra,
       ] + (
@@ -112,7 +113,7 @@ local debian_pipeline(name,
 local clang(version, lto=true) = debian_pipeline(
   'Debian sid/clang-' + version + ' (amd64)',
   docker_base + 'debian-sid-clang',
-  deps=['clang-' + version, 'llvm-' + version] + default_deps_nocxx,
+  deps=['clang-' + version, 'clang-tools-' + version, 'llvm-' + version] + default_deps_nocxx,
   cmake_extra='-DCMAKE_C_COMPILER=clang-' + version + ' -DCMAKE_CXX_COMPILER=clang++-' + version + ' ',
   lto=lto,
   build_everything=true
@@ -124,11 +125,9 @@ local distro_deb_suffix = {
   forky: '~deb14',
   trixie: '~deb13',
   bookworm: '~deb12',
-  bullseye: '~deb11',
-  oracular: '~ubuntu2410',
+  questing: '~ubuntu2510',
   noble: '~ubuntu2404',
   jammy: '~ubuntu2204',
-  focal: '~ubuntu2004',
 };
 local distro_fmtspdsecp(distro) = !(distro == 'bullseye' || distro == 'jammy' || distro == 'focal');
 local distro_build_env(distro, deb_suffix_base) = {
@@ -206,8 +205,8 @@ local mac_builder(name,
         'cd build',
         'cmake .. -G Ninja -DCMAKE_CXX_FLAGS=-fcolor-diagnostics -DCMAKE_BUILD_TYPE=' + build_type + ' ' +
         '-DOXEN_LOGGING_FORCE_SUBMODULES=ON ' +
-        '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps -DUSE_LTO=' + (if lto then 'ON ' else 'OFF ') +
-        (if werror then '-DWARNINGS_AS_ERRORS=ON ' else '') +
+        '-DLOCAL_MIRROR=https://oxen.rocks/deps -DUSE_LTO=' + (if lto then 'ON ' else 'OFF ') +
+        '-DWARNINGS_AS_ERRORS=' + (if werror then 'ON ' else 'OFF ') +
         (if build_tests || run_tests then '-DBUILD_TESTS=ON ' else '') +
         cmake_extra,
         'ninja -j' + jobs + ' -v',
@@ -252,10 +251,19 @@ local android_build_steps(android_abi, android_platform=21, jobs=6, cmake_extra=
   'cmake .. -DCMAKE_CXX_FLAGS=-fdiagnostics-color=always -DCMAKE_C_FLAGS=-fdiagnostics-color=always ' +
   '-DCMAKE_BUILD_TYPE=Release ' +
   '-DCMAKE_TOOLCHAIN_FILE=/usr/lib/android-ndk/build/cmake/android.toolchain.cmake ' +
-  '-DANDROID_PLATFORM=' + android_platform + ' -DANDROID_ABI=' + android_abi + ' ' +
-  cmake_options({ MONERO_SLOW_HASH: true, WARNINGS_AS_ERRORS: false, BUILD_TESTS: false }) +
-  '-DLOCAL_MIRROR=https://builds.lokinet.dev/deps ' +
-  '-DBUILD_STATIC_DEPS=ON -DSTATIC=ON -G Ninja ' + cmake_extra,
+  '-DANDROID_PLATFORM=' + android_platform + ' -DANDROID_ABI=' + android_abi + ' -DANDROID_STL=c++_shared ' +
+  '-DCMAKE_CXX_STANDARD_LIBRARIES=-lc++_shared ' +
+  cmake_options({
+    MONERO_SLOW_HASH: true,
+    WARNINGS_AS_ERRORS: false,
+    BUILD_TESTS: false,
+    RANDOMX_ENABLE_JIT: false,
+    CMAKE_POSITION_INDEPENDENT_CODE: true,
+    STATIC: true,
+    BUILD_STATIC_DEPS: true,
+  }) +
+  '-DLOCAL_MIRROR=https://oxen.rocks/deps ' +
+  '-G Ninja ' + cmake_extra,
   'ninja -j' + jobs + ' -v wallet_merged',
   'cd ..',
 ];
@@ -314,7 +322,7 @@ local gui_wallet_step_darwin = {
         'echo "Building on ${DRONE_STAGE_MACHINE}"',
         apt_get_quiet + ' update',
         apt_get_quiet + ' install -y eatmydata',
-        'eatmydata ' + apt_get_quiet + ' install --no-install-recommends -y git clang-format-16 jsonnet',
+        'eatmydata ' + apt_get_quiet + ' install --no-install-recommends -y git clang-format-19 jsonnet',
         './contrib/drone-format-verify.sh',
       ],
     }],
@@ -323,7 +331,7 @@ local gui_wallet_step_darwin = {
   // Various debian builds
   debian_pipeline('Debian sid (w/ tests) (amd64)', docker_base + 'debian-sid', lto=true, run_tests=true, build_everything=true),
   debian_pipeline('Debian sid Debug (amd64)', docker_base + 'debian-sid', build_type='Debug', build_everything=true, cmake_extra='-DBUILD_DEBUG_UTILS=ON'),
-  clang(18),
+  clang(19),
   debian_pipeline('Debian stable (i386)', docker_base + 'debian-stable/i386', cmake_extra='-DDOWNLOAD_SODIUM=ON -DARCH_ID=i386 -DARCH=i686'),
   debian_pipeline('Debian bullseye (amd64)', docker_base + 'debian-bullseye'),
   debian_pipeline('Ubuntu LTS (amd64)', docker_base + 'ubuntu-lts'),
@@ -337,7 +345,7 @@ local gui_wallet_step_darwin = {
                   build_tests=false,
                   cmake_extra='-DARCH_ID=armhf'),
 
-  // Static build (on bionic) which gets uploaded to builds.lokinet.dev:
+  // Static build (on focal) which gets uploaded to oxen.rocks:
   debian_pipeline(
     'Static (focal amd64)',
     docker_base + 'ubuntu-focal',
@@ -353,14 +361,12 @@ local gui_wallet_step_darwin = {
   snapshot_deb('trixie'),
   snapshot_deb('bookworm'),
   snapshot_deb('bookworm', buildarch='arm64', debarch='arm64', jobs=1),
-  snapshot_deb('bullseye'),
-  snapshot_deb('oracular'),
+  snapshot_deb('questing'),
   snapshot_deb('noble'),
   snapshot_deb('noble', buildarch='arm64', debarch='arm64', jobs=1),
   snapshot_deb('jammy'),
-  snapshot_deb('focal'),
 
-  // Static mingw build (on focal) which gets uploaded to builds.lokinet.dev:
+  // Static mingw build (on focal) which gets uploaded to oxen.rocks:
   debian_pipeline(
     'Static (win64)',
     docker_base + 'debian-win32-cross',
@@ -415,7 +421,7 @@ local gui_wallet_step_darwin = {
                     apt_get_quiet + ' install -y eatmydata',
                     'eatmydata ' + apt_get_quiet + ' dist-upgrade -y',
                     'eatmydata ' + apt_get_quiet + ' install -y --no-install-recommends '
-                    + 'cmake g++ git ninja-build ccache tar xz-utils google-android-ndk-r26c-installer '
+                    + 'cmake g++ git ninja-build ccache tar xz-utils google-android-ndk-r28-installer '
                     + std.join(' ', static_build_deps),
                   ]
                   + android_build_steps('armeabi-v7a', cmake_extra='-DARCH=armv7-a -DARCH_ID=arm32')
@@ -439,22 +445,45 @@ local gui_wallet_step_darwin = {
       {
         name: 'build',
         environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
-        commands: submodules_commands + [
-          'mkdir -p build/{arm64,sim64}',
-          'cd build/arm64',
-          'cmake ../.. -G Ninja ' +
-          '-DCMAKE_TOOLCHAIN_FILE=../../cmake/ios.toolchain.cmake -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+        commands: [
+          'mkdir -p build',
+          'cd build',
+          'cmake .. -G Ninja ' +
+          '-DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+          '-DRANDOMX_ENABLE_JIT=OFF ' +
           '-DSTATIC=ON -DBUILD_STATIC_DEPS=ON -DUSE_LTO=OFF -DCMAKE_BUILD_TYPE=Release ' +
-          '-DRANDOMX_ENABLE_JIT=OFF -DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
+          '-DLOCAL_MIRROR=https://oxen.rocks/deps ' +
+          '-DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
           'ninja -j6 -v wallet_merged',
-          'cd ../sim64',
-          'cmake ../.. -G Ninja ' +
-          '-DCMAKE_TOOLCHAIN_FILE=../../cmake/ios.toolchain.cmake -DPLATFORM=SIMULATOR64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+          'cd ..',
+          './utils/build_scripts/drone-ios-static-upload.sh ios',
+        ],
+      },
+    ],
+  },
+  // iOS simulator build
+  {
+    name: 'iOS (sim) wallet_api',
+    kind: 'pipeline',
+    type: 'exec',
+    platform: { os: 'darwin', arch: 'arm64' },
+    steps: [
+      { name: 'submodules', commands: submodules_commands },
+      {
+        name: 'build',
+        environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },
+        commands: [
+          'mkdir -p build',
+          'cd build',
+          'cmake .. -G Ninja ' +
+          '-DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake -DPLATFORM=SIMULATORARM64 -DDEPLOYMENT_TARGET=13 -DENABLE_VISIBILITY=ON -DENABLE_BITCODE=OFF ' +
+          '-DRANDOMX_ENABLE_JIT=OFF ' +
           '-DSTATIC=ON -DBUILD_STATIC_DEPS=ON -DUSE_LTO=OFF -DCMAKE_BUILD_TYPE=Release ' +
-          '-DRANDOMX_ENABLE_JIT=OFF -DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
+          '-DLOCAL_MIRROR=https://oxen.rocks/deps ' +
+          '-DCMAKE_CXX_FLAGS=-fcolor-diagnostics',
           'ninja -j6 -v wallet_merged',
-          'cd ../..',
-          './utils/build_scripts/drone-ios-static-upload.sh',
+          'cd ..',
+          './utils/build_scripts/drone-ios-static-upload.sh ios-sim',
         ],
       },
     ],

@@ -33,7 +33,7 @@
 
 #include <array>
 #include <atomic>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -63,6 +63,10 @@
 
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
+
+namespace boost::asio {
+using io_service = io_context;
+}
 
 namespace nodetool {
 struct proxy {
@@ -423,8 +427,6 @@ class node_server
     void record_addr_failed(const epee::net_utils::network_address& addr);
     bool is_addr_recently_failed(const epee::net_utils::network_address& addr);
     bool is_priority_node(const epee::net_utils::network_address& na);
-    std::set<std::string> get_seed_nodes(cryptonote::network_type nettype) const;
-    std::set<std::string> get_seed_nodes();
     bool connect_to_seed();
 
     template <class Container>

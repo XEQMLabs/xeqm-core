@@ -29,6 +29,7 @@
 oxen_add_library(l2_tracker
     contracts.cpp
     l2_tracker.cpp
+    l2_tracker_proxy.cpp
     rewards_contract.cpp
 )
 
@@ -37,6 +38,7 @@ target_link_libraries(l2_tracker
     common
     ethyl
     cryptonote_basic
+    network_config
     bls_crypto
     logging
     extra)

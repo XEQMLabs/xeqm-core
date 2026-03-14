@@ -19,20 +19,17 @@ class Proof {
   public:
     std::array<uint16_t, 3> version{};
     std::array<uint16_t, 3> storage_server_version{};
+    std::array<uint16_t, 3> session_router_version{};
     std::array<uint16_t, 3> lokinet_version{};
 
-    // TODO: after HF21 we can drop `pubkey`, `sig` (just keeping the _ed25519 versions),
-    // `pubkey_bls`, and `bls_pop`: the data these carry will be directly stored in the registration
-    // (either copied in at the HF21 block transition for transitioning nodes, or in the
-    // registration itself for new HF21+ registrations).
-
     uint64_t timestamp{};
-    crypto::public_key pubkey{};
-    crypto::signature sig{};
     crypto::ed25519_public_key pubkey_ed25519{};
     crypto::ed25519_signature sig_ed25519{};
     eth::bls_public_key pubkey_bls{};
     uint64_t l2_height{};
+
+    // Copies the pubkey_ed25519 into a crypto::public_key for convenience.
+    crypto::public_key pubkey() const;
 
     // Our proof of possession here is the BLS signature of H(pubkey_bls || service_node_pubkey); we
     // can't use the same PoP that we use for the smart contract because for transitioning nodes in
@@ -44,6 +41,11 @@ class Proof {
     uint16_t storage_https_port{};
     uint16_t storage_omq_port{};
     uint16_t qnet_port{};
+
+    // Returns true if this Proof and the given Proof value have different contact-dependent fields:
+    // that is, if oxend/lokinet/SS version, the ed/X pubkeys, IP, or ports of various services are
+    // different across the two proofs.
+    bool contact_info_changed(const Proof& other) const;
 
     // Non-consensus field: stores the current git version or release tag to assist debugging.
     std::string version_tag;
@@ -67,6 +69,7 @@ class Proof {
           std::array<uint16_t, 3> ss_version,
           uint16_t quorumnet_port,
           uint64_t l2_height,
+          std::array<uint16_t, 3> sr_version,
           std::array<uint16_t, 3> lokinet_version,
           const service_nodes::service_node_keys& keys);
 

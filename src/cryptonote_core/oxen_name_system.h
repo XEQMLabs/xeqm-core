@@ -72,8 +72,8 @@ struct mapping_value {
     // older session values the nonce will be all 0 bytes *if* the encrypted value is not the proper
     // length for an including-the-nonce value.  For newer session and all others the nonce is
     // always present.
-    std::pair<std::basic_string_view<unsigned char>, std::basic_string_view<unsigned char>>
-    value_nonce(mapping_type type) const;
+    std::pair<std::span<const unsigned char>, std::span<const unsigned char>> value_nonce(
+            mapping_type type) const;
     bool operator==(mapping_value const& other) const {
         return encrypted == other.encrypted && other.to_view() == to_view();
     }
@@ -271,9 +271,12 @@ struct settings_record {
     int version;
 };
 
-std::optional<mapping_type> parse_ons_type(std::string input);
-
-std::optional<mapping_type> parse_ons_type(uint16_t input);
+// Look up the ONS type from string or integer input.  Returns the mapping_type if the input is a
+// valid type value, otherwise returns nullopt.  If the queryable_types_only parameter is given and
+// true, then only the base types (session/wallet/lokinet) but not the special registration types
+// (e.g. lokinet_5years) will be accepted.
+std::optional<mapping_type> parse_ons_type(std::string input, bool queryable_types_only = false);
+std::optional<mapping_type> parse_ons_type(uint16_t input, bool queryable_types_only = false);
 
 struct mapping_record {
     // NOTE: We keep expired entries in the DB indefinitely because we need to
@@ -356,9 +359,9 @@ struct name_system_db {
             std::optional<int64_t> backup_owner_id);
     bool save_settings(uint64_t top_height, crypto::hash const& top_hash, int version);
 
-    // Delete all mappings that are registered on height or newer followed by deleting all owners no
-    // longer referenced in the DB
-    bool prune_db(uint64_t height);
+    // Delete all mappings that are registered after height followed by deleting all owners no
+    // longer referenced in the DB.  Updates the state to the given height and hash.
+    bool prune_db(uint64_t top_height, const crypto::hash& top_hash);
 
     owner_record get_owner_by_key(generic_owner const& owner);
     owner_record get_owner_by_id(int64_t owner_id);
@@ -367,16 +370,15 @@ struct name_system_db {
             std::string str, uint64_t blockchain_height, cryptonote::address_parse_info& addr_info);
     // The get_mapping* methods can return any mapping, or only active mappings: for only active
     // mappings, pass in the blockchain height.  If you omit it (or explicitly pass std::nullopt)
-    // then you will get the latest mappingsvalues regardless of whether expired or not they are
-    // expired.
+    // then you will get the latest mappingsvalues regardless of whether or not they are expired.
     mapping_record get_mapping(
             mapping_type type,
             std::string_view name_base64_hash,
             std::optional<uint64_t> blockchain_height = std::nullopt);
     std::vector<mapping_record> get_mappings(
-            std::vector<mapping_type> const& types,
             std::string_view name_base64_hash,
-            std::optional<uint64_t> blockchain_height = std::nullopt);
+            std::optional<uint64_t> blockchain_height = std::nullopt,
+            const std::unordered_set<mapping_type>& only_types = {});
     std::vector<mapping_record> get_mappings_by_owner(
             generic_owner const& key, std::optional<uint64_t> blockchain_height = std::nullopt);
     std::vector<mapping_record> get_mappings_by_owners(
@@ -430,13 +432,13 @@ struct name_system_db {
 
 template <>
 struct fmt::formatter<ons::mapping_value> : fmt::formatter<std::string> {
-    auto format(const ons::mapping_value& v, format_context& ctx) {
+    auto format(const ons::mapping_value& v, format_context& ctx) const {
         return formatter<std::string>::format(oxenc::to_hex(v.to_view()), ctx);
     }
 };
 template <>
 struct fmt::formatter<ons::mapping_type> : fmt::formatter<std::string_view> {
-    auto format(const ons::mapping_type& t, format_context& ctx) {
+    auto format(const ons::mapping_type& t, format_context& ctx) const {
         return formatter<std::string_view>::format(ons::mapping_type_str(t), ctx);
     }
 };

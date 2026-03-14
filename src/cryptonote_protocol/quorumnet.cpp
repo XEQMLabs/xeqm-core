@@ -28,15 +28,18 @@
 
 #include "quorumnet.h"
 
+#include <oxenc/bt_producer.h>
 #include <oxenc/hex.h>
 #include <oxenmq/oxenmq.h>
 #include <time.h>
 
 #include <iterator>
 #include <shared_mutex>
+#include <vector>
 
 #include "common/exception.h"
 #include "common/random.h"
+#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core/cryptonote_core.h"
@@ -86,6 +89,7 @@ namespace {
 
     struct QnetState {
         cryptonote::core& core;
+        pulse::pulse pulse;
         oxenmq::OxenMQ& omq{core.omq()};
 
         // Track submitted blink txes here; unlike the blinks stored in the mempool we store these
@@ -110,11 +114,12 @@ namespace {
         std::condition_variable pulse_message_queue_cv;
         std::queue<pulse::message> pulse_message_queue;
 
-        QnetState(cryptonote::core& core) : core{core} {}
+        QnetState(cryptonote::core& core, pulse::pulse pulse) :
+                core{core}, pulse{std::move(pulse)} {}
 
         static QnetState& from(void* obj) {
             assert(obj);
-            return *reinterpret_cast<QnetState*>(obj);
+            return *static_cast<QnetState*>(obj);
         }
     };
 
@@ -133,8 +138,8 @@ namespace {
 
     void setup_endpoints(cryptonote::core& core, void* obj);
 
-    void* new_qnetstate(cryptonote::core& core) {
-        return new QnetState(core);
+    void* new_qnetstate(cryptonote::core& core, pulse::pulse pulse) {
+        return new QnetState{core, std::move(pulse)};
     }
 
     void delete_qnetstate(void*& obj) {
@@ -145,9 +150,9 @@ namespace {
 
     template <typename E>
 #ifdef __GNUG__
-[[gnu::warn_unused_result]]
+    [[gnu::warn_unused_result]]
 #endif
-E get_enum(const bt_dict &d, const std::string &key) {
+    E get_enum(const bt_dict& d, const std::string& key) {
         E result = static_cast<E>(get_int<std::underlying_type_t<E>>(d.at(key)));
         if (result < E::_count)
             return result;
@@ -240,11 +245,10 @@ E get_enum(const bt_dict &d, const std::string &key) {
             cryptonote::core& core,
             std::vector<prepared_relay_destinations> const& destinations,
             std::string_view command,
-            std::string&& data) {
+            std::string_view data) {
         for (auto const& [x25519_string, connect_string] : destinations) {
             log::info(logcat, "Relaying data to {} @ {}", to_hex(x25519_string), connect_string);
-            core.omq().send(
-                    x25519_string, command, std::move(data), send_option::hint{connect_string});
+            core.omq().send(x25519_string, command, data, send_option::hint{connect_string});
         }
     }
 
@@ -372,12 +376,25 @@ E get_enum(const bt_dict &d, const std::string &key) {
 
         /// Relays a command and any number of serialized data to everyone we're supposed to relay
         /// to
-        template <typename... T>
-        void relay_to_peers(const std::string_view& cmd, const T&... data) {
-            relay_to_peers_impl(
-                    cmd,
-                    std::array<std::string, sizeof...(T)>{bt_serialize(data)...},
-                    std::make_index_sequence<sizeof...(T)>{});
+        void relay_to_peers(std::string_view cmd, const bt_dict& data) {
+            relay_to_peers(cmd, bt_serialize(data));
+        }
+        void relay_to_peers(std::string_view cmd, const bt_dict_producer& data) {
+            relay_to_peers(cmd, data.view());
+        }
+        void relay_to_peers(std::string_view cmd, std::string_view serialized_data) {
+            for (auto& peer : peers) {
+                log::trace(
+                        logcat,
+                        "Relaying {} to peer {}{}",
+                        cmd,
+                        to_hex(peer.first),
+                        (peer.second.empty() ? " (if connected)"s : " @ " + peer.second));
+                if (peer.second.empty())
+                    omq.send(peer.first, cmd, serialized_data, send_option::optional{});
+                else
+                    omq.send(peer.first, cmd, serialized_data, send_option::hint{peer.second});
+            }
         }
 
       private:
@@ -537,26 +554,6 @@ E get_enum(const bt_dict &d, const std::string &key) {
                 }
             }
         }
-
-        /// Relays a command and pre-serialized data to everyone we're supposed to relay to
-        template <size_t N, size_t... I>
-        void relay_to_peers_impl(
-                const std::string_view& cmd,
-                std::array<std::string, N> relay_data,
-                std::index_sequence<I...>) {
-            for (auto& peer : peers) {
-                log::trace(
-                        logcat,
-                        "Relaying {} to peer {}{}",
-                        cmd,
-                        to_hex(peer.first),
-                        (peer.second.empty() ? " (if connected)"s : " @ " + peer.second));
-                if (peer.second.empty())
-                    omq.send(peer.first, cmd, relay_data[I]..., send_option::optional{});
-                else
-                    omq.send(peer.first, cmd, relay_data[I]..., send_option::hint{peer.second});
-            }
-        }
     };
 
     bt_dict serialize_vote(const quorum_vote_t& vote) {
@@ -588,12 +585,12 @@ E get_enum(const bt_dict &d, const std::string &key) {
         if (vote.group == quorum_group::invalid)
             throw oxen::traced<std::invalid_argument>("invalid vote group");
         vote.index_in_group = get_int<uint16_t>(d.at("i"));
-        auto& sig = var::get<std::string>(d.at("s"));
+        auto& sig = std::get<std::string>(d.at("s"));
         if (sig.size() != sizeof(vote.signature))
             throw oxen::traced<std::invalid_argument>("invalid vote signature size");
         std::memcpy(&vote.signature, sig.data(), sizeof(vote.signature));
         if (vote.type == quorum_type::checkpointing) {
-            auto& bh = var::get<std::string>(d.at("bh"));
+            auto& bh = std::get<std::string>(d.at("bh"));
             if (bh.size() != vote.checkpoint.block_hash.size())
                 throw oxen::traced<std::invalid_argument>("invalid vote checkpoint block hash");
             std::memcpy(vote.checkpoint.block_hash.data(), bh.data(), bh.size());
@@ -1115,7 +1112,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
                                 {"!", tag}, {"e", "No transaction included in blink request"sv}}));
             return;
         }
-        const std::string& tx_data = var::get<std::string>(t_it->second);
+        const std::string& tx_data = std::get<std::string>(t_it->second);
         log::trace(logcat, "Blink tx data is {} bytes", tx_data.size());
 
         // "hash" is optional -- it lets us short-circuit processing the tx if we've already seen
@@ -1123,7 +1120,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
         // don't trust the hash if we haven't seen it before -- this is only used to skip
         // propagation and validation.
         crypto::hash tx_hash;
-        auto& tx_hash_str = var::get<std::string>(data.at("#"));
+        auto& tx_hash_str = std::get<std::string>(data.at("#"));
         bool already_approved = false, already_rejected = false;
         if (tx_hash_str.size() == sizeof(crypto::hash)) {
             std::memcpy(tx_hash.data(), tx_hash_str.data(), tx_hash_str.size());
@@ -1222,7 +1219,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
 
         auto btxptr = std::make_shared<blink_tx>(blink_height);
         auto& btx = *btxptr;
-        auto& tx = var::get<cryptonote::transaction>(btx.tx);
+        auto& tx = std::get<cryptonote::transaction>(btx.tx);
         // If any quorums are too small set the extra spaces to rejected (this also checks that no
         // quorums are too big).
         for (size_t qi = 0; qi < blink_quorums.size(); qi++)
@@ -1729,7 +1726,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
         }
         auto data = bt_deserialize<bt_dict>(m.data[0]);
         auto tag = get_int<uint64_t>(data.at("!"));
-        auto& error = var::get<std::string>(data.at("e"));
+        auto& error = std::get<std::string>(data.at("e"));
 
         log::info(logcat, "Received no-start blink response: {}", error);
 
@@ -1757,7 +1754,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
         // remotes we sent it to rejected it then that remote can reply with a message.  That gets a
         // bit complicated, though, in terms of maintaining internal state (since the bl.bad is sent
         // on signature receipt, not at rejection time), so for now we don't include it.
-        // auto &error = var::get<std::string>(data.at("e"));
+        // auto &error = std::get<std::string>(data.at("e"));
 
         log::info(logcat, "Received blink failure response");
 
@@ -1801,6 +1798,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
 
     // Extra fields are intentionally given tags after the common header fields.
     const std::string PULSE_TAG_BLOCK_TEMPLATE = "t";
+    const std::string PULSE_TAG_BLOCK_SUPPLEMENTAL = "tx";
     const std::string PULSE_TAG_VALIDATOR_BITSET = "u";
     const std::string PULSE_TAG_RANDOM_VALUE = "v";
     const std::string PULSE_TAG_RANDOM_VALUE_HASH = "x";
@@ -1812,7 +1810,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
     const std::string PULSE_CMD_BLOCK_TEMPLATE = "block_template";
     const std::string PULSE_CMD_RANDOM_VALUE_HASH = "random_value_hash";
     const std::string PULSE_CMD_RANDOM_VALUE = "random_value";
-    const std::string PULSE_CMD_SIGNED_BLOCK = "signed_block";
+    const std::string PULSE_CMD_BLOCK_SIGNATURE = "signed_block";
     const std::string PULSE_CMD_SEND_VALIDATOR_BITSET =
             PULSE_CMD_CATEGORY + "." + PULSE_CMD_VALIDATOR_BITSET;
     const std::string PULSE_CMD_SEND_VALIDATOR_BIT =
@@ -1823,8 +1821,8 @@ E get_enum(const bt_dict &d, const std::string &key) {
             PULSE_CMD_CATEGORY + "." + PULSE_CMD_RANDOM_VALUE_HASH;
     const std::string PULSE_CMD_SEND_RANDOM_VALUE =
             PULSE_CMD_CATEGORY + "." + PULSE_CMD_RANDOM_VALUE;
-    const std::string PULSE_CMD_SEND_SIGNED_BLOCK =
-            PULSE_CMD_CATEGORY + "." + PULSE_CMD_SIGNED_BLOCK;
+    const std::string PULSE_CMD_SEND_BLOCK_SIGNATURE =
+            PULSE_CMD_CATEGORY + "." + PULSE_CMD_BLOCK_SIGNATURE;
 
     void pulse_relay_message_to_quorum(
             void* self,
@@ -1834,56 +1832,61 @@ E get_enum(const bt_dict &d, const std::string &key) {
         peer_info::exclude_set relay_exclude;
 
         bool include_block_producer = false;
-        std::string_view command = {};
+        std::string_view command;
 
-        bt_dict data = {};
-        data[PULSE_TAG_SIGNATURE] = tools::view_guts(msg.signature);
-        data[PULSE_TAG_BLOCK_ROUND] = msg.round;
+        using namespace pulse;
 
-        if (msg.type == pulse::message_type::block_template) {
-            command = PULSE_CMD_SEND_BLOCK_TEMPLATE;
-            data[PULSE_TAG_BLOCK_TEMPLATE] = msg.block_template.blob;
-        } else {
-            data[PULSE_TAG_QUORUM_POSITION] = msg.quorum_position;
+        bt_dict_producer data;
+        if (msg.type != message_type::block_template)
+            data.append(PULSE_TAG_QUORUM_POSITION, msg.quorum_position);
+        data.append(PULSE_TAG_BLOCK_ROUND, msg.round);
+        data.append(PULSE_TAG_SIGNATURE, tools::view_guts(msg.signature));
 
-            switch (msg.type) {
-                case pulse::message_type::invalid: assert("Invalid Code Path" == nullptr); break;
+        switch (msg.type) {
+            case message_type::invalid: assert("Invalid Code Path" == nullptr); break;
 
-                case pulse::message_type::signed_block: {
-                    command = PULSE_CMD_SEND_SIGNED_BLOCK;
-                    data[PULSE_TAG_FINAL_BLOCK_SIGNATURE] =
-                            tools::view_guts(msg.signed_block.signature_of_final_block_hash);
-                } break;
+            case message_type::block_signature: {
+                command = PULSE_CMD_SEND_BLOCK_SIGNATURE;
+                data.append(
+                        PULSE_TAG_FINAL_BLOCK_SIGNATURE,
+                        tools::view_guts(msg.get<message_type::block_signature>()));
+            } break;
 
-                case pulse::message_type::block_template: break;
+            case message_type::block_template: {
+                command = PULSE_CMD_SEND_BLOCK_TEMPLATE;
+                const auto& [block, supplemental] = msg.get<message_type::block_template>();
+                data.append(PULSE_TAG_BLOCK_TEMPLATE, block);
+                if (!supplemental.empty())
+                    data.append_list(PULSE_TAG_BLOCK_SUPPLEMENTAL, supplemental);
+            } break;
 
-                case pulse::message_type::handshake: /* FALLTHRU */
-                case pulse::message_type::handshake_bitset: {
-                    assert(msg.quorum_position < quorum.validators.size());
+            case message_type::handshake: command = PULSE_CMD_SEND_VALIDATOR_BIT; [[fallthrough]];
+            case message_type::handshake_bitset: {
+                assert(msg.quorum_position < quorum.validators.size());
 
-                    include_block_producer = msg.type == pulse::message_type::handshake_bitset;
-                    relay_exclude.insert(quorum.validators[msg.quorum_position]);
+                include_block_producer = msg.type == message_type::handshake_bitset;
+                relay_exclude.insert(quorum.validators[msg.quorum_position]);
 
-                    if (msg.type == pulse::message_type::handshake) {
-                        command = PULSE_CMD_SEND_VALIDATOR_BIT;
-                    } else {
-                        assert(msg.type == pulse::message_type::handshake_bitset);
-                        command = PULSE_CMD_SEND_VALIDATOR_BITSET;
-                        data[PULSE_TAG_VALIDATOR_BITSET] = msg.handshakes.validator_bitset;
-                    }
-                } break;
+                if (msg.type == message_type::handshake_bitset) {
+                    command = PULSE_CMD_SEND_VALIDATOR_BITSET;
+                    data.append(
+                            PULSE_TAG_VALIDATOR_BITSET, msg.get<message_type::handshake_bitset>());
+                }
+            } break;
 
-                case pulse::message_type::random_value_hash: {
-                    command = PULSE_CMD_SEND_RANDOM_VALUE_HASH;
-                    data[PULSE_TAG_RANDOM_VALUE_HASH] =
-                            tools::view_guts(msg.random_value_hash.hash);
-                } break;
+            case message_type::random_value_hash: {
+                command = PULSE_CMD_SEND_RANDOM_VALUE_HASH;
+                data.append(
+                        PULSE_TAG_RANDOM_VALUE_HASH,
+                        tools::view_guts(msg.get<message_type::random_value_hash>()));
+            } break;
 
-                case pulse::message_type::random_value: {
-                    command = PULSE_CMD_SEND_RANDOM_VALUE;
-                    data[PULSE_TAG_RANDOM_VALUE] = tools::view_guts(msg.random_value.value);
-                } break;
-            }
+            case message_type::random_value: {
+                command = PULSE_CMD_SEND_RANDOM_VALUE;
+                data.append(
+                        PULSE_TAG_RANDOM_VALUE,
+                        tools::view_guts(msg.get<message_type::random_value>()));
+            } break;
         }
 
         auto& qnet = QnetState::from(self);
@@ -1891,8 +1894,7 @@ E get_enum(const bt_dict &d, const std::string &key) {
             service_nodes::quorum const* quorum_ptr = &quorum;
             auto destinations = peer_prepare_relay_to_quorum_subset(
                     qnet.core, &quorum_ptr, &quorum_ptr + 1, 4 /*num_peers*/);
-            peer_relay_to_prepared_destinations(
-                    qnet.core, destinations, command, bt_serialize(data));
+            peer_relay_to_prepared_destinations(qnet.core, destinations, command, data.view());
         } else {
             peer_info peer_list{
                     qnet,
@@ -1952,14 +1954,13 @@ E get_enum(const bt_dict &d, const std::string &key) {
 
         if (bitset) {
             if (auto const& tag = PULSE_TAG_VALIDATOR_BITSET; data.skip_until(tag))
-                msg.handshakes.validator_bitset = data.consume_integer<uint16_t>();
+                msg.payload = data.consume_integer<uint16_t>();
             else
                 throw oxen::traced<std::invalid_argument>{"{}{}'"_format(INVALID_ARG_PREFIX, tag)};
         }
 
         qnet.omq.job(
-                [&qnet, data = std::move(msg)]() { pulse::handle_message(&qnet, data); },
-                qnet.core.pulse_thread_id());
+                [&qnet, msg = std::move(msg)] { qnet.pulse(&msg); }, qnet.core.pulse_thread_id());
     }
 
     void handle_pulse_block_template(Message& m, QnetState& qnet) {
@@ -1974,14 +1975,18 @@ E get_enum(const bt_dict &d, const std::string &key) {
         pulse::message msg = pulse_parse_msg_header_fields(
                 pulse::message_type::block_template, data, INVALID_ARG_PREFIX);
 
+        auto& [block_blob, supplemental] = msg.payload.emplace<pulse::message::block_and_txes>();
         if (auto const& tag = PULSE_TAG_BLOCK_TEMPLATE; data.skip_until(tag))
-            msg.block_template.blob = data.consume_string_view();
+            block_blob = data.consume_string();
         else
             throw oxen::traced<std::invalid_argument>{"{}{}'"_format(INVALID_ARG_PREFIX, tag)};
 
+        if (data.skip_until(PULSE_TAG_BLOCK_SUPPLEMENTAL))
+            data.consume_list(supplemental);
+        // else missing is fine: it is not sent if empty, or by Oxen nodes older than 11.3
+
         qnet.omq.job(
-                [&qnet, data = std::move(msg)]() { pulse::handle_message(&qnet, data); },
-                qnet.core.pulse_thread_id());
+                [&qnet, msg = std::move(msg)] { qnet.pulse(&msg); }, qnet.core.pulse_thread_id());
     }
 
     void handle_pulse_random_value_hash(Message& m, QnetState& qnet) {
@@ -1998,19 +2003,13 @@ E get_enum(const bt_dict &d, const std::string &key) {
                 pulse::message_type::random_value_hash, data, INVALID_ARG_PREFIX);
 
         if (auto const& tag = PULSE_TAG_RANDOM_VALUE_HASH; data.skip_until(tag)) {
-            auto str = data.consume_string_view();
-            if (str.size() != sizeof(msg.random_value_hash.hash))
-                throw oxen::traced<std::invalid_argument>(
-                        "Invalid hash data size: " + std::to_string(str.size()));
-
-            std::memcpy(msg.random_value_hash.hash.data(), str.data(), str.size());
+            msg.payload = tools::make_from_guts<crypto::hash>(data.consume_string_view());
         } else {
             throw oxen::traced<std::invalid_argument>{"{}{}'"_format(INVALID_ARG_PREFIX, tag)};
         }
 
         qnet.omq.job(
-                [&qnet, data = std::move(msg)]() { pulse::handle_message(&qnet, data); },
-                qnet.core.pulse_thread_id());
+                [&qnet, msg = std::move(msg)] { qnet.pulse(&msg); }, qnet.core.pulse_thread_id());
     }
 
     void handle_pulse_random_value(Message& m, QnetState& qnet) {
@@ -2026,21 +2025,17 @@ E get_enum(const bt_dict &d, const std::string &key) {
         pulse::message msg = pulse_parse_msg_header_fields(
                 pulse::message_type::random_value, data, INVALID_ARG_PREFIX);
         if (auto const& tag = PULSE_TAG_RANDOM_VALUE; data.skip_until(tag)) {
-            auto str = data.consume_string_view();
-            if (str.size() != sizeof(msg.random_value.value.data))
-                throw oxen::traced<std::invalid_argument>(
-                        "Invalid data size: " + std::to_string(str.size()));
-            std::memcpy(msg.random_value.value.data, str.data(), str.size());
+            msg.payload = tools::make_from_guts<cryptonote::pulse_random_value>(
+                    data.consume_string_view());
         } else {
             throw oxen::traced<std::invalid_argument>{"{}{}'"_format(INVALID_ARG_PREFIX, tag)};
         }
 
         qnet.omq.job(
-                [&qnet, data = std::move(msg)]() { pulse::handle_message(&qnet, data); },
-                qnet.core.pulse_thread_id());
+                [&qnet, msg = std::move(msg)] { qnet.pulse(&msg); }, qnet.core.pulse_thread_id());
     }
 
-    void handle_pulse_signed_block(Message& m, QnetState& qnet) {
+    void handle_pulse_block_signature(Message& m, QnetState& qnet) {
         if (m.data.size() != 1)
             throw oxen::traced<std::runtime_error>{
                     "Rejecting pulse signed block expected one data entry not {}"_format(
@@ -2050,19 +2045,17 @@ E get_enum(const bt_dict &d, const std::string &key) {
                 "Invalid pulse signed block: missing required field '"sv;
         bt_dict_consumer data{m.data[0]};
         pulse::message msg = pulse_parse_msg_header_fields(
-                pulse::message_type::signed_block, data, INVALID_ARG_PREFIX);
+                pulse::message_type::block_signature, data, INVALID_ARG_PREFIX);
 
         if (auto const& tag = PULSE_TAG_FINAL_BLOCK_SIGNATURE; data.skip_until(tag)) {
             auto sig_str = data.consume_string_view();
-            msg.signed_block.signature_of_final_block_hash =
-                    convert_string_view_bytes_to_signature(sig_str);
+            msg.payload = convert_string_view_bytes_to_signature(sig_str);
         } else {
             throw oxen::traced<std::invalid_argument>{"{}{}'"_format(INVALID_ARG_PREFIX, tag)};
         }
 
         qnet.omq.job(
-                [&qnet, data = std::move(msg)]() { pulse::handle_message(&qnet, data); },
-                qnet.core.pulse_thread_id());
+                [&qnet, msg = std::move(msg)] { qnet.pulse(&msg); }, qnet.core.pulse_thread_id());
     }
 
 }  // namespace
@@ -2133,8 +2126,8 @@ namespace {
                     .add_command(
                             PULSE_CMD_RANDOM_VALUE,
                             [&qnet](Message& m) { handle_pulse_random_value(m, qnet); })
-                    .add_command(PULSE_CMD_SIGNED_BLOCK, [&qnet](Message& m) {
-                        handle_pulse_signed_block(m, qnet);
+                    .add_command(PULSE_CMD_BLOCK_SIGNATURE, [&qnet](Message& m) {
+                        handle_pulse_block_signature(m, qnet);
                     });
         }
 

@@ -35,6 +35,7 @@
 #include "common/guts.h"
 #include "common/meta.h"
 #include "common/string_util.h"
+#include "common/tracy_shim.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
 #include "cryptonote_basic_impl.h"
@@ -80,6 +81,7 @@ bool is_v1_tx(const std::string_view tx_blob);
 template <typename T>
 bool find_tx_extra_field_by_type(
         const std::vector<tx_extra_field>& tx_extra_fields, T& field, size_t skip_fields = 0) {
+    ZoneScoped;
     if (skip_fields >= tx_extra_fields.size())
         return false;
 
@@ -87,7 +89,7 @@ bool find_tx_extra_field_by_type(
         if (!std::holds_alternative<T>(f))
             continue;
         if (skip_fields == 0) {
-            field = var::get<T>(f);
+            field = std::get<T>(f);
             return true;
         }
         skip_fields--;
@@ -295,11 +297,24 @@ std::vector<uint64_t> absolute_output_offsets_to_relative(const std::vector<uint
 constexpr std::string_view get_unit() {
     return "OXEN"sv;
 }
+
+enum class strip_zeros {
+    no,
+    yes,
+};
+
 // Returns a monetary value with a decimal point; optionally strips insignificant trailing 0s.
-std::string print_money(uint64_t amount, bool strip_zeros = false);
+std::string print_money(
+        uint64_t amount,
+        strip_zeros strip_z = strip_zeros::no,
+        size_t decimal_point = oxen::DISPLAY_DECIMAL_POINT);
+
 // Returns a formatted monetary value including the unit, e.g. "1.234567 OXEN"; strips
 // insignificant trailing 0s by default (unlike the above) but can be overridden to not do that.
-std::string format_money(uint64_t amount, bool strip_zeros = true);
+std::string format_money(
+        uint64_t amount,
+        strip_zeros strip_z = strip_zeros::yes,
+        size_t decimal_point = oxen::DISPLAY_DECIMAL_POINT);
 
 std::string print_tx_verification_context(
         tx_verification_context const& tvc, transaction const* tx = nullptr);
@@ -419,7 +434,7 @@ crypto::secret_key decrypt_key(crypto::secret_key key, const epee::wipeable_stri
             "wrong variant type: {}, expected {}",                                               \
             tools::type_name(tools::variant_type(variant_var)),                                  \
             tools::type_name<specific_type>());                                                  \
-    auto& variable_name = var::get<specific_type>(variant_var);
+    auto& variable_name = std::get<specific_type>(variant_var);
 
 // Provide an inline header implementation of this function because device_default needs it (but
 // it doesn't link to us, rather we link to it).

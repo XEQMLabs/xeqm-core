@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <span>
 
 #include "../cryptonote_config.h"
 
@@ -31,6 +32,10 @@ struct network_config final {
     const uint16_t RPC_DEFAULT_PORT;
     const uint16_t QNET_DEFAULT_PORT;
     const std::array<unsigned char, 16> NETWORK_ID;
+
+    // oxen blockchain p2p seed nodes.
+    const std::span<const std::string_view> P2P_SEED_NODES;
+
     const std::string_view GENESIS_TX;
     const uint32_t GENESIS_NONCE;
     const std::chrono::seconds GOVERNANCE_REWARD_INTERVAL;
@@ -52,8 +57,18 @@ struct network_config final {
     // last proof we consider the SN to be down)
     const std::chrono::seconds UPTIME_PROOF_VALIDITY;
 
-    // True if this network requires storage server and lokinet.
-    const bool HAVE_STORAGE_AND_LOKINET;
+    // We only want to deactivate (active -> dereg/decom) a maximum number of nodes, even if more
+    // failed testing, as deactivating too many at once can cause swarm issues.
+    const size_t MAX_DEACTIVATE_PER_BLOCK;
+
+    // True if this network requires storage server
+    const bool HAVE_STORAGE_SERVER;
+
+    // True if this network requires Session Router
+    const bool HAVE_SESSION_ROUTER;
+
+    // True if this network requires lokinet
+    const bool HAVE_LOKINET;
 
     // The ideal block time.  Before the pulse hardfork, the actual block time compared to this
     // determines the difficulty of subsequent blocks; with pulse this determines when each pulse
@@ -139,6 +154,13 @@ struct network_config final {
     /// liquidation (which also remove it but award a penalty reward to the liquidator) during this
     /// buffer period.
     const uint64_t ETH_EXIT_BUFFER;
+
+    /// (HF21+) Number of blocks after a deregistration during which the node is protected from
+    /// liquidation-with-penalty.  Regular removals can still be submitted to remove it from the ETH
+    /// pubkey list, but *not* penalizing liquidation (which also remove it but award a penalty
+    /// reward to the liquidator) during this buffer period.  0 means liquidations will be available
+    /// immediately upon deregistration.
+    const uint64_t ETH_DEREG_BUFFER;
 
     // Details of the ethereum smart contract managing rewards and chain its kept on:
     const uint32_t ETHEREUM_CHAIN_ID;

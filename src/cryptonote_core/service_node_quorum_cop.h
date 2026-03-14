@@ -86,6 +86,25 @@ struct quorum_manager {
         assert(!"Developer error: Unhandled quorum enum with value: ");
         return nullptr;
     }
+
+    template <class Archive>
+    void serialize_value(Archive& ar) {
+        uint32_t version = 0;
+        field(ar, "version", version);
+        for (size_t index = 0; index < static_cast<size_t>(quorum_type::_count); index++) {
+            switch (static_cast<quorum_type>(index)) {
+                case quorum_type::obligations:
+                    serialize_quorum_ptr_directly(ar, "obligations", obligations);
+                    break;
+                case quorum_type::checkpointing:
+                    serialize_quorum_ptr_directly(ar, "checkpointing", checkpointing);
+                    break;
+                case quorum_type::blink: serialize_quorum_ptr_directly(ar, "blink", blink); break;
+                case quorum_type::pulse: serialize_quorum_ptr_directly(ar, "pulse", pulse); break;
+                case quorum_type::_count: break;
+            }
+        }
+    }
 };
 
 struct service_node_test_results {
@@ -98,11 +117,12 @@ struct service_node_test_results {
     bool storage_server_reachable = true;
     bool lokinet_reachable = true;
     bool recent_l2_height = true;
+    bool failed_transition = false;
 
     // Returns a vector of reasons why this node is failing (nullopt if not failing).
     std::optional<std::vector<std::string_view>> why() const;
     constexpr bool passed() const {
-        return uptime_proved &&
+        return !failed_transition && uptime_proved &&
                // single_ip -- deliberately excluded (it only gives ip-change penalties, not deregs)
                checkpoint_participation && pulse_participation && timestamp_participation &&
                timesync_status && storage_server_reachable && lokinet_reachable && recent_l2_height;

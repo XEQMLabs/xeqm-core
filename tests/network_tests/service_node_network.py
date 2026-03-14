@@ -62,7 +62,7 @@ class SNNetwork:
 
         vprint("Using '{}' for data files and logs".format(datadir))
 
-        nodeopts = dict(oxend=self.binpath+'/oxend', datadir=datadir)
+        nodeopts = dict(oxend=self.binpath+'/xeq-d', datadir=datadir)
 
         self.sns = [Daemon(service_node=True, **nodeopts) for _ in range(sns)]
         self.nodes = [Daemon(**nodeopts) for _ in range(nodes)]
@@ -314,8 +314,8 @@ def chuck(net):
     chuck = Wallet(node=net.nodes[0], name='Chuck', rpc_wallet=net.binpath+'/oxen-wallet-rpc', datadir=net.datadir)
     chuck.ready(wallet="chuck")
 
-    hidden_node = Daemon(oxend=net.binpath+'/oxend', datadir=net.datadir)
-    bridge_node = Daemon(oxend=net.binpath+'/oxend', datadir=net.datadir)
+    hidden_node = Daemon(oxend=net.binpath+'/xeq-d', datadir=net.datadir)
+    bridge_node = Daemon(oxend=net.binpath+'/xeq-d', datadir=net.datadir)
     for x in (4, 7):
         bridge_node.add_peer(net.all_nodes[x])
     bridge_node.add_peer(hidden_node)
