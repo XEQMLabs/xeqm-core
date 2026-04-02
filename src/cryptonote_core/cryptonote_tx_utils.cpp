@@ -227,7 +227,8 @@ uint64_t derive_governance_from_block_reward(
 }
 
 uint64_t service_node_reward_formula(uint64_t base_reward, hf hard_fork_version) {
-    return hard_fork_version >= hf::hf15_ons ? oxen::SN_REWARD_HF15
+    return hard_fork_version >= hf::hf19_reward_batching ? oxen::SN_REWARD_HF19
+         : hard_fork_version >= hf::hf15_ons ? oxen::SN_REWARD_HF15
          : hard_fork_version >= hf::hf9_service_nodes
                  ? base_reward / 2
                  :  // 50% of base reward up until HF15's fixed payout
