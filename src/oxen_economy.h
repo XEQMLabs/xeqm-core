@@ -67,9 +67,9 @@ inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 // annual simple payout rate (= 14% compounding rate).
 inline constexpr uint64_t ETH_BLS_INITIAL_REWARD = 40000000'000000000 * 151 / 1000 / 365 / 720;
 
-// Equilibria Horizon: Minimum operator contribution is 25% of staking requirement (25,000 XEQ)
+// Equilibria Horizon: Minimum operator contribution is 50% of staking requirement (100,000 XEQ)
 constexpr uint64_t MINIMUM_OPERATOR_CONTRIBUTION(uint64_t staking_requirement) {
-    return staking_requirement / 4;
+    return staking_requirement / 2;
 }
 
 // -------------------------------------------------------------------------------------------------
