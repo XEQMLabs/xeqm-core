@@ -984,7 +984,7 @@ elseif(tar_os STREQUAL "Windows")
   endif()
   set(default_archive create_zip) # .tar.xz files are too scary for Windows users
 endif()
-set(tar_dir "oxen-${tar_os}-${PROJECT_VERSION}${OXEN_RELEASE_SUFFIX}${git_tag}")
+set(tar_dir "equilibria-${tar_os}-${PROJECT_VERSION}${OXEN_RELEASE_SUFFIX}${git_tag}")
 add_custom_target(create_tarxz
   COMMAND ${CMAKE_COMMAND} -E rename bin "${tar_dir}"
   COMMAND ${CMAKE_COMMAND} -E tar cvJ "${tar_dir}.tar.xz" -- "${tar_dir}"
