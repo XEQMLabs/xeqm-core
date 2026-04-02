@@ -157,6 +157,7 @@ bool validate_governance_reward_key(
 
 uint64_t governance_reward_formula(hf hf_version, uint64_t base_reward) {
     return hf_version >= feature::ETH_BLS ? 0
+         : hf_version >= hf::hf19_reward_batching ? oxen::FOUNDATION_REWARD_HF19
          : hf_version >= hf::hf17         ? oxen::FOUNDATION_REWARD_HF17
          : hf_version >= hf::hf16_pulse
                  ? oxen::FOUNDATION_REWARD_HF15 + oxen::CHAINFLIP_LIQUIDITY_HF16
