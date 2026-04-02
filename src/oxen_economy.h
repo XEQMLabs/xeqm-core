@@ -52,8 +52,8 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 200'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
-// Max contributors since HF19:
-inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
+// Max contributors since HF19 (operator + 10 community slots = 11 total):
+inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 11;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
