@@ -52,7 +52,9 @@ inline constexpr network_config config{
         // Testnet uptime proofs are 6x faster than mainnet (devnet config also uses these)
         .UPTIME_PROOF_FREQUENCY = 10min,
         .UPTIME_PROOF_VALIDITY = 21min,
-        .HAVE_STORAGE_AND_LOKINET = false,  // Disable storage & lokinet
+        .HAVE_STORAGE_SERVER = false,
+        .HAVE_SESSION_ROUTER = false,
+        .HAVE_LOKINET = false,
         .TARGET_BLOCK_TIME = mainnet::config.TARGET_BLOCK_TIME,
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
