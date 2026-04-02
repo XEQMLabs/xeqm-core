@@ -6986,7 +6986,7 @@ registration_details convert_registration_args(
                 std::to_string(max_contributors) + ")"};
 
     const uint64_t max_fee = hf_version >= hf::hf19_reward_batching
-                                   ? cryptonote::STAKING_FEE_BASIS
+                                   ? cryptonote::MAX_OPERATOR_FEE_BASIS
                                    : cryptonote::old::STAKING_PORTIONS;
     if (!tools::parse_int(args[0], result.fee) || result.fee > max_fee)
         throw invalid_registration{
