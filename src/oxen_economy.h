@@ -48,8 +48,8 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 //
 // -------------------------------------------------------------------------------------------------
 
-// Equilibria Horizon: Full stake requirement is 100,000 XEQ
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 100'000 * COIN;
+// Equilibria Horizon: Full stake requirement is 200,000 XEQ
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 200'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 // Max contributors since HF19:
@@ -57,8 +57,8 @@ inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// Equilibria Horizon: SESH staking requirement is also 100,000 XEQ
-inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 100'000 * COIN;
+// Equilibria Horizon: SESH staking requirement is also 200,000 XEQ
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 200'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 
