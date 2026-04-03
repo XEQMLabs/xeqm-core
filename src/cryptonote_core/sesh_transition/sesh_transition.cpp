@@ -613,7 +613,7 @@ void transition(
             // of the SESH staking requirement; thus we want to ensure that when we multiply such a
             // value by extra_ratio.first, we won't overflow:
             static_assert(
-                    std::numeric_limits<uint64_t>::max() / 70000'0 >
+                    std::numeric_limits<uint64_t>::max() / 15000'0 >
                     (SESH_STAKING_REQUIREMENT * 7 + 5) / 6 /* ceiling division */);
         }
 

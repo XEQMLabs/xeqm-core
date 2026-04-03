@@ -62,8 +62,7 @@ inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 11;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// Equilibria Horizon: SESH staking requirement is also 200,000 XEQ
-inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 200'000 * COIN;
+inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 100'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 
