@@ -2,9 +2,9 @@
 
 using namespace std::literals;
 
-const std::array<uint16_t, 3> OXEN_VERSION = {@oxen_VERSION_MAJOR@, @oxen_VERSION_MINOR@, @oxen_VERSION_PATCH@};
+const std::array<uint16_t, 3> OXEN_VERSION = {@equilibria_VERSION_MAJOR@, @equilibria_VERSION_MINOR@, @equilibria_VERSION_PATCH@};
 
 const std::string_view OXEN_VERSION_TAG = "@VERSIONTAG@"sv;
-const std::string_view OXEN_VERSION_STR = "@oxen_VERSION@"sv;
+const std::string_view OXEN_VERSION_STR = "@equilibria_VERSION@"sv;
 const std::string_view OXEN_RELEASE_NAME = "@OXEN_RELEASE_CODENAME@"sv;
-const std::string_view OXEN_VERSION_FULL = "@oxen_VERSION@-@VERSIONTAG@@OXEN_RELEASE_SUFFIX@"sv;
+const std::string_view OXEN_VERSION_FULL = "@equilibria_VERSION@-@VERSIONTAG@@OXEN_RELEASE_SUFFIX@"sv;

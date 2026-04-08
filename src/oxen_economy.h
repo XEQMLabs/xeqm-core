@@ -37,10 +37,15 @@ inline constexpr uint64_t CHAINFLIP_LIQUIDITY_HF16 = BLOCK_REWARD_HF15 * 24 / 10
 inline constexpr uint64_t BLOCK_REWARD_HF17 = 18'333'333'333;
 inline constexpr uint64_t FOUNDATION_REWARD_HF17 = 1'833'333'333;
 
+// HF19 reward parameters:
+inline constexpr uint64_t SN_REWARD_HF19 = 8'250'000'000;  // 8.25 XEQ per block
+inline constexpr uint64_t FOUNDATION_REWARD_HF19 = 12'400'000'000;  // 12.4 XEQ per block (~17,856 XEQ/day)
+
 static_assert(MINER_REWARD_HF15 + SN_REWARD_HF15 + FOUNDATION_REWARD_HF15 == BLOCK_REWARD_HF15);
 static_assert(
         CHAINFLIP_LIQUIDITY_HF16 + SN_REWARD_HF15 + FOUNDATION_REWARD_HF15 == BLOCK_REWARD_HF16);
 static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
+static_assert(SN_REWARD_HF19 + FOUNDATION_REWARD_HF19 == 20'650'000'000);  // 20.65 XEQ total per block
 
 // -------------------------------------------------------------------------------------------------
 //
@@ -48,16 +53,15 @@ static_assert(SN_REWARD_HF15 + FOUNDATION_REWARD_HF17 == BLOCK_REWARD_HF17);
 //
 // -------------------------------------------------------------------------------------------------
 
-// Equilibria Horizon: Full stake requirement is 100,000 XEQ
-inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 100'000 * COIN;
+// Equilibria Horizon: Full stake requirement is 200,000 XEQ
+inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 200'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
-// Max contributors since HF19:
-inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 10;
+// Max contributors since HF19 (operator + 10 community slots = 11 total):
+inline constexpr size_t MAX_CONTRIBUTORS_HF19 = 11;
 // Max contributors before HF19:
 inline constexpr size_t MAX_CONTRIBUTORS_V1 = 4;
 
-// Equilibria Horizon: SESH staking requirement is also 100,000 XEQ
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT = 100'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
 inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
@@ -67,9 +71,9 @@ inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 // annual simple payout rate (= 14% compounding rate).
 inline constexpr uint64_t ETH_BLS_INITIAL_REWARD = 40000000'000000000 * 151 / 1000 / 365 / 720;
 
-// Equilibria Horizon: Minimum operator contribution is 25% of staking requirement (25,000 XEQ)
+// Equilibria Horizon: Minimum operator contribution is 50% of staking requirement (100,000 XEQ)
 constexpr uint64_t MINIMUM_OPERATOR_CONTRIBUTION(uint64_t staking_requirement) {
-    return staking_requirement / 4;
+    return staking_requirement / 2;
 }
 
 // -------------------------------------------------------------------------------------------------

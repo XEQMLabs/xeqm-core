@@ -94,7 +94,7 @@ else()
     message(STATUS "Found Git: ${GIT_EXECUTABLE}")
 
     set(genversion_args "-DGIT=${GIT_EXECUTABLE}")
-    foreach(v oxen_VERSION oxen_VERSION_MAJOR oxen_VERSION_MINOR oxen_VERSION_PATCH OXEN_RELEASE_CODENAME OXEN_RELEASE_SUFFIX)
+    foreach(v equilibria_VERSION equilibria_VERSION_MAJOR equilibria_VERSION_MINOR equilibria_VERSION_PATCH OXEN_RELEASE_CODENAME OXEN_RELEASE_SUFFIX)
       list(APPEND genversion_args "-D${v}=${${v}}")
     endforeach()
 

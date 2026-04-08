@@ -50,10 +50,10 @@ message(STATUS "CMake version ${CMAKE_VERSION}")
 # Has to be set before `project()`, and ignored on non-macos:
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "macOS deployment target (Apple clang only)")
 
-project(oxen
+project(equilibria
     VERSION 23.0.0
     LANGUAGES CXX C)
-set(OXEN_RELEASE_CODENAME "Aegis")
+set(OXEN_RELEASE_CODENAME "Ragnarok")
 # Version update notes:
 # - bump the version above.
 # - for a new major release, make a new codename
@@ -984,7 +984,7 @@ elseif(tar_os STREQUAL "Windows")
   endif()
   set(default_archive create_zip) # .tar.xz files are too scary for Windows users
 endif()
-set(tar_dir "oxen-${tar_os}-${PROJECT_VERSION}${OXEN_RELEASE_SUFFIX}${git_tag}")
+set(tar_dir "equilibria-${tar_os}-${PROJECT_VERSION}${OXEN_RELEASE_SUFFIX}${git_tag}")
 add_custom_target(create_tarxz
   COMMAND ${CMAKE_COMMAND} -E rename bin "${tar_dir}"
   COMMAND ${CMAKE_COMMAND} -E tar cvJ "${tar_dir}.tar.xz" -- "${tar_dir}"

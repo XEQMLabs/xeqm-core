@@ -157,6 +157,7 @@ bool validate_governance_reward_key(
 
 uint64_t governance_reward_formula(hf hf_version, uint64_t base_reward) {
     return hf_version >= feature::ETH_BLS ? 0
+         : hf_version >= hf::hf19_reward_batching ? oxen::FOUNDATION_REWARD_HF19
          : hf_version >= hf::hf17         ? oxen::FOUNDATION_REWARD_HF17
          : hf_version >= hf::hf16_pulse
                  ? oxen::FOUNDATION_REWARD_HF15 + oxen::CHAINFLIP_LIQUIDITY_HF16
@@ -227,7 +228,8 @@ uint64_t derive_governance_from_block_reward(
 }
 
 uint64_t service_node_reward_formula(uint64_t base_reward, hf hard_fork_version) {
-    return hard_fork_version >= hf::hf15_ons ? oxen::SN_REWARD_HF15
+    return hard_fork_version >= hf::hf19_reward_batching ? oxen::SN_REWARD_HF19
+         : hard_fork_version >= hf::hf15_ons ? oxen::SN_REWARD_HF15
          : hard_fork_version >= hf::hf9_service_nodes
                  ? base_reward / 2
                  :  // 50% of base reward up until HF15's fixed payout
