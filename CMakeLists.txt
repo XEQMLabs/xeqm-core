@@ -53,7 +53,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "macOS deployment target (App
 project(equilibria
     VERSION 23.0.0
     LANGUAGES CXX C)
-set(OXEN_RELEASE_CODENAME "Aegis")
+set(OXEN_RELEASE_CODENAME "Ragnarok")
 # Version update notes:
 # - bump the version above.
 # - for a new major release, make a new codename
