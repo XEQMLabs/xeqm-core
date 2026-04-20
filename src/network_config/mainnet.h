@@ -6,6 +6,14 @@
 using namespace std::literals;
 namespace cryptonote::config::mainnet {
 
+inline constexpr std::array seeds = {
+        "147.93.0.247:18080"sv, // seed-1.xeqmlabs.com
+        "194.238.25.200:18080"sv, // seed-2.xeqmlabs.com
+        "62.146.169.98:18080"sv, // seed-3.xeqmlabs.com
+        "158.220.116.207:18080"sv, // seed-4.xeqmlabs.com
+        "217.216.108.148:18080"sv, // seed-5.xeqmlabs.com
+};
+
 inline constexpr auto TARGET_BLOCK_TIME = 1min;
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::MAINNET,
@@ -36,6 +44,7 @@ inline constexpr network_config config{
                 0x00,
                 0x00,
         }},
+        .P2P_SEED_NODES = seeds,
         .GENESIS_TX =
                 "021e01ff0001e0929292c9fcd5eb0302e9fd9ecc323d8e5c7ef6a2f654f0a2fcad6066e25e08f90b228fbd9a51a2032c42011613fd188ec2108351fc47576e5a886eee82a1c962a175e81a9e5249ecc09ee572000000000000000000000000000000000000000000000000000000000000000000"sv
         ,
@@ -87,17 +96,5 @@ inline constexpr network_config config{
         .L2_NODE_LIST_PURGE_MIN_OXEN_AGE = 24h / TARGET_BLOCK_TIME,
         .DEFAULT_STAKING_URL = ""sv,
 };
-inline constexpr std::array<const char*, 5> SEED_NODES = {
-    "seed1.equilibria.network:9230",
-    "seed2.equilibria.network:9230", 
-    "seed3.equilibria.network:9230",
-    "seed4.equilibria.network:9230",
-    "seed5.equilibria.network:9230"
-};
 
-inline constexpr std::array<const char*, 3> CHECKPOINT_NODES = {
-    "checkpoint1.equilibria.network:9230",
-    "checkpoint2.equilibria.network:9230",
-    "checkpoint3.equilibria.network:9230"
-};
 }  // namespace cryptonote::config::mainnet
