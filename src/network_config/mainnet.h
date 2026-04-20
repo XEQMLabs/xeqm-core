@@ -7,11 +7,11 @@ using namespace std::literals;
 namespace cryptonote::config::mainnet {
 
 inline constexpr std::array seeds = {
-        "147.93.0.247:18080"sv, // seed-1.xeqmlabs.com
-        "194.238.25.200:18080"sv, // seed-2.xeqmlabs.com
-        "62.146.169.98:18080"sv, // seed-3.xeqmlabs.com
-        "158.220.116.207:18080"sv, // seed-4.xeqmlabs.com
-        "217.216.108.148:18080"sv, // seed-5.xeqmlabs.com
+        "147.93.0.247:9230"sv, // seed-1.xeqmlabs.com
+        "194.238.25.200:9230"sv, // seed-2.xeqmlabs.com
+        "62.146.169.98:9230"sv, // seed-3.xeqmlabs.com
+        "158.220.116.207:9230"sv, // seed-4.xeqmlabs.com
+        "217.216.108.148:9230"sv, // seed-5.xeqmlabs.com
 };
 
 inline constexpr auto TARGET_BLOCK_TIME = 1min;
