@@ -8,6 +8,7 @@
 #include "../common/string_util.h"
 #include "../cryptonote_basic/cryptonote_basic.h"
 #include "../cryptonote_basic/cryptonote_format_utils.h"
+#include "../cryptonote_basic/miner.h"
 #include "../cryptonote_core/cryptonote_core.h"
 #include "../cryptonote_core/cryptonote_tx_utils.h"
 #include "../serialization/binary_utils.h"
@@ -124,7 +125,6 @@ int main(int argc, char* argv[]) {
         genesis.minor_version = static_cast<uint8_t>(hf::hf7);
         genesis.timestamp = 0;  // Must be 0
         genesis.prev_id = crypto::hash{};
-        genesis.nonce = 12345;  // Must match GENESIS_NONCE
 
         // Parse genesis transaction
         std::string tx_blob;
@@ -140,13 +140,34 @@ int main(int argc, char* argv[]) {
 
         genesis.miner_tx = parsed_tx;
 
-        // Calculate block hash using the same method as the daemon
-        crypto::hash block_hash = get_block_longhash(
-            nettype,
-            randomx_longhash_context(NULL, genesis, 0),
-            genesis,
-            0,
-            0);
+        // Get config for GENESIS_NONCE
+        auto& conf = get_config(nettype);
+        genesis.nonce = conf.GENESIS_NONCE;
+
+        // Mine the genesis block using the same method as the daemon
+        // This finds a valid nonce starting from GENESIS_NONCE
+        miner::find_nonce_for_given_block(
+                [](const cryptonote::block& b,
+                   uint64_t height,
+                   unsigned int threads,
+                   crypto::hash& hash) {
+                    // Daemon uses UNDEFINED for genesis block longhash
+                    hash = cryptonote::get_block_longhash(
+                            network_type::UNDEFINED,
+                            cryptonote::randomx_longhash_context(NULL, b, height),
+                            b,
+                            height,
+                            threads);
+                    return true;
+                },
+                genesis,
+                1,   // difficulty = 1
+                0);  // height = 0
+
+        genesis.invalidate_hashes();
+
+        // Calculate final block hash
+        crypto::hash block_hash = get_block_hash(genesis);
 
         // Output results
         std::cout << "Genesis TX: " << genesis_tx << std::endl;
