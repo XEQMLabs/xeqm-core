@@ -24,7 +24,7 @@ std::string create_genesis_tx() {
 
     // Create miner tx context
     oxen_miner_tx_context miner_tx_context = oxen_miner_tx_context::miner_block(
-            network_type::TESTNET,
+            network_type::MAINNET,
             genesis_account.get_keys().m_account_address);
 
     // Construct miner tx
@@ -58,7 +58,7 @@ std::string create_genesis_tx() {
     // Print the genesis wallet address and keys
     std::cout << "Genesis wallet address: "
               << get_account_address_as_str(
-                         network_type::TESTNET, false, genesis_account.get_keys().m_account_address)
+                         network_type::MAINNET, false, genesis_account.get_keys().m_account_address)
               << std::endl;
 
     std::cout << "Genesis spend private key: "
