@@ -38,6 +38,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/equilibriahorizon/equilibria-node:v23.0.0
+            ghcr.io/equilibriahorizon/equilibria-node:v23.0.1
             ghcr.io/equilibriahorizon/equilibria-node:latest
           no-cache: true
