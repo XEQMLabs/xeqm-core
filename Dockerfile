@@ -38,7 +38,7 @@ RUN mkdir -p build && cd build && \
         -DCMAKE_BUILD_TYPE=Release \
         -DARCH=x86-64 \
         .. && \
-    make -j$(nproc) daemon xeq-wallet-cli wallet_rpc_server
+    make -j$(nproc) daemon simplewallet wallet_rpc_server
 
 # --- Runtime stage ---
 FROM ubuntu:24.04
@@ -61,14 +61,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/build/bin/xeq-d /usr/local/bin/xeq-d
-COPY --from=builder /src/build/bin/xeq-wallet-cli /usr/local/bin/xeq-wallet-cli
-COPY --from=builder /src/build/bin/xeq-wallet-rpc /usr/local/bin/xeq-wallet-rpc
+COPY --from=builder /src/build/bin/xeq-d /usr/local/bin/xeqm-d
+COPY --from=builder /src/build/bin/xeq-wallet-cli /usr/local/bin/xeqm-wallet
+COPY --from=builder /src/build/bin/xeq-wallet-rpc /usr/local/bin/xeqm-rpc
 
-RUN chmod +x /usr/local/bin/xeq-d /usr/local/bin/xeq-wallet-cli /usr/local/bin/xeq-wallet-rpc
+RUN chmod +x /usr/local/bin/xeqm-d /usr/local/bin/xeqm-wallet /usr/local/bin/xeqm-rpc
 
 WORKDIR /data
 
 EXPOSE 9230 9231 9232 9233
 
-ENTRYPOINT ["/usr/local/bin/xeq-d"]
+ENTRYPOINT ["/usr/local/bin/xeqm-d"]
