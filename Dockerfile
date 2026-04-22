@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-all-dev \
     libcurl4-openssl-dev \
     libuv1-dev \
+    libgmp-dev \
     ca-certificates \
     python3 \
     && rm -rf /var/lib/apt/lists/*
