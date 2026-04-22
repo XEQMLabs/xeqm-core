@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-serialization1.83.0 \
     libcurl4 \
     libuv1 \
+    libjemalloc2 \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
