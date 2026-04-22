@@ -38,7 +38,7 @@ RUN mkdir -p build && cd build && \
         -DCMAKE_BUILD_TYPE=Release \
         -DARCH=x86-64 \
         .. && \
-    make -j$(nproc) daemon
+    make -j$(nproc) daemon xeq-wallet-cli wallet_rpc_server
 
 # --- Runtime stage ---
 FROM ubuntu:24.04
