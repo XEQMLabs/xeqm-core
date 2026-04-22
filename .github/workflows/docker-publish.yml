@@ -40,5 +40,4 @@ jobs:
           tags: |
             ghcr.io/equilibriahorizon/equilibria-node:v23.0.0
             ghcr.io/equilibriahorizon/equilibria-node:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
