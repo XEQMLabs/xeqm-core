@@ -67,7 +67,7 @@ if(TARGET device_trezor)
   target_link_libraries(wallet PUBLIC device_trezor)
 endif()
 
-oxen_add_executable(wallet_rpc_server "xeq-wallet-rpc"
+oxen_add_executable(wallet_rpc_server "xeqm-rpc"
   wallet_rpc_server.cpp
   wallet_rpc_server_commands_defs.cpp
   )

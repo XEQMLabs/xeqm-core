@@ -101,7 +101,7 @@ bool get_base_block_reward(
 
     // premine reward
     if (already_generated_coins == 0) {
-        reward = 200'000'000 * oxen::COIN;  // 200M XEQ premine
+        reward = 276'786'541'324'700'000;  // 276,786,541.3247 XEQM premine
         return true;
     }
 

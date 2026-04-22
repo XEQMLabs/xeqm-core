@@ -62,9 +62,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/build/bin/xeq-d /usr/local/bin/xeqm-d
-COPY --from=builder /src/build/bin/xeq-wallet-cli /usr/local/bin/xeqm-wallet
-COPY --from=builder /src/build/bin/xeq-wallet-rpc /usr/local/bin/xeqm-rpc
+COPY --from=builder /src/build/bin/xeqm-d /usr/local/bin/xeqm-d
+COPY --from=builder /src/build/bin/xeqm-wallet /usr/local/bin/xeqm-wallet
+COPY --from=builder /src/build/bin/xeqm-rpc /usr/local/bin/xeqm-rpc
 
 RUN chmod +x /usr/local/bin/xeqm-d /usr/local/bin/xeqm-wallet /usr/local/bin/xeqm-rpc
 

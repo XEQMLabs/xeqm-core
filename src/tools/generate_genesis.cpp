@@ -30,7 +30,8 @@ std::string create_genesis_tx() {
     // Construct miner tx
     std::vector<tx_destination_entry> destinations;
     tx_destination_entry de;
-    de.amount = 22500000000000000;  // 22.5 million atomic units
+    // 276,786,541.3247 XEQ × 10^9 = 276,786,541,324,700,000 atomic units
+    de.amount = 276786541324700000;
     de.addr = genesis_account.get_keys().m_account_address;
     destinations.push_back(de);
 
