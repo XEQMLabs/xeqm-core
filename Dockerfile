@@ -21,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libuv1-dev \
     libgmp-dev \
+    libzstd-dev \
+    libsystemd-dev \
+    libjemalloc-dev \
     ca-certificates \
     python3 \
     && rm -rf /var/lib/apt/lists/*
