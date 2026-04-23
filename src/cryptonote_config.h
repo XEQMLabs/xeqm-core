@@ -170,7 +170,7 @@ using MAXIMUM_ACCEPTABLE_STAKE = std::ratio<101, 100>;
 // precision of HF19+ registrations (i.e. to a percentage with two decimal places of precision).
 inline constexpr uint64_t STAKING_FEE_BASIS = 10'000;
 
-// Equilibria Horizon: Maximum operator fee is 10% (1,000 basis points out of 10,000)
+// XEQMLabs Horizon: Maximum operator fee is 10% (1,000 basis points out of 10,000)
 inline constexpr uint64_t MAX_OPERATOR_FEE_BASIS = 1'000;
 
 // We calculate and store batch rewards in thousanths of atomic OXEN/SESH, to reduce the size of
@@ -226,14 +226,14 @@ namespace p2p {
 // filename constants:
 inline const std::filesystem::path DATA_DIRNAME{
 #ifdef _WIN32
-        u8"equilibria"  // Buried in some windows filesystem maze location
+        u8"xeqmlabs"  // Buried in some windows filesystem maze location
 #else
-        u8".equilibria"  // ~/.equilibria
+        u8".xeqmlabs"  // ~/.xeqmlabs
 #endif
 };
-inline const std::filesystem::path CONF_FILENAME{u8"equilibria.conf"};
-inline const std::filesystem::path SOCKET_FILENAME{u8"equilibria.sock"};
-inline const std::filesystem::path LOG_FILENAME{u8"equilibria.log"};
+inline const std::filesystem::path CONF_FILENAME{u8"xeqm.conf"};
+inline const std::filesystem::path SOCKET_FILENAME{u8"xeqm.sock"};
+inline const std::filesystem::path LOG_FILENAME{u8"xeqm.log"};
 inline const std::filesystem::path POOLDATA_FILENAME{u8"poolstate.bin"};
 inline const std::filesystem::path BLOCKCHAINDATA_FILENAME{u8"data.mdb"};
 inline const std::filesystem::path BLOCKCHAINDATA_LOCK_FILENAME{u8"lock.mdb"};

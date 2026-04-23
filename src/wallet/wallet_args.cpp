@@ -206,7 +206,7 @@ std::pair<std::optional<boost::program_options::variables_map>, bool> main(
     if (!command_line::is_arg_defaulted(vm, arg_max_concurrency))
         tools::set_max_concurrency(command_line::get_arg(vm, arg_max_concurrency));
 
-    print("Equilibria '{}' (v{})\n"_format(OXEN_RELEASE_NAME, OXEN_VERSION_FULL));
+    print("XEQMLabs '{}' (v{})\n"_format(OXEN_RELEASE_NAME, OXEN_VERSION_FULL));
 
     if (!command_line::is_arg_defaulted(vm, arg_log_level))
         log::info(logcat, "Setting log level = {}", command_line::get_arg(vm, arg_log_level));

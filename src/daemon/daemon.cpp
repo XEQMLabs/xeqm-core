@@ -486,13 +486,13 @@ void daemon::cleanup_socket_files() {
         }
         
         // Paths to socket files
-        std::string equilibria_sock = (std::filesystem::path(data_dir) / "equilibria.sock").string();
+        std::string xeqmlabs_sock = (std::filesystem::path(data_dir) / "xeqm.sock").string();
         std::string lokid_sock = (std::filesystem::path(data_dir) / "lokid.sock").string();
         
         // Remove socket files if they exist
-        if (std::filesystem::exists(equilibria_sock)) {
-            log::info(logcat, "Removing stale socket file: {}", equilibria_sock);
-            std::filesystem::remove(equilibria_sock);
+        if (std::filesystem::exists(xeqmlabs_sock)) {
+            log::info(logcat, "Removing stale socket file: {}", xeqmlabs_sock);
+            std::filesystem::remove(xeqmlabs_sock);
         }
         
         if (std::filesystem::exists(lokid_sock)) {
