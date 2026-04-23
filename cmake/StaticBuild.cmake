@@ -137,7 +137,11 @@ set(LIBTASN1_HASH SHA512=287f5eddfb5e21762d9f14d11997e56b953b980b2b03a97ed4cd6d3
     CACHE STRING "libtasn1 source hash")
 
 set(GMP_VERSION 6.3.0 CACHE STRING "gmp version")
-set(GMP_MIRROR ${LOCAL_MIRROR} https://gmplib.org/download/gmp
+set(GMP_MIRROR ${LOCAL_MIRROR}
+    https://ftpmirror.gnu.org/gmp
+    https://ftp.gnu.org/gnu/gmp
+    https://mirrors.kernel.org/gnu/gmp
+    https://gmplib.org/download/gmp
     CACHE STRING "gmp mirror(s)")
 set(GMP_SOURCE gmp-${GMP_VERSION}.tar.xz)
 set(GMP_HASH SHA512=e85a0dab5195889948a3462189f0e0598d331d3457612e2d3350799dba2e244316d256f8161df5219538eb003e4b5343f989aaa00f96321559063ed8c8f29fd2
