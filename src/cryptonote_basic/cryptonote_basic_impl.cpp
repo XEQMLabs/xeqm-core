@@ -231,6 +231,7 @@ bool get_account_address_from_str(
             serialization::parse_binary(data, iadr);
             info.address = iadr.adr;
             info.payment_id = iadr.payment_id;
+
         } else {
             serialization::parse_binary(data, info.address);
         }

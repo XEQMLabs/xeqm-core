@@ -2,29 +2,32 @@
 
 #include <iostream>
 #include <string>
+#include <boost/program_options.hpp>
 
+#include "../common/command_line.h"
 #include "../common/string_util.h"
 #include "../cryptonote_basic/cryptonote_basic.h"
 #include "../cryptonote_basic/cryptonote_format_utils.h"
+#include "../cryptonote_basic/miner.h"
 #include "../cryptonote_core/cryptonote_core.h"
 #include "../cryptonote_core/cryptonote_tx_utils.h"
 #include "../serialization/binary_utils.h"
 
+namespace po = boost::program_options;
 using namespace cryptonote;
 
-// Create a genesis transaction with no premine
-std::string create_genesis_tx() {
+// Create a genesis transaction for the specified network
+std::string create_genesis_tx(network_type nettype, account_base& genesis_account) {
     transaction tx;
     tx.version = txversion::v1;
     tx.unlock_time = 0;  // No unlock time
 
-    // Create a new wallet address with the correct prefix
-    account_base genesis_account;
+    // Create a new wallet address
     genesis_account.generate();
 
-    // Create miner tx context
+    // Create miner tx context for the correct network
     oxen_miner_tx_context miner_tx_context = oxen_miner_tx_context::miner_block(
-            network_type::MAINNET,
+            nettype,
             genesis_account.get_keys().m_account_address);
 
     // Construct miner tx
@@ -59,7 +62,7 @@ std::string create_genesis_tx() {
     // Print the genesis wallet address and keys
     std::cout << "Genesis wallet address: "
               << get_account_address_as_str(
-                         network_type::MAINNET, false, genesis_account.get_keys().m_account_address)
+                         nettype, false, genesis_account.get_keys().m_account_address)
               << std::endl;
 
     std::cout << "Genesis spend private key: "
@@ -76,12 +79,45 @@ std::string create_genesis_tx() {
     return oxenc::to_hex(tx_blob);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    std::string network;
+
+    po::options_description desc("Genesis block generator");
+    desc.add_options()
+        ("help,h", "produce help message")
+        ("network,n", po::value<std::string>(&network)->default_value("mainnet"),
+         "Network type: mainnet, testnet, devnet");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << std::endl;
+        return 1;
+    }
+
+    // Parse network type
+    network_type nettype;
+    if (network == "testnet") {
+        nettype = network_type::TESTNET;
+    } else if (network == "devnet") {
+        nettype = network_type::DEVNET;
+    } else if (network == "mainnet") {
+        nettype = network_type::MAINNET;
+    } else {
+        std::cerr << "Error: Unknown network type '" << network << "'. Use: mainnet, testnet, devnet" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Network: " << network << std::endl;
+
     try {
         hw::get_device("default");  // Initialize crypto via hardware device
 
         // Generate genesis transaction
-        std::string genesis_tx = create_genesis_tx();
+        account_base genesis_account;
+        std::string genesis_tx = create_genesis_tx(nettype, genesis_account);
 
         // Create genesis block
         block genesis;
@@ -89,7 +125,6 @@ int main() {
         genesis.minor_version = static_cast<uint8_t>(hf::hf7);
         genesis.timestamp = 0;  // Must be 0
         genesis.prev_id = crypto::hash{};
-        genesis.nonce = 12345;  // Must match GENESIS_NONCE
 
         // Parse genesis transaction
         std::string tx_blob;
@@ -105,13 +140,34 @@ int main() {
 
         genesis.miner_tx = parsed_tx;
 
-        // Calculate block hash using the same method as the daemon
-        crypto::hash block_hash = get_block_longhash(
-            network_type::UNDEFINED,
-            randomx_longhash_context(NULL, genesis, 0),
-            genesis,
-            0,
-            0);
+        // Get config for GENESIS_NONCE
+        auto& conf = get_config(nettype);
+        genesis.nonce = conf.GENESIS_NONCE;
+
+        // Mine the genesis block using the same method as the daemon
+        // This finds a valid nonce starting from GENESIS_NONCE
+        miner::find_nonce_for_given_block(
+                [](const cryptonote::block& b,
+                   uint64_t height,
+                   unsigned int threads,
+                   crypto::hash& hash) {
+                    // Daemon uses UNDEFINED for genesis block longhash
+                    hash = cryptonote::get_block_longhash(
+                            network_type::UNDEFINED,
+                            cryptonote::randomx_longhash_context(NULL, b, height),
+                            b,
+                            height,
+                            threads);
+                    return true;
+                },
+                genesis,
+                1,   // difficulty = 1
+                0);  // height = 0
+
+        genesis.invalidate_hashes();
+
+        // Calculate final block hash
+        crypto::hash block_hash = get_block_hash(genesis);
 
         // Output results
         std::cout << "Genesis TX: " << genesis_tx << std::endl;
@@ -127,9 +183,9 @@ int main() {
         std::cout << "Timestamp: " << genesis.timestamp << "\n";
         std::cout << "Nonce: " << genesis.nonce << "\n";
         std::cout << "Prev ID: " << oxenc::to_hex(std::string_view{
-                             reinterpret_cast<const char*>(genesis.prev_id.data()), sizeof(genesis.prev_id)}) << "\n";
+            reinterpret_cast<const char*>(genesis.prev_id.data(), sizeof(genesis.prev_id))}) << "\n";
         std::cout << "Miner tx hash: " << oxenc::to_hex(std::string_view{
-                             reinterpret_cast<const char*>(tx_hash.data()), sizeof(tx_hash)}) << "\n";
+            reinterpret_cast<const char*>(tx_hash.data(), sizeof(tx_hash))}) << "\n";
 
         return 0;
     } catch (const std::exception& e) {
