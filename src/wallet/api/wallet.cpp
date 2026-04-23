@@ -2420,7 +2420,7 @@ bool WalletImpl::parse_uri(
 
 EXPORT
 std::string WalletImpl::getDefaultDataDir() const {
-    return tools::get_default_data_dir();
+    return tools::get_default_data_dir().string();
 }
 
 EXPORT

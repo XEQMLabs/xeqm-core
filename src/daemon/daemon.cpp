@@ -477,7 +477,7 @@ void daemon::cleanup_socket_files() {
         // Get the data directory path
         std::string data_dir = command_line::get_arg(vm, cryptonote::arg_data_dir);
         if (data_dir.empty()) {
-            data_dir = tools::get_default_data_dir();
+            data_dir = tools::get_default_data_dir().string();
         }
         
         // If testnet is enabled, append testnet to the path
