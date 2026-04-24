@@ -102,4 +102,4 @@ WORKDIR /data
 EXPOSE 18080-18200
 
 # Default to daemon but allow override
-ENTRYPOINT ["/usr/local/bin/xeq-d"]
+ENTRYPOINT ["/usr/local/bin/xeqm-d"]

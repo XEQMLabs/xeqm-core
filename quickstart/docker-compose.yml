@@ -1,0 +1,24 @@
+services:
+  xeqm-seed:
+    image: ghcr.io/equilibriahorizon/equilibria-node:v23.0.3
+    container_name: xeqm-seed
+    restart: unless-stopped
+    volumes:
+      - /opt/xeqm/data:/data
+      - /opt/xeqm/xeqm.conf:/data/xeqm.conf:ro
+    ports:
+      - "9230:9230/tcp"
+      - "9230:9230/udp"
+      - "9231:9231/tcp"
+      - "9233:9233/tcp"
+    command:
+      - --non-interactive
+      - --config-file=/data/xeqm.conf
+      - --start-mining=XEQM9WDMP7ZWvuY5AQPpQdWsufYyB1vmYEHWVQV4wUrU3uyr4xHg2nA34KdGtyng6B39RZrr6t8DuhS1gadkARM43cCij1tkDW
+      - --mining-threads=4
+    logging:
+      driver: journald
+      options:
+        tag: xeqm-seed
+    stop_grace_period: 60s
+
