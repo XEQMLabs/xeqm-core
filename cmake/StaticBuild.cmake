@@ -655,7 +655,9 @@ build_external(zmq
 add_static_target(libzmq zmq_external libzmq.a)
 
 set(libzmq_link_libs "sodium")
-if(CMAKE_CROSSCOMPILING AND ARCH_TRIPLET MATCHES mingw)
+# libzmq uses Windows Winsock2 (ws2_32) and IP Helper (iphlpapi) APIs.
+# Add these on ANY Windows build (cross-compile from Linux OR native MSYS2 MinGW).
+if(WIN32 OR MINGW OR (CMAKE_CROSSCOMPILING AND ARCH_TRIPLET MATCHES mingw))
   list(APPEND libzmq_link_libs iphlpapi ws2_32)
 endif()
 
