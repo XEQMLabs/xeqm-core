@@ -32,67 +32,20 @@
 
 namespace cryptonote {
 
-// version 7 from the start of the blockchain, inhereted from Monero mainnet
 static constexpr std::array mainnet_hard_forks = {
-
-        // NOTE: all commented timestamps are UTC.
-
-        // Loki 0.1: Loki is born
-        hard_fork{hf::hf7, 0, 0, 1503046577 /*Fri, 18 Aug 2017 08:56:17*/},
-
-        // Loki 0.2: New emissions schedule
-        hard_fork{hf::hf8, 0, 64324, 1533006000 /*Tue, 31 Jul 2018 03:00*/},
-
-        // Loki 1: Service nodes launched
-        hard_fork{hf::hf9_service_nodes, 0, 101250, 1537444800 /*Thu, 20 Sep 2018 12:00*/},
-        // Loki 2: Bulletproofs, gov fee batching
-        hard_fork{hf::hf10_bulletproofs, 0, 161849, 1544743800 /*Thu, 13 Dec 2018 23:30*/},
-
-        // Loki 3: Infinite staking, CN-Turtle
-        hard_fork{hf::hf11_infinite_staking, 0, 234767, 1554170400 /*Tue,  2 Apr 2019 02:00*/},
-
-        // Loki 4: Checkpointing, RandomXL, decommissioning, Storage Server launched
-        hard_fork{hf::hf12_checkpointing, 0, 321467, 1563940800 /*Wed, 24 Jul 2019 04:00*/},
-
-        // Loki 5: Checkpointing enforced
-        hard_fork{hf::hf13_enforce_checkpoints, 0, 385824, 1571850000 /*Wed, 23 Oct 2019 17:00*/},
-
-        // Loki 6: Blink, Lokinet launched on mainnet
-        hard_fork{hf::hf14_blink, 0, 442333, 1578528000 /*Thu,  9 Jan 2020 00:00*/},
-
-        // Loki 7: ONS (Session)
-        hard_fork{hf::hf15_ons, 0, 496969, 1585105200 /*Wed, 25 Mar 2020 03:00*/},
-
-        // Loki 8: Pulse.  Contains two hardforks: HF17 eliminates 6/block emissions after 180 days
-        hard_fork{hf::hf16_pulse, 0, 641111, 1602464400 /*Mon, 12 Oct 2020 01:00*/},
-        hard_fork{hf::hf17, 0, 770711, 1618016400 /*Sat, 10 Apr 2021 01:00*/},
-
-        // Oxen 9: Timesync, new proofs, reasons, wallet ONS
-        hard_fork{hf::hf18, 0, 785000, 1619736143 /*Thu, 29 Apr 2021 22:42:23*/},
-
-        // Oxen 9.2: mandatory SS 2.2.0 & lokinet 0.9.5 updates
-        hard_fork{hf::hf18, 1, 839009, 1626217200 /*Tue, 13 Jul 2021 23:00*/},
-
-        // Oxen 10: Service Node Reward Batching, includes minor HF bump after two weeks with
-        // upgrades for assisting Session migration
-        hard_fork{hf::hf19_reward_batching, 0, 1080149, 1655154000 /*Mon, 13 Jun 2022 21:00*/},
-        hard_fork{hf::hf19_reward_batching, 1, 1090229, 1656363600 /*Mon, 27 Jun 2022 21:00*/},
-
-        // Oxen 10.2: Unlock fixes, mandatory SS 2.4.0 update
-        hard_fork{hf::hf19_reward_batching, 2, 1146479, 1663113600 /*Wed, 14 Sep 2022 00:00*/},
-
-        // Oxen 10.3: Mandatory SS 2.5.0 update
-        hard_fork{hf::hf19_reward_batching, 3, 1253039, 1675900800 /*Thu, 9 Feb 2023 00:00*/},
-
-        // Oxen 10.4: Mandatory SS 2.6.0 update
-        hard_fork{hf::hf19_reward_batching, 4, 1523759, 1708387200 /*Tue, 20 Feb 2024 00:00*/},
-
-        // Oxen 10.5: Mandatory SS 2.7.0 update
-        hard_fork{hf::hf19_reward_batching, 5, 1634624, 1721691000 /*Mon, 22 Jul 2024 23:30*/},
-
-        // Oxen 10.6: Mandatory SS 2.8.0 update
-        hard_fork{hf::hf19_reward_batching, 6, 1641104, 1722468600 /*Wed, 31 July 2024 23:30*/},
-
+        hard_fork{hf::hf7, 0, 0, 1653632397},
+        hard_fork{hf::hf11_infinite_staking, 0, 2, 1653632397},
+        hard_fork{hf::hf12_checkpointing, 0, 3, 1653632397},
+        hard_fork{hf::hf13_enforce_checkpoints, 0, 4, 1653632397},
+        hard_fork{hf::hf14_blink, 0, 5, 1653632397},
+        hard_fork{hf::hf15_ons, 0, 6, 1653632397},
+        hard_fork{hf::hf16_pulse, 0, 750, 1653632397},
+        hard_fork{hf::hf17, 0, 751, 1653632397},
+        hard_fork{hf::hf18, 0, 752, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 0, 753, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
+        hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
 };
 
 static constexpr std::array testnet_hard_forks = {
