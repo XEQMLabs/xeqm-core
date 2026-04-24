@@ -41,3 +41,10 @@ target_link_libraries(simplewallet
     Boost::thread
     logging
     extra)
+
+# libzmq (linked transitively via wallet/cryptonote_core) pulls in Winsock2
+# and IP Helper APIs on Windows. Add them explicitly so native MSYS2 MinGW
+# builds resolve __imp_WSASocketA, if_nametoindex, GetAdaptersAddresses, etc.
+if(WIN32 OR MINGW)
+  target_link_libraries(simplewallet PRIVATE ws2_32 iphlpapi)
+endif()
