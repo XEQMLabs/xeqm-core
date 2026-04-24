@@ -53,7 +53,7 @@ static_assert(SN_REWARD_HF19 + FOUNDATION_REWARD_HF19 == 20'650'000'000);  // 20
 //
 // -------------------------------------------------------------------------------------------------
 
-// Equilibria Horizon: Full stake requirement is 200,000 XEQ
+// XEQMLabs Horizon: Full stake requirement is 200,000 XEQ
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT = 200'000 * COIN;
 // testnet/devnet/fakenet have always had a fixed 100 OXEN staking requirement:
 inline constexpr uint64_t OXEN_STAKING_REQUIREMENT_TESTNET = 100'000 * COIN;
@@ -71,7 +71,7 @@ inline constexpr uint64_t SESH_STAKING_REQUIREMENT_LOCALDEV = 100'000 * COIN;
 // annual simple payout rate (= 14% compounding rate).
 inline constexpr uint64_t ETH_BLS_INITIAL_REWARD = 40000000'000000000 * 151 / 1000 / 365 / 720;
 
-// Equilibria Horizon: Minimum operator contribution is 50% of staking requirement (100,000 XEQ)
+// XEQMLabs Horizon: Minimum operator contribution is 50% of staking requirement (100,000 XEQ)
 constexpr uint64_t MINIMUM_OPERATOR_CONTRIBUTION(uint64_t staking_requirement) {
     return staking_requirement / 2;
 }
