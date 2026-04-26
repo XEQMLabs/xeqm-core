@@ -778,7 +778,8 @@ void validate_registration(
     } else {
         // If not using portions then the hf value must be >= 19 and equal to the current blockchain
         // hf:
-        if (hf_version < hf::hf19_reward_batching || reg.hf != static_cast<uint8_t>(hf_version))
+      if (reg.hf != static_cast<uint8_t>(hf_version) &&
+          reg.hf != static_cast<uint8_t>(hf::hf19_reward_batching))
             throw invalid_registration{
                     "Wrong registration hardfork {}; you likely need to regenerate "
                     "the registration for compatibility with hardfork {}"_format(
