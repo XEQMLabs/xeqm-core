@@ -170,7 +170,7 @@ service_node_test_results quorum_cop::check_service_node(
         }
     }
 
-    if (check_l2_height) {
+    if (check_l2_height && m_core.have_l2_tracker()) {
         // Checking if the nodes L2 height is too far behind
         auto l2_min_acceptable_height = m_core.l2_tracker().get_l2_heights().synced;
         l2_min_acceptable_height -= std::min(
