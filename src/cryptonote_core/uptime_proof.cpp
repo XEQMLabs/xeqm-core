@@ -99,9 +99,7 @@ Proof::Proof(
         !epee::string_tools::get_ip_int32_from_string(public_ip, ip) || public_ip == 0)
         throw oxen::traced<std::runtime_error>{"Invalid IP address in proof"};
 
-    l2_height = proof.require<uint64_t>("l2");
-    if (l2_height == 0)
-        throw oxen::traced<std::runtime_error>{"Invalid L2 height in proof"};
+    l2_height = proof.maybe<uint64_t>("l2").value_or(0);
 
     lokinet_version =
             proof.maybe<std::array<uint16_t, 3>>("lv").value_or(std::array<uint16_t, 3>{0, 0, 0});
@@ -164,7 +162,6 @@ std::string Proof::bt_encode_uptime_proof(hf hardfork, cryptonote::network_type 
     if (nettype != cryptonote::network_type::MAINNET)
         proof.append("gh", version_tag);
     proof.append("ip", epee::string_tools::get_ip_string_from_int32(public_ip));
-    proof.append("l2", l2_height);
     proof.append("lv", lokinet_version);
     proof.append("pke", tools::view_guts(pubkey_ed25519));
     proof.append("q", qnet_port);

@@ -102,7 +102,7 @@ service_node_test_results quorum_cop::check_service_node(
     std::chrono::seconds proof_age = 0s;
 
     // nodes which did not transition at HF21 will have an empty contributors list
-    result.failed_transition = info.contributors.empty();
+    result.failed_transition = hf_version >= cryptonote::feature::ETH_BLS && info.contributors.empty();
 
     participation_history<service_nodes::checkpoint_participation_entry> checkpoint_participation{};
     participation_history<service_nodes::pulse_participation_entry> pulse_participation{};
@@ -146,12 +146,12 @@ service_node_test_results quorum_cop::check_service_node(
         result.uptime_proved = false;
     }
 
-    if (!ss_reachable) {
+    if (!ss_reachable && netconf.HAVE_STORAGE_SERVER) {
         log::info(logcat, "Service Node storage server is not reachable for node: {}", pubkey);
         result.storage_server_reachable = false;
     }
 
-    if (!lokinet_reachable && hf_version >= hf::hf19_reward_batching) {
+    if (!lokinet_reachable && hf_version >= hf::hf19_reward_batching && netconf.HAVE_LOKINET) {
         log::info(logcat, "Service Node lokinet is not reachable for node: {}", pubkey);
         result.lokinet_reachable = false;
     }
