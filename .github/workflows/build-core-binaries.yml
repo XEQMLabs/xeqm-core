@@ -101,7 +101,7 @@ jobs:
             XEQM-core-*-ubuntu-24.04-x86_64-*.tar.gz.sha256
 
   windows-x64:
-    name: Build Windows x64 binaries using depends
+    name: Build Windows x64 binaries
     runs-on: ubuntu-24.04
 
     steps:
@@ -122,7 +122,7 @@ jobs:
 
       - name: Build Windows x64 using depends
         run: |
-          make depends target=x86_64-w64-mingw32 -j"$(nproc)"
+          make release-static-win64 -j"$(nproc)"
 
       - name: Locate Windows binaries
         id: locate
