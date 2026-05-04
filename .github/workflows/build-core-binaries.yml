@@ -1,0 +1,248 @@
+name: Build XEQM Core Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label, for example 23.0.0-dev"
+        required: true
+        type: string
+
+  push:
+    tags:
+      - "core-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-ubuntu-2404:
+    name: Build Ubuntu 24.04 x64 binaries
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git build-essential cmake pkg-config ccache curl zip unzip tar \
+            libssl-dev libzmq3-dev libsodium-dev libunbound-dev \
+            libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
+            libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
+            libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Configure
+        run: |
+          rm -rf build
+          mkdir -p build
+          cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBoost_NO_BOOST_CMAKE=ON
+
+      - name: Build
+        run: |
+          cd build
+          make -j"$(nproc)"
+
+      - name: Verify binaries
+        run: |
+          build/bin/xeqm-d --version
+          build/bin/xeqm-wallet --version
+          build/bin/xeqm-rpc --version
+          file build/bin/xeqm-d
+          file build/bin/xeqm-wallet
+          file build/bin/xeqm-rpc
+
+      - name: Package Ubuntu binaries
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME#core-v}"
+          fi
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT="$(git rev-parse --short HEAD)"
+          PKG="XEQM-core-${VERSION}-ubuntu-24.04-x86_64-${SHORT}"
+
+          mkdir -p "$PKG"
+          cp build/bin/xeqm-d "$PKG/"
+          cp build/bin/xeqm-wallet "$PKG/"
+          cp build/bin/xeqm-rpc "$PKG/"
+          chmod +x "$PKG"/*
+
+          cat > "$PKG/README.txt" <<EOF
+XEQM Core Ubuntu 24.04 x86_64 binaries
+
+Source commit: ${COMMIT}
+
+Included:
+  xeqm-d
+  xeqm-wallet
+  xeqm-rpc
+
+Version output:
+
+EOF
+
+          ./build/bin/xeqm-d --version >> "$PKG/README.txt"
+          ./build/bin/xeqm-wallet --version >> "$PKG/README.txt"
+          ./build/bin/xeqm-rpc --version >> "$PKG/README.txt"
+
+          tar -czf "${PKG}.tar.gz" "$PKG"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+
+      - name: Upload Ubuntu artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XEQM-core-ubuntu-24.04-x86_64
+          path: |
+            XEQM-core-*-ubuntu-24.04-x86_64-*.tar.gz
+            XEQM-core-*-ubuntu-24.04-x86_64-*.tar.gz.sha256
+
+  windows-x64:
+    name: Build Windows x64 binaries using depends
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Windows cross-build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git build-essential cmake pkg-config ccache curl zip unzip tar \
+            python3 python3-dev python3-setuptools bc \
+            g++-mingw-w64-x86-64 mingw-w64 wine64 \
+            bison gperf autoconf automake autopoint libtool-bin \
+            libtool gettext nsis
+
+      - name: Build Windows x64 using depends
+        run: |
+          make depends target=x86_64-w64-mingw32 -j"$(nproc)"
+
+      - name: Locate Windows binaries
+        id: locate
+        shell: bash
+        run: |
+          echo "Searching for Windows binaries..."
+          find build -type f \( \
+            -name 'xeqm-d.exe' -o \
+            -name 'xeqm-wallet.exe' -o \
+            -name 'xeqm-rpc.exe' -o \
+            -name '*.dll' \
+          \) | sort
+
+          BIN_DIR="$(find build -type f -name 'xeqm-d.exe' -exec dirname {} \; | head -1)"
+
+          if [ -z "$BIN_DIR" ]; then
+            echo "FATAL: Could not find xeqm-d.exe"
+            find build -type f -name '*.exe' | sort
+            exit 1
+          fi
+
+          echo "bin_dir=$BIN_DIR" >> "$GITHUB_OUTPUT"
+          echo "Found Windows bin dir: $BIN_DIR"
+
+      - name: Verify Windows binaries exist
+        run: |
+          BIN_DIR="${{ steps.locate.outputs.bin_dir }}"
+
+          test -f "$BIN_DIR/xeqm-d.exe"
+          test -f "$BIN_DIR/xeqm-wallet.exe"
+          test -f "$BIN_DIR/xeqm-rpc.exe"
+
+          file "$BIN_DIR/xeqm-d.exe"
+          file "$BIN_DIR/xeqm-wallet.exe"
+          file "$BIN_DIR/xeqm-rpc.exe"
+
+      - name: Package Windows binaries
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME#core-v}"
+          fi
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT="$(git rev-parse --short HEAD)"
+          BIN_DIR="${{ steps.locate.outputs.bin_dir }}"
+          PKG="XEQM-core-${VERSION}-windows-x86_64-${SHORT}"
+
+          mkdir -p "$PKG"
+
+          cp "$BIN_DIR/xeqm-d.exe" "$PKG/"
+          cp "$BIN_DIR/xeqm-wallet.exe" "$PKG/"
+          cp "$BIN_DIR/xeqm-rpc.exe" "$PKG/"
+
+          find "$BIN_DIR" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$PKG/" \; || true
+
+          cat > "$PKG/README.txt" <<EOF
+XEQM Core Windows x86_64 binaries
+
+Source commit: ${COMMIT}
+
+Included:
+  xeqm-d.exe
+  xeqm-wallet.exe
+  xeqm-rpc.exe
+
+Note:
+  These binaries are unsigned unless a Windows signing step is added later.
+EOF
+
+          zip -r "${PKG}.zip" "$PKG"
+          sha256sum "${PKG}.zip" > "${PKG}.zip.sha256"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XEQM-core-windows-x86_64
+          path: |
+            XEQM-core-*-windows-x86_64-*.zip
+            XEQM-core-*-windows-x86_64-*.zip.sha256
+
+  publish:
+    name: Publish core release
+    needs:
+      - linux-ubuntu-2404
+      - windows-x64
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/core-v')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: List assets
+        run: |
+          find release-assets -type f -print
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: XEQM Core ${{ github.ref_name }}
+          files: release-assets/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            XEQM Core binary release.
+
+            Includes:
+            - Ubuntu 24.04 x86_64 tar.gz
+            - Windows x86_64 zip
+
+            Source commit:
+            ${{ github.sha }}
