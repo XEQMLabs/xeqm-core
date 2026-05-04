@@ -76,23 +76,18 @@ jobs:
           cp build/bin/xeqm-rpc "$PKG/"
           chmod +x "$PKG"/*
 
-          cat > "$PKG/README.txt" <<EOF
-XEQM Core Ubuntu 24.04 x86_64 binaries
-
-Source commit: ${COMMIT}
-
-Included:
-  xeqm-d
-  xeqm-wallet
-  xeqm-rpc
-
-Version output:
-
-EOF
-
-          ./build/bin/xeqm-d --version >> "$PKG/README.txt"
-          ./build/bin/xeqm-wallet --version >> "$PKG/README.txt"
-          ./build/bin/xeqm-rpc --version >> "$PKG/README.txt"
+          {
+            printf "XEQM Core Ubuntu 24.04 x86_64 binaries\\n\\n"
+            printf "Source commit: %s\\n\\n" "$COMMIT"
+            printf "Included:\\n"
+            printf "  xeqm-d\\n"
+            printf "  xeqm-wallet\\n"
+            printf "  xeqm-rpc\\n\\n"
+            printf "Version output:\\n\\n"
+            ./build/bin/xeqm-d --version
+            ./build/bin/xeqm-wallet --version
+            ./build/bin/xeqm-rpc --version
+          } > "$PKG/README.txt"
 
           tar -czf "${PKG}.tar.gz" "$PKG"
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
@@ -185,19 +180,16 @@ EOF
 
           find "$BIN_DIR" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$PKG/" \; || true
 
-          cat > "$PKG/README.txt" <<EOF
-XEQM Core Windows x86_64 binaries
-
-Source commit: ${COMMIT}
-
-Included:
-  xeqm-d.exe
-  xeqm-wallet.exe
-  xeqm-rpc.exe
-
-Note:
-  These binaries are unsigned unless a Windows signing step is added later.
-EOF
+          {
+            printf "XEQM Core Windows x86_64 binaries\\n\\n"
+            printf "Source commit: %s\\n\\n" "$COMMIT"
+            printf "Included:\\n"
+            printf "  xeqm-d.exe\\n"
+            printf "  xeqm-wallet.exe\\n"
+            printf "  xeqm-rpc.exe\\n\\n"
+            printf "Note:\\n"
+            printf "  These binaries are unsigned unless a Windows signing step is added later.\\n"
+          } > "$PKG/README.txt"
 
           zip -r "${PKG}.zip" "$PKG"
           sha256sum "${PKG}.zip" > "${PKG}.zip.sha256"
