@@ -145,7 +145,7 @@ std::pair<std::optional<boost::program_options::variables_map>, bool> main(
         bool help = command_line::get_arg(vm, command_line::arg_help);
         bool version = command_line::get_arg(vm, command_line::arg_version);
         if (help or version) {
-            print("Oxen '{}' (v{})\n"_format(OXEN_RELEASE_NAME, OXEN_VERSION_FULL));
+            print("XEQMLabs '{}' (v{})\n"_format(OXEN_RELEASE_NAME, OXEN_VERSION_FULL));
 
             if (help) {
                 print(
