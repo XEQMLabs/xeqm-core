@@ -36,6 +36,19 @@ jobs:
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
             libboost-all-dev libzstd-dev libgmp-dev
 
+      - name: Patch SQLiteCpp headers for GCC
+        shell: bash
+        run: |
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
+            sed -i '/#include <memory>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
+            sed -i '/#include <SQLiteCpp\/Statement.h>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+          grep -n '#include <cstdint>' \
+            external/SQLiteCpp/include/SQLiteCpp/Statement.h \
+            external/SQLiteCpp/include/SQLiteCpp/Column.h
+
       - name: Configure
         run: |
           rm -rf build
@@ -155,6 +168,19 @@ jobs:
           which make
           make --version | head -5
           gcc --version | head -3
+
+      - name: Patch SQLiteCpp headers for GCC
+        shell: bash
+        run: |
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
+            sed -i '/#include <memory>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
+            sed -i '/#include <SQLiteCpp\/Statement.h>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+          grep -n '#include <cstdint>' \
+            external/SQLiteCpp/include/SQLiteCpp/Statement.h \
+            external/SQLiteCpp/include/SQLiteCpp/Column.h
 
       - name: Build Windows x64
         run: |
