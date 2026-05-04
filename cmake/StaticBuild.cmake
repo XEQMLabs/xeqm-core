@@ -367,11 +367,16 @@ if(CMAKE_CROSSCOMPILING)
   set(boost_bootstrap_cxx "") # need to use our native compiler to bootstrap
   if(ARCH_TRIPLET MATCHES mingw)
     list(APPEND boost_extra "target-os=windows")
-    if(ARCH_TRIPLET MATCHES x86_64)
+
+    if(BUILD_64)
       list(APPEND boost_extra "address-model=64")
     else()
       list(APPEND boost_extra "address-model=32")
     endif()
+
+    message(STATUS "Boost static build ARCH_TRIPLET=${ARCH_TRIPLET}")
+    message(STATUS "Boost static build BUILD_64=${BUILD_64}")
+    message(STATUS "Boost static build boost_extra=${boost_extra}")
   elseif(ANDROID)
     set(boost_bootstrap_cxx "--cxx=c++")
   endif()
