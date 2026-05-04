@@ -1246,7 +1246,9 @@ void BlockchainSQLite::reward_handler(
     if (block.major_version < feature::ETH_BLS) {
         // Step 1: Pay out the block producer their tx fees (note that, unlike the
         // below, this applies even if the SN isn't currently payable).
-        auto base_sn_reward = reward_money::from_coin(oxen::SN_REWARD_HF15);
+        auto base_sn_reward = reward_money::from_coin(
+                block.major_version >= hf::hf19_reward_batching ? oxen::SN_REWARD_HF19
+                                                                : oxen::SN_REWARD_HF15);
         if (block_reward < base_sn_reward)
             throw oxen::traced<std::logic_error>{"Invalid payment: block reward is too small"};
         if (auto tx_fees = block_reward - base_sn_reward;

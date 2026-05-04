@@ -105,11 +105,12 @@ bool get_base_block_reward(
         return true;
     }
 
-    uint64_t base_reward = version >= hf::hf17     ? oxen::BLOCK_REWARD_HF17
-                         : version >= hf::hf15_ons ? oxen::BLOCK_REWARD_HF15
-                         : version >= hf::hf8      ? block_reward_unpenalized_formula_v8(height)
-                                                   : block_reward_unpenalized_formula_v7(
-                                                        already_generated_coins, height);
+    uint64_t base_reward = version >= hf::hf19_reward_batching ? oxen::BLOCK_REWARD_HF19
+                         : version >= hf::hf17                 ? oxen::BLOCK_REWARD_HF17
+                         : version >= hf::hf15_ons             ? oxen::BLOCK_REWARD_HF15
+                         : version >= hf::hf8                  ? block_reward_unpenalized_formula_v8(height)
+                                                              : block_reward_unpenalized_formula_v7(
+                                                                   already_generated_coins, height);
 
     uint64_t full_reward_zone = get_min_block_weight(version);
 

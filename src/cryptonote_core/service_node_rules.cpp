@@ -83,8 +83,10 @@ static_assert([]<size_t... I>(std::index_sequence<I...>) {
 }(std::make_index_sequence<ALL_NETWORKS.size()>{}));
 
 uint64_t get_default_staking_requirement(cryptonote::network_type nettype, hf hardfork) {
-    assert(hardfork >= hf::hf16_pulse);
-    if (hardfork >= feature::ETH_BLS)
+  if (hardfork < hf::hf16_pulse)
+    return nettype == network_type::MAINNET ? oxen::OXEN_STAKING_REQUIREMENT
+      : oxen::OXEN_STAKING_REQUIREMENT_TESTNET;
+  if (hardfork >= feature::ETH_BLS)
         return nettype == network_type::MAINNET  ? SESH_STAKING_REQUIREMENT
              : nettype == network_type::LOCALDEV ? SESH_STAKING_REQUIREMENT_LOCALDEV
                                                  : SESH_STAKING_REQUIREMENT_TESTNET;
@@ -93,73 +95,9 @@ uint64_t get_default_staking_requirement(cryptonote::network_type nettype, hf ha
                                             : OXEN_STAKING_REQUIREMENT_TESTNET;
 }
 
+// This is a shim that was being used for oxen/loki HFs before
 uint64_t get_default_staking_requirement(cryptonote::network_type nettype, uint64_t height) {
-
-    auto hf_version = get_network_version(nettype, height);
-    if (hf_version >= hf::hf16_pulse)
-        return get_default_staking_requirement(nettype, hf_version);
-
-    if (nettype != cryptonote::network_type::MAINNET)
-        return OXEN_STAKING_REQUIREMENT_TESTNET;
-
-    if (is_hard_fork_at_least(nettype, hf::hf13_enforce_checkpoints, height)) {
-        constexpr int64_t heights[] = {
-                385824,
-                429024,
-                472224,
-                515424,
-                558624,
-                601824,
-                645024,
-        };
-
-        constexpr int64_t lsr[] = {
-                20458'380815527,
-                19332'319724305,
-                18438'564443912,
-                17729'190407764,
-                17166'159862153,
-                16719'282221956,
-                16364'595203882,
-        };
-
-        assert(static_cast<int64_t>(height) >= heights[0]);
-        constexpr uint64_t LAST_HEIGHT = heights[oxen::array_count(heights) - 1];
-        constexpr uint64_t LAST_REQUIREMENT = lsr[oxen::array_count(lsr) - 1];
-        if (height >= LAST_HEIGHT)
-            return LAST_REQUIREMENT;
-
-        size_t i = 0;
-        for (size_t index = 1; index < oxen::array_count(heights); index++) {
-            if (heights[index] > static_cast<int64_t>(height)) {
-                i = (index - 1);
-                break;
-            }
-        }
-
-        int64_t H = height;
-        int64_t result =
-                lsr[i] + (H - heights[i]) * ((lsr[i + 1] - lsr[i]) / (heights[i + 1] - heights[i]));
-        return static_cast<uint64_t>(result);
-    }
-
-    uint64_t hardfork_height = 101250;
-    if (height < hardfork_height)
-        height = hardfork_height;
-
-    uint64_t height_adjusted = height - hardfork_height;
-    uint64_t base = 0, variable = 0;
-    std::fesetround(FE_TONEAREST);
-    if (is_hard_fork_at_least(nettype, hf::hf11_infinite_staking, height)) {
-        base = 15000 * oxen::COIN;
-        variable = (25007.0 * oxen::COIN) / oxen::exp2(height_adjusted / 129600.0);
-    } else {
-        base = 10000 * oxen::COIN;
-        variable = (35000.0 * oxen::COIN) / oxen::exp2(height_adjusted / 129600.0);
-    }
-
-    uint64_t result = base + variable;
-    return result;
+    return get_default_staking_requirement(nettype, get_network_version(nettype, height));
 }
 
 uint64_t portions_to_amount(uint64_t portions, uint64_t staking_requirement) {

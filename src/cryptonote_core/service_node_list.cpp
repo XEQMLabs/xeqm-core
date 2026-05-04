@@ -778,7 +778,8 @@ void validate_registration(
     } else {
         // If not using portions then the hf value must be >= 19 and equal to the current blockchain
         // hf:
-        if (hf_version < hf::hf19_reward_batching || reg.hf != static_cast<uint8_t>(hf_version))
+      if (reg.hf != static_cast<uint8_t>(hf_version) &&
+          reg.hf != static_cast<uint8_t>(hf::hf19_reward_batching))
             throw invalid_registration{
                     "Wrong registration hardfork {}; you likely need to regenerate "
                     "the registration for compatibility with hardfork {}"_format(
@@ -5688,7 +5689,7 @@ uptime_proof::Proof service_node_list::generate_uptime_proof(
             storage_omq_port,
             ss_version,
             quorumnet_port,
-            blockchain.l2_tracker().get_l2_heights().synced,
+            blockchain.maybe_l2_tracker() ? blockchain.l2_tracker().get_l2_heights().synced : 0,
             sr_version,
             lokinet_version,
             keys};
@@ -6153,6 +6154,8 @@ void service_node_list::record_timesync_status(crypto::public_key const& pubkey,
 std::vector<bool> service_node_list::l2_pending_state_votes() const {
     std::lock_guard lock{m_sn_mutex};
     std::vector<bool> votes;
+    if (!blockchain.maybe_l2_tracker())
+        return votes;
     auto& l2_tracker = blockchain.l2_tracker();
     votes.reserve(m_state.unconfirmed_l2_txes.size());
     for (auto& [txid, confirm_info] : m_state.unconfirmed_l2_txes) {

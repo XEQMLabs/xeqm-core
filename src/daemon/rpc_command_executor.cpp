@@ -2378,10 +2378,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
         return false;
     auto& hfinfo = *maybe_hf;
     auto hf_version = hfinfo["version"].get<cryptonote::hf>();
-    if (hf_version < hf::hf19_reward_batching) {
-        tools::fail_msg_writer("Error: this command only supports HF19");
-        return false;
-    } else if (hf_version == cryptonote::feature::ETH_TRANSITION) {
+    if (hf_version == cryptonote::feature::ETH_TRANSITION) {
         tools::fail_msg_writer(
                 "Error: New SN registrations are disabled during OXEN->SESH transition");
         return false;
