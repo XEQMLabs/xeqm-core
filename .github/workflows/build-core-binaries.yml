@@ -282,8 +282,35 @@ jobs:
           brew update
           brew install \
             cmake ninja pkg-config ccache \
-            boost zeromq openssl@3 libsodium hidapi \
+            zeromq openssl@3 libsodium hidapi \
             sqlite3 curl gmp zstd doxygen
+
+      - name: Build pinned Boost 1.85 for macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BOOST_VERSION="1.85.0"
+          BOOST_UNDERSCORE="1_85_0"
+          BOOST_ROOT="$PWD/.ci/boost-${BOOST_VERSION}"
+
+          mkdir -p .ci
+          cd .ci
+
+          if [ ! -d "boost_${BOOST_UNDERSCORE}" ]; then
+            curl -L "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_UNDERSCORE}.tar.gz" -o boost.tar.gz
+            tar -xzf boost.tar.gz
+          fi
+
+          cd "boost_${BOOST_UNDERSCORE}"
+
+          ./bootstrap.sh --prefix="$BOOST_ROOT"
+
+          ./b2 -d0             --prefix="$BOOST_ROOT"             --with-atomic             --with-chrono             --with-program_options             --with-serialization             --with-system             --with-thread             variant=release             link=static             threading=multi             cxxstd=17             architecture=arm             address-model=64             target-os=darwin             install
+
+          echo "BOOST_ROOT=$BOOST_ROOT" >> "$GITHUB_ENV"
+          echo "Boost installed at: $BOOST_ROOT"
+          find "$BOOST_ROOT/lib" -maxdepth 1 -type f | sort
 
       - name: Patch SQLiteCpp headers for AppleClang
         shell: bash
@@ -323,7 +350,7 @@ jobs:
           mkdir -p build-macos-arm64
           cd build-macos-arm64
 
-          BOOST_ROOT="$(brew --prefix boost)"
+          BOOST_ROOT="$BOOST_ROOT"
           OPENSSL_ROOT="$(brew --prefix openssl@3)"
           ZEROMQ_ROOT="$(brew --prefix zeromq)"
           HIDAPI_ROOT="$(brew --prefix hidapi)"
@@ -341,6 +368,8 @@ jobs:
             -DBoost_NO_SYSTEM_PATHS=ON \
             -DBOOST_ROOT="$BOOST_ROOT" \
             -DBoost_INCLUDE_DIR="$BOOST_ROOT/include" \
+            -DBoost_LIBRARY_DIR_RELEASE="$BOOST_ROOT/lib" \
+            -DBoost_USE_STATIC_LIBS=ON \
             -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$ZEROMQ_ROOT;$OPENSSL_ROOT;$HIDAPI_ROOT" \
             -DWITH_SYSTEM_ZMQ=ON \
             -DBUILD_ZMQ=OFF \
