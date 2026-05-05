@@ -312,6 +312,32 @@ jobs:
           echo "Boost installed at: $BOOST_ROOT"
           find "$BOOST_ROOT/lib" -maxdepth 1 -type f | sort
 
+      - name: Patch bundled libzmq for CMake 4 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="external/oxen-mq/cmake/local-libzmq/LocalLibzmq.cmake"
+
+          if ! grep -q 'CMAKE_POLICY_VERSION_MINIMUM' "$FILE"; then
+            python3 - <<'PY2'
+from pathlib import Path
+
+p = Path("external/oxen-mq/cmake/local-libzmq/LocalLibzmq.cmake")
+s = p.read_text()
+
+needle = "    CMAKE_ARGS ${libzmq_compiler_args}\n"
+replace = "    CMAKE_ARGS ${libzmq_compiler_args}\n    -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n"
+
+if needle not in s:
+    raise SystemExit("Could not find libzmq CMAKE_ARGS line")
+
+p.write_text(s.replace(needle, replace, 1))
+PY2
+          fi
+
+          grep -n 'CMAKE_ARGS\|CMAKE_POLICY_VERSION_MINIMUM' "$FILE"
+
       - name: Patch SQLiteCpp headers for AppleClang
         shell: bash
         run: |
