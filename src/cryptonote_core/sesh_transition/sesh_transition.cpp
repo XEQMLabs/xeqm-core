@@ -20,6 +20,11 @@ namespace oxen::sesh {
 namespace {
     auto logcat = oxen::log::Cat("sesh_transition");
 
+    static std::tm localtime_from_timestamp(uint64_t timestamp) {
+        const auto t = static_cast<std::time_t>(timestamp);
+        return *std::localtime(&t);
+    }
+
     static const addrmap_t empty_addrmap;
     const proper_ed_keys_t empty_ed_keys;
     const bls_keys_t empty_bls_keys;
@@ -140,7 +145,7 @@ static void dump_transition_outcome_csv(
     {
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
-                        *std::localtime(&now),
+                        localtime_from_timestamp(now),
                         cryptonote::print_money(
                                 context.staking_requirement,
                                 cryptonote::strip_zeros::yes,
@@ -337,7 +342,7 @@ static void dump_transition_outcome_csv(
         // NOTE: Generate file
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
-                        *std::localtime(&now),
+                        localtime_from_timestamp(now),
                         cryptonote::print_money(
                                 context.staking_requirement,
                                 cryptonote::strip_zeros::yes,
