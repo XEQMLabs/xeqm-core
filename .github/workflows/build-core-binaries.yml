@@ -266,11 +266,142 @@ jobs:
             XEQM-core-*-windows-x86_64-*.zip
             XEQM-core-*-windows-x86_64-*.zip.sha256
 
+
+  macos-arm64:
+    name: Build macOS ARM64 binaries
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install \
+            cmake ninja pkg-config ccache \
+            boost@1.85 zeromq openssl@3 libsodium hidapi \
+            sqlite3 curl gmp zstd doxygen
+
+      - name: Patch SQLiteCpp headers for AppleClang
+        shell: bash
+        run: |
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
+            sed -i '' '/#include <memory>/a\
+#include <cstdint>
+' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
+            sed -i '' '/#include <SQLiteCpp\/Statement.h>/a\
+#include <cstdint>
+' external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+          grep -n '#include <cstdint>' \
+            external/SQLiteCpp/include/SQLiteCpp/Statement.h \
+            external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+      - name: Configure macOS ARM64
+        shell: bash
+        run: |
+          rm -rf build-macos-arm64
+          mkdir -p build-macos-arm64
+          cd build-macos-arm64
+
+          BOOST_ROOT="$(brew --prefix boost@1.85)"
+          OPENSSL_ROOT="$(brew --prefix openssl@3)"
+          ZEROMQ_ROOT="$(brew --prefix zeromq)"
+          HIDAPI_ROOT="$(brew --prefix hidapi)"
+
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_STATIC_DEPS=OFF \
+            -DSTATIC=OFF \
+            -DTREZOR=OFF \
+            -DBoost_NO_BOOST_CMAKE=ON \
+            -DBoost_NO_SYSTEM_PATHS=ON \
+            -DBOOST_ROOT="$BOOST_ROOT" \
+            -DBoost_INCLUDE_DIR="$BOOST_ROOT/include" \
+            -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$ZEROMQ_ROOT;$OPENSSL_ROOT;$HIDAPI_ROOT" \
+            -DWITH_SYSTEM_ZMQ=ON \
+            -DBUILD_ZMQ=OFF \
+            -DBUILD_LIBZMQ=OFF \
+            -DZEROMQ_INCLUDE_DIR="$ZEROMQ_ROOT/include" \
+            -DZEROMQ_LIBRARY="$ZEROMQ_ROOT/lib/libzmq.dylib" \
+            -DHIDAPI_INCLUDE_DIR="$HIDAPI_ROOT/include" \
+            -DHIDAPI_LIBRARY="$HIDAPI_ROOT/lib/libhidapi.dylib"
+
+      - name: Build macOS ARM64
+        shell: bash
+        run: |
+          cmake --build build-macos-arm64 \
+            --target daemon simplewallet wallet_rpc_server \
+            --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Verify macOS binaries
+        shell: bash
+        run: |
+          build-macos-arm64/bin/xeqm-d --version
+          build-macos-arm64/bin/xeqm-wallet --version
+          build-macos-arm64/bin/xeqm-rpc --version
+          file build-macos-arm64/bin/xeqm-d
+          file build-macos-arm64/bin/xeqm-wallet
+          file build-macos-arm64/bin/xeqm-rpc
+
+      - name: Package macOS ARM64 binaries
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME#core-v}"
+          fi
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT="$(git rev-parse --short HEAD)"
+          PKG="XEQM-core-${VERSION}-macos-arm64-${SHORT}"
+
+          mkdir -p "$PKG"
+          cp build-macos-arm64/bin/xeqm-d "$PKG/"
+          cp build-macos-arm64/bin/xeqm-wallet "$PKG/"
+          cp build-macos-arm64/bin/xeqm-rpc "$PKG/"
+          chmod +x "$PKG"/*
+
+          {
+            printf "XEQM Core macOS ARM64 binaries\n\n"
+            printf "Source commit: %s\n\n" "$COMMIT"
+            printf "Included:\n"
+            printf "  xeqm-d\n"
+            printf "  xeqm-wallet\n"
+            printf "  xeqm-rpc\n\n"
+            printf "Version output:\n\n"
+            ./build-macos-arm64/bin/xeqm-d --version
+            ./build-macos-arm64/bin/xeqm-wallet --version
+            ./build-macos-arm64/bin/xeqm-rpc --version
+          } > "$PKG/README.txt"
+
+          tar -czf "${PKG}.tar.gz" "$PKG"
+          shasum -a 256 "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+
+      - name: Upload macOS ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XEQM-core-macos-arm64
+          path: |
+            XEQM-core-*-macos-arm64-*.tar.gz
+            XEQM-core-*-macos-arm64-*.tar.gz.sha256
+
+
   publish:
     name: Publish core release
     needs:
       - linux-ubuntu-2404
       - windows-x64
+      - macos-arm64
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/core-v')
 
@@ -299,6 +430,7 @@ jobs:
             Includes:
             - Ubuntu 24.04 x86_64 tar.gz
             - Windows x86_64 zip
+            - macOS ARM64 tar.gz
 
             Source commit:
             ${{ github.sha }}
