@@ -129,7 +129,7 @@ static void dump_transition_outcome_csv(
         std::span<node_transition> node_list,
         const std::unordered_map<eth::address, uint64_t>& final_allocation_before_distrib,
         const std::unordered_map<eth::address, uint64_t>& final_unlocked_tokens) {
-    uint64_t now = time(nullptr);
+    time_t now = time(nullptr);
     oxen::log::debug(logcat, "Writing SESH->ETH allocation to disk");
     uint64_t total_bonus_sesh = 0;
 
