@@ -288,19 +288,33 @@ jobs:
       - name: Patch SQLiteCpp headers for AppleClang
         shell: bash
         run: |
-          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
-            sed -i '' '/#include <memory>/a\
-#include <cstdint>
-' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+          python3 - <<'PY'
+          from pathlib import Path
 
-          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
-            sed -i '' '/#include <SQLiteCpp\/Statement.h>/a\
-#include <cstdint>
-' external/SQLiteCpp/include/SQLiteCpp/Column.h
+          patches = [
+              (
+                  Path("external/SQLiteCpp/include/SQLiteCpp/Statement.h"),
+                  "#include <memory>",
+              ),
+              (
+                  Path("external/SQLiteCpp/include/SQLiteCpp/Column.h"),
+                  "#include <SQLiteCpp/Statement.h>",
+              ),
+          ]
 
-          grep -n '#include <cstdint>' \
-            external/SQLiteCpp/include/SQLiteCpp/Statement.h \
-            external/SQLiteCpp/include/SQLiteCpp/Column.h
+          for path, marker in patches:
+              text = path.read_text()
+              if "#include <cstdint>" not in text:
+                  if marker not in text:
+                      raise SystemExit(f"Marker not found in {path}: {marker}")
+                  text = text.replace(marker, marker + "\n#include <cstdint>", 1)
+                  path.write_text(text)
+
+          for path, _ in patches:
+              for i, line in enumerate(path.read_text().splitlines(), 1):
+                  if "#include <cstdint>" in line:
+                      print(f"{path}:{i}:{line}")
+          PY
 
       - name: Configure macOS ARM64
         shell: bash
