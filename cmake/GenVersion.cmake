@@ -57,7 +57,7 @@ else()
     endif()
 
     # Check if we have uncommitted changes (if so, append -dirty)
-    execute_process(COMMAND "${GIT}" diff --quiet --ignore-submodules HEAD --
+    execute_process(COMMAND "${GIT}" diff --quiet --ignore-submodules --ignore-cr-at-eol HEAD --
                     RESULT_VARIABLE DIRTY_CHECK)
     if(DIRTY_CHECK EQUAL 1)
         set(VERSIONTAG "${VERSIONTAG}-dirty")

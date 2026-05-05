@@ -399,6 +399,35 @@ jobs:
             --target daemon simplewallet wallet_rpc_server \
             --parallel "$(sysctl -n hw.ncpu)"
 
+      - name: Bundle Homebrew dylibs into binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install dylibbundler
+
+          mkdir -p build-macos-arm64/bin/libs
+          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+            echo "Bundling dylibs for $bin..."
+            dylibbundler \
+              -b \
+              -x "build-macos-arm64/bin/$bin" \
+              -d build-macos-arm64/bin/libs \
+              -p "@executable_path/libs/" \
+              -of -cd
+          done
+
+          echo "--- Bundled libs/ contents ---"
+          ls -la build-macos-arm64/bin/libs/
+
+          echo "--- Verify no Homebrew paths remain in binaries ---"
+          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+            if otool -L "build-macos-arm64/bin/$bin" | grep -E '/(opt/homebrew|usr/local/Cellar)' ; then
+              echo "FATAL: $bin still references absolute Homebrew dylib paths"
+              exit 1
+            fi
+          done
+          echo "All binaries reference @executable_path-relative dylibs only."
+
       - name: Verify macOS binaries
         shell: bash
         run: |
@@ -425,7 +454,8 @@ jobs:
           cp build-macos-arm64/bin/xeqm-d "$PKG/"
           cp build-macos-arm64/bin/xeqm-wallet "$PKG/"
           cp build-macos-arm64/bin/xeqm-rpc "$PKG/"
-          chmod +x "$PKG"/*
+          cp -R build-macos-arm64/bin/libs "$PKG/"
+          chmod +x "$PKG"/xeqm-d "$PKG"/xeqm-wallet "$PKG"/xeqm-rpc
 
           {
             printf "XEQM Core macOS ARM64 binaries\n\n"
@@ -433,7 +463,8 @@ jobs:
             printf "Included:\n"
             printf "  xeqm-d\n"
             printf "  xeqm-wallet\n"
-            printf "  xeqm-rpc\n\n"
+            printf "  xeqm-rpc\n"
+            printf "  libs/  (bundled runtime dylibs — keep next to the binaries)\n\n"
             printf "Version output:\n\n"
             ./build-macos-arm64/bin/xeqm-d --version
             ./build-macos-arm64/bin/xeqm-wallet --version
