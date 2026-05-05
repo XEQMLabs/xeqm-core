@@ -2,6 +2,7 @@
 
 #include <fmt/chrono.h>
 
+#include <ctime>
 #include <fstream>
 #include <iterator>
 #include <ranges>
@@ -139,7 +140,7 @@ static void dump_transition_outcome_csv(
     {
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_eth_addr_allocation.csv"_format(
-                        fmt::localtime(now),
+                        *std::localtime(&now),
                         cryptonote::print_money(
                                 context.staking_requirement,
                                 cryptonote::strip_zeros::yes,
@@ -336,7 +337,7 @@ static void dump_transition_outcome_csv(
         // NOTE: Generate file
         FileFormatter file{
                 "{:%Y%m%d_%H%M%S}_sesh_transition_result_stake_req_{}_conv_ratio_{}_oxen_per_{}_sesh_transition_{}pct.csv"_format(
-                        fmt::localtime(now),
+                        *std::localtime(&now),
                         cryptonote::print_money(
                                 context.staking_requirement,
                                 cryptonote::strip_zeros::yes,
