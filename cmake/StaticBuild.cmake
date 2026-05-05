@@ -363,6 +363,15 @@ if(USE_LTO)
   list(APPEND boost_extra "lto=on")
 endif()
 
+# Force Boost to build only the selected bitness.  This is required on native
+# MSYS2 Windows builds because Boost may otherwise try both x86_32 and x86_64
+# variants, then fail during install while looking for missing 32-bit outputs.
+if(BUILD_64)
+  list(APPEND boost_extra "address-model=64")
+else()
+  list(APPEND boost_extra "address-model=32")
+endif()
+
 if(CMAKE_CROSSCOMPILING)
   set(boost_bootstrap_cxx "") # need to use our native compiler to bootstrap
   if(ARCH_TRIPLET MATCHES mingw)
