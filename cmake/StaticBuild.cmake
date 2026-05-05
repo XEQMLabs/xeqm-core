@@ -439,7 +439,7 @@ build_external(boost
   BUILD_COMMAND
     cp tools/build/src/engine/b2 .
   INSTALL_COMMAND
-    ./b2 -d0 variant=release link=static runtime-link=static optimization=speed ${boost_extra}
+    ./b2 -d0 variant=release link=static optimization=speed ${boost_extra}
       threading=multi threadapi=${boost_threadapi} ${boost_buildflags} cxxstd=17 visibility=global
       --disable-icu --user-config=${CMAKE_CURRENT_BINARY_DIR}/user-config.bjam
       --prefix=${DEPS_DESTDIR} --exec-prefix=${DEPS_DESTDIR} --libdir=${DEPS_DESTDIR}/lib --includedir=${DEPS_DESTDIR}/include
@@ -576,6 +576,7 @@ else()
     DEPENDS ${maybe_eudev} libusb_external
     CONFIGURE_COMMAND mkdir -p build && cd build && cmake .. "-DCMAKE_GENERATOR=Unix Makefiles"
     "-DCMAKE_PREFIX_PATH=${DEPS_DESTDIR}" "-DCMAKE_INSTALL_PREFIX=${DEPS_DESTDIR}"
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
     "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}"
     "-DCMAKE_C_FLAGS=${deps_CFLAGS}"
