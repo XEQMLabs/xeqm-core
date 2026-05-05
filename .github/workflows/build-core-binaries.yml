@@ -502,11 +502,18 @@ jobs:
         run: |
           find release-assets -type f -print
 
+      - name: Compute release name
+        id: relmeta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#core-v}"
+          echo "title=XEQMLabs 'Ragnarok' v${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: XEQM Core ${{ github.ref_name }}
+          name: ${{ steps.relmeta.outputs.title }}
           files: release-assets/**/*
           draft: false
           prerelease: false
