@@ -282,7 +282,7 @@ jobs:
           brew update
           brew install \
             cmake ninja pkg-config ccache \
-            boost@1.85 zeromq openssl@3 libsodium hidapi \
+            boost zeromq openssl@3 libsodium hidapi \
             sqlite3 curl gmp zstd doxygen
 
       - name: Patch SQLiteCpp headers for AppleClang
@@ -323,7 +323,7 @@ jobs:
           mkdir -p build-macos-arm64
           cd build-macos-arm64
 
-          BOOST_ROOT="$(brew --prefix boost@1.85)"
+          BOOST_ROOT="$(brew --prefix boost)"
           OPENSSL_ROOT="$(brew --prefix openssl@3)"
           ZEROMQ_ROOT="$(brew --prefix zeromq)"
           HIDAPI_ROOT="$(brew --prefix hidapi)"
