@@ -427,6 +427,12 @@ elseif(APPLE)
   set(boost_buildflags "cxxflags=-fPIC -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}" "cflags=-mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
+if(WIN32 AND DEFINED ENV{RUNNER_TEMP})
+  file(TO_CMAKE_PATH "$ENV{RUNNER_TEMP}/boost-b2" boost_b2_build_dir)
+else()
+  set(boost_b2_build_dir "${CMAKE_CURRENT_BINARY_DIR}/boost-b2")
+endif()
+
 if(ANDROID)
   set(boost_buildflags ${boost_buildflags} target-os=android)
 endif()
@@ -438,12 +444,12 @@ build_external(boost
     ./tools/build/src/engine/build.sh ${boost_toolset} ${boost_bootstrap_cxx}
   BUILD_COMMAND
     cp tools/build/src/engine/b2 .
-    COMMAND ./b2 -d2 variant=release link=static optimization=speed ${boost_extra}
+    COMMAND ./b2 -d2 --build-dir="${boost_b2_build_dir}" variant=release link=static optimization=speed ${boost_extra}
       threading=multi threadapi=${boost_threadapi} ${boost_buildflags} cxxstd=17 visibility=global
       --disable-icu --user-config=${CMAKE_CURRENT_BINARY_DIR}/user-config.bjam
       --with-program_options --with-thread --with-serialization --with-asio --layout=system
   INSTALL_COMMAND
-    ./b2 -d2 variant=release link=static optimization=speed ${boost_extra}
+    ./b2 -d2 --build-dir="${boost_b2_build_dir}" variant=release link=static optimization=speed ${boost_extra}
       threading=multi threadapi=${boost_threadapi} ${boost_buildflags} cxxstd=17 visibility=global
       --disable-icu --user-config=${CMAKE_CURRENT_BINARY_DIR}/user-config.bjam
       --prefix=${DEPS_DESTDIR} --exec-prefix=${DEPS_DESTDIR} --libdir=${DEPS_DESTDIR}/lib --includedir=${DEPS_DESTDIR}/include
