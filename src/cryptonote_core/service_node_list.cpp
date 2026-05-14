@@ -5997,6 +5997,14 @@ bool service_node_list::handle_uptime_proof(
     if (updated)
         iproof.store(pubkey, blockchain);
 
+    // Keep the legacy x25519 -> primary pubkey reverse map up to date as proofs arrive.
+    // initialize_x25519_map() only populates this at startup; without incremental updates,
+    // SNs whose first proof we receive after startup become unreachable for outbound OMQ
+    // requests (find_public_key returns null, remote_lookup returns "", every timestamp test
+    // fails with TIMEOUT). m_x25519_map_mutex is already held via the unique_locks acquired
+    // earlier in this function.
+    x25519_to_pub[derived_x25519_pubkey] = {pubkey, std::time(nullptr)};
+
     if (contact_changed && snode_addr_change_notifier)
         snode_addr_change_notifier(*iproof.proof, derived_x25519_pubkey);
 
