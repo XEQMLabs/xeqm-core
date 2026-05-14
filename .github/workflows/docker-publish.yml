@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: equilibriahorizon/equilibria-node
+  IMAGE_NAME: xeqmlabs/equilibria-node
 
 jobs:
   build-and-push:
@@ -38,7 +38,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/equilibriahorizon/equilibria-node:v23.0.2
-            ghcr.io/equilibriahorizon/equilibria-node:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v1.0.2
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
