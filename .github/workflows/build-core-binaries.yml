@@ -35,9 +35,14 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # gperf is required by libunbound's configure step during the
+          # BUILD_STATIC_DEPS source build. Without it the static deps build
+          # fails with "configure: error: *** gperf not found" before any of
+          # the project's own code is compiled.
           sudo apt update
           sudo apt install -y \
             git build-essential cmake pkg-config ccache curl zip unzip tar \
+            gperf \
             libssl-dev libzmq3-dev libsodium-dev libunbound-dev \
             libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
