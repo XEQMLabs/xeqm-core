@@ -51,7 +51,7 @@ message(STATUS "CMake version ${CMAKE_VERSION}")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "macOS deployment target (Apple clang only)")
 
 project(equilibria
-    VERSION 23.0.0
+    VERSION 1.0.2
     LANGUAGES CXX C)
 set(OXEN_RELEASE_CODENAME "Ragnarok")
 # Version update notes:
@@ -60,11 +60,16 @@ set(OXEN_RELEASE_CODENAME "Ragnarok")
 # - (if update needed) required SS/lokinet versions are in cryptonote_core/service_node_rules.h
 
 # String value to append to the full version string; this is intended to easily identify whether a
-# binary was build from the release or development branches.  This should be permanently set to an
-# empty string on `stable`, "-dev" on the `dev` branch, and can be set externally (via cmake
-# arguments) where it makes sense to take some other branch release with an extra value.
+# binary was built from a tagged release or a development branch.  Default is "-dev". Override
+# via either:
+#   -DOXEN_RELEASE_SUFFIX=...    (cmake command-line)
+#   OXEN_RELEASE_SUFFIX=...      (environment variable; useful in CI to set "" for tagged builds)
 if(NOT DEFINED OXEN_RELEASE_SUFFIX)
-  set(OXEN_RELEASE_SUFFIX "-dev")
+  if(DEFINED ENV{OXEN_RELEASE_SUFFIX})
+    set(OXEN_RELEASE_SUFFIX "$ENV{OXEN_RELEASE_SUFFIX}")
+  else()
+    set(OXEN_RELEASE_SUFFIX "-dev")
+  endif()
 endif()
 
 if(POLICY CMP0079)

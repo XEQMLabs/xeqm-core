@@ -1,17 +1,34 @@
-# Equilibria Community Testnet Launcher
+# XEQM Testnet Quickstart
 
-The Equilibria testnet. Launch testnet nodes, service nodes, or wallet services with a single command.
+Spin up XEQM testnet nodes, service nodes, or wallet services for local development and testing.
 
-## 🚀 Quick Start
+## Quick Start
 
-### Installation
+### Prerequisites
 
-- Install [Docker](https://docs.docker.com/get-docker/)
-- Fetch/Run the docker image for the XEQ node: `docker run glutinous165/equilibria-node --platform linux/amd64`
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
 
-## 🛡️ Security Notes
+### Pull the image
 
-- **Testnet Only**: This tool is for testnet use only
-- **Default Passwords**: Change default passwords for any sensitive use
-- **Public IPs**: Be cautious when exposing service nodes to internet
-- **Wallet Backup**: Always backup wallet files and keys
+```bash
+docker pull ghcr.io/xeqmlabs/equilibria-node:v1.0.2
+```
+
+### Launch
+
+The provided `docker-compose.yml` and `xeqm.conf` boot a testnet node ready for further configuration. From this directory:
+
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
+For a fleet of service nodes for development testing, see `equilibria_testnet.py` and edit the parameters at the top.
+
+## Security Notes
+
+- **Testnet only**: this stack is configured for testnet by default. Do not point it at mainnet without reviewing every flag.
+- **Wallet backup**: always back up wallet files and keys before doing anything destructive. Loss of keys is loss of funds, even on testnet for committed registrations.
+- **Public exposure**: only expose RPC ports beyond localhost if you understand the implications. Use `--restricted-rpc` and a reverse proxy if you need a public RPC.
+- **Default config**: change any default credentials before relying on this for anything sensitive.

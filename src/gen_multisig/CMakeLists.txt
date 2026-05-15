@@ -30,7 +30,7 @@
 option(BUILD_GEN_MULTISIG "Build trusted-multisig wallet generation tool" ${BUILD_EVERYTHING})
 if(BUILD_GEN_MULTISIG)
 
-    oxen_add_executable(gen_multisig "equilibria-gen-trusted-multisig"
+    oxen_add_executable(gen_multisig "xeqm-gen-trusted-multisig"
       gen_multisig.cpp
       )
 

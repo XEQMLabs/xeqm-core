@@ -1,8 +1,8 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a problem with XEQM Core (xeqm-d, xeqm-wallet, xeqm-rpc)
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
@@ -10,19 +10,32 @@ assignees: ''
 **Describe the bug**
 A clear and concise description of what the bug is.
 
-**To Reproduce**
-Steps to reproduce the behavior:
+**To reproduce**
+Steps to reproduce the behaviour:
+1.
+2.
+3.
 
 **Expected behaviour**
-What is the expected behaviour if the steps above are followed:
+What you expected to happen.
 
-**Current Behaviour**
-What is the current behaviour if the steps to reproduce are followed:
+**Actual behaviour**
+What actually happened.
 
-**Screenshots or Logs**
-If applicable, add screenshots or logs to help explain your problem.
+**Logs**
+Please attach the relevant section of the daemon log. If you can reproduce the issue, please re-run with debug logging enabled and include the relevant lines:
 
-**Additional Information (please complete the following information):**
- - Operating System: [e.g. Ubuntu 16.04, Windows 10]
--  Local or Remote node
- - Version of Loki daemon, or most recent commit hash.
+```
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"set_log_level","params":{"categories":"*:warn,core:debug,qnet:debug,oxenmq:debug,service_nodes:debug"}}'
+```
+
+**Environment**
+- OS and version (e.g. Ubuntu 24.04, Windows 11, macOS 14):
+- Install method: [Docker image / binary release / built from source]
+- Daemon version (output of `xeqm-d --version`):
+- Service node? [yes / no]
+- Behind NAT? [yes / no]
+
+**Additional context**
+Anything else that might help — recent changes, related issues, screenshots, etc.

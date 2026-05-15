@@ -1,507 +1,388 @@
-# Equilibria
+# XEQM Core
 
-**NOTE: DOES THE COPYRIGHT NEED TO BE REVIEWED AND UPDATED - WORK IN PROGRESS**
+XEQM Core is the reference C++ daemon, wallet, and tooling for the XEQM service node network. The codebase descends from Monero → Loki/Oxen and inherits the service node consensus layer (Pulse, obligations quorums, OxenMQ messaging, checkpointing).
 
-Copyright (c) 2018-2022 The Equilibria Project.
-Portions Copyright (c) 2014-2019 The Monero Project.
-Portions Copyright (c) 2012-2013 The Cryptonote developers.
+The three binaries shipped in every release are:
 
-## Development resources
+| Binary | Purpose |
+| ------ | ------- |
+| `xeqm-d` | Network daemon (full node, optionally a service node) |
+| `xeqm-wallet` | CLI wallet |
+| `xeqm-rpc` | Standalone wallet RPC server |
 
-- Web: [equilibria.network](https://https://www.equilibria.cc/)
-- Telegram: [t.me/EquilibriaCommunity](https://telegram.equilibriacc.com/)
-- Mail: [team@equilibira.cc](mailto:team@equilibira.cc)
-- GitHub: [https://github.com/oxen-io/oxen-core](https://github.com/oxen-io/oxen-core)
-- Discord: [https://discord.gg/67GXfD6](https://discord.equilibriacc.com/)
-## Vulnerability disclosure
+## Resources
 
-- Check out our [Vulnerability Response Process](https://github.com/oxen-io/oxen-docs/blob/master/docs/Contributing/VULNERABILITY_RESPONSE_LOKI.md), encourages prompt disclosure of any Vulnerabilities
+**Project**
+- Website: <https://xeqmlabs.com>
+- Vision: <https://xeqmlabs.com/blog/xeqmlabs-vision>
+- Block explorer: <https://explorer.xeqmlabs.com>
 
-## Information
+**Documentation**
+- Documentation home: <https://xeqmlabs.gitbook.io/docs>
+- Whitepaper: <https://github.com/XEQMLabs/whitepaper>
+- Service nodes: <https://xeqmlabs.gitbook.io/docs/documentation/whitepaper/service-nodes-sn>
+- Service node operator guide: <https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide>
+- Tokenomics: <https://xeqmlabs.gitbook.io/docs/documentation/whitepaper/tokenomics>
 
-Equilibria is a private cryptocurrency based on Monero. Equilibria currently offers an incentivised full node layer, over the coming months we will be looking to support a secondary p2p network (Lokinet) and a messenger that offers private communications based on the Signal protocol (Session).
+**Software**
+- Wallet GUI releases: <https://github.com/XEQMLabs/XEQMLabs-GUI/releases>
+- All XEQMLabs repositories: <https://github.com/XEQMLabs>
 
-More information on the project can be found on the website and in the whitepaper.
+**Trade**
+- NonLogs (XEQM/BTC): <https://nonlogs.io/trade/XEQM-BTC>
+- NonLogs (XEQM/USDT): <https://nonlogs.io/trade/XEQM-USDT>
+- NonKYC (XEQM/USDT): <https://nonkyc.io/market/XEQM_USDT>
 
-Equilibria is an open source project, and we encourage contributions from anyone with something to offer. For more information on contributing, please contact team@oxen.io
+**Community**
+- Telegram: <https://t.me/XEQCommunity>
 
-## Compiling Equilibria from source
+---
 
-### Dependencies
+## Quick start (recommended)
 
-The following table summarizes the tools and libraries required to build. A
-few of the libraries are also included in this repository (marked as
-"Vendored"). By default, the build uses the library installed on the system,
-and ignores the vendored sources. However, if no library is found installed on
-the system, then the vendored source will be built and used. The vendored
-sources are also used for statically-linked builds because distribution
-packages often include only shared library binaries (`.so`) but not static
-library archives (`.a`).
-
-| Dep          | Min. version  | Vendored | Debian/Ubuntu pkg      | Arch pkg     | Fedora              | Optional | Purpose            |
-| ------------ | ------------- | -------- | ---------------------- | ------------ | ------------------- | -------- | ----------------   |
-| GCC          | 10.1.0        | NO       | `g++`[1]               | `base-devel` | `gcc`               | NO       |                    |
-| CMake        | 3.16          | NO       | `cmake`                | `cmake`      | `cmake`             | NO       |                    |
-| pkg-config   | any           | NO       | `pkg-config`           | `base-devel` | `pkgconf`           | NO       |                    |
-| Boost        | 1.65          | NO       | `libboost-all-dev`[2]  | `boost`      | `boost-devel`       | NO       | C++ libraries      |
-| libzmq       | 4.3.0         | YES      | `libzmq3-dev`          | `zeromq`     | `zeromq-devel`      | NO       | ZeroMQ library     |
-| sqlite3      | 3.24.0        | YES      | `libsqlite3-dev`       | `sqlite`     | `sqlite-devel`      | NO       | ONS, batching      |
-| libsodium    | 1.0.9         | YES      | `libsodium-dev`        | `libsodium`  | `libsodium-devel`   | NO       | cryptography       |
-| libcurl      | 4.0           | NO       | `libcurl4-dev`         | `curl`       | `curl-devel`        | NO       | HTTP RPC           |
-| libuv (Win)  | any           | NO       | (Windows only)         | --           | --                  | NO       | RPC event loop     |
-| libgmp       | any           | NO       | `libgmp-dev`           | `gmp`        | `gmp-devel`         | NO       | BLS precision math |
-| libzstd      | any           | NO       | `libzstd-dev`          | `zstd`       | `libzstd-devel`     | NO       | SN state compress  |
-| libunwind    | any           | NO       | `libunwind8-dev`       | `libunwind`  | `libunwind-devel`   | YES      | Stack traces       |
-| liblzma      | any           | NO       | `liblzma-dev`          | `xz`         | `xz-devel`          | YES      | For libunwind      |
-| libreadline  | 6.3.0         | NO       | `libreadline-dev`      | `readline`   | `readline-devel`    | YES      | Input editing      |
-| Doxygen      | any           | NO       | `doxygen`              | `doxygen`    | `doxygen`           | YES      | Documentation      |
-| Graphviz     | any           | NO       | `graphviz`             | `graphviz`   | `graphviz`          | YES      | Documentation      |
-| Qt tools     | 5.x           | NO       | `qttools5-dev`         | `qt5-tools`  | `qt5-linguist`      | YES      | Translations       |
-| libhidapi    | ?             | NO       | `libhidapi-dev`        | `hidapi`     | `hidapi-devel`      | YES      | Hardware wallet    |
-| libusb       | ?             | NO       | `libusb-dev`           | `libusb`     | `libusb-devel`      | YES      | Hardware wallet    |
-| libprotobuf  | ?             | NO       | `libprotobuf-dev`      | `protobuf`   | `protobuf-devel`    | YES      | Hardware wallet    |
-| protoc       | ?             | NO       | `protobuf-compiler`    | `protobuf`   | `protobuf-compiler` | YES      | Hardware wallet    |
-
-
-[1] On Ubuntu Focal (20.04) you will need the g++-10 package instead of g++ (which is version 9) and will
-need to run `export CC=gcc-10 CXX=g++-10` before running `make` or `cmake`.
-
-[2] libboost-all-dev includes a lot of unnecessary packages; see the apt command below for a
-breakdown of the minimum set of required boost packages.
-
-Install all dependencies at once on Debian/Ubuntu:
-
-```
-sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libzmq3-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev doxygen graphviz libpgm-dev libsqlite3-dev libcurl4-openssl-dev libgmp-dev libsystemd-dev libssl-dev openssl
-```
-
-Install all dependencies at once on macOS with the provided Brewfile:
-``` brew update && brew bundle --file=contrib/brew/Brewfile ```
-
-FreeBSD one liner for required to build dependencies
-```pkg install git gmake cmake pkgconf boost-libs libzmq4 libsodium sqlite3```
-
-### Build instructions
-
-Equilibria uses the CMake build system which is used by creating a build directory and invoke cmake before building.
-
-#### On Linux and macOS
-
-**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
-
-You do not have to build from source if you are on debian or ubuntu as we have apt repositories with pre-built oxen packages on `deb.oxen.io`.
-
-You can install these using:
-
-	$ sudo curl -so /etc/apt/trusted.gpg.d/oxen.gpg https://deb.oxen.io/pub.gpg
-	$ echo "deb https://deb.oxen.io $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/oxen.list
-	$ sudo apt update
-	$ sudo apt install xeq-d
-
-**END - WORK IN PROGRESS**
-
-if you want to build a dev build you can do the following after installing the dependancies above:
-
-	$ git clone --recursive https://github.com/EquilibriaHorizon/equilibria-core.git
-	$ cd equilibria-core
-	$ git submodule update --init --recursive
-	$ mkdir build
-	$ cd build
-	$ cmake ..
-	$ make -j$(nproc)
-
-* The resulting executables can be found in `~/equilibria-core/build/bin`
-
-* Add `PATH="$PATH:$HOME/equilibria-core/build/bin"` to `.profile`
-
-* Run Equilibria with `xeq-d --detach`
-
-* **Optional**: build and run the test suite to verify the binaries:
-
-    ```bash
-    make release-test
-    ```
-
-    *NOTE*: `core_tests` test may take a few hours to complete.
-
-* **Optional**: to build binaries suitable for debugging:
-
-    ```bash
-    make debug
-    ```
-
-* **Optional**: to build statically-linked binaries:
-
-    ```bash
-    make release-static
-    ```
-
-Dependencies need to be built with -fPIC. Static libraries usually aren't, so you may have to build them yourself with -fPIC. Refer to their documentation for how to build them.
-
-* **Optional**: build documentation in `doc/html` (omit `HAVE_DOT=YES` if `graphviz` is not installed):
-
-    ```bash
-    HAVE_DOT=YES doxygen Doxyfile
-    ```
-
-* **Optional**: to build with profiling support set `-D TRACY_ENABLE=ON` on the
-  CMake configuration line. Then compile the profiler located at
-  `external/tracy/profiler` or use a pre-built binary from their Github (as long as the
-  binary's version is forwards/backwards compatible with the submodule version).
-
-  Run the `oxend` and then launch the profiler and connect to the instance
-  on `127.0.0.1` to get profiler timings live as the application runs.
-
-* **Optional**: build with stack traces in thrown exceptions with `-D WITH_STACKTRACE`. This incurs
-  a large performance penalty on thrown exceptions on Linux.
-
-* **Optional**: build with mocknet support with `-D WITH_MOCKNET` which adds an argument to specify
-  the height at which the blockchain will fork whereby quorums thereafter are replaced by a set of
-  nodes with pre-defined keys.
-
-#### On the Raspberry Pi (and similar ARM-based devices)
-
-The build process is exactly the same, but note that some parts of the build require around 3GB of
-RAM which is more memory than most Raspberry Pi class devices have available.  You can work around
-this by enabling 2GB (or more) of swap, but this is not particularly recommended, particularly if
-the swap file is on the SD card: intensive writes to a swap file on an SD card can accelerate how
-quickly the SD card wears out.  Devices with 4GB of RAM (such as the 4GB model of the Pi 4B, and
-some other SBC ARM devices) can build without needing swap.
-
-As an alternative, pre-built oxen debs are available for ARM32 and ARM64 for recent
-Debian/Raspbian/Ubuntu distributions and are often a much better alternative for SBC-class devices.
-If you still want to compile from source, ensure you have enough memory (or swap -- consult your OS
-documentation to learn how to enable or increase swap size) and follow the regular linux build
-instructions above.
-
-#### On Windows:
-
-Binaries for Windows are built on Windows using the MinGW toolchain within
-[MSYS2 environment](https://www.msys2.org). The MSYS2 environment emulates a
-POSIX system. The toolchain runs within the environment and *cross-compiles*
-binaries that can run outside of the environment as a regular Windows
-application.
-
-**Preparing the build environment**
-
-* Download and install the [MSYS2 installer 64-bit
-  (x86_64)](https://www.msys2.org).
-
-* Note: On Windows it's recommended to setup MSYS and the repository at the root
-  of `C:/` due to path-length limitations. Dependencies like Boost will fail to
-  build because of long file name paths that exceed `PATH_MAX` on Windows. Long
-  file name path support requires the toolchain to be built aware of these
-  limitations and enabled which is not always enforceable.
-
-  It's highly recommended to also export the variable `USE_SINGLE_BUILDDIR=1` to
-  reduce the build path length(s) for similar reasons.
-
-* Open the MSYS MinGW64 shell by opening `mingw64.exe` in the MSYS installation
-  directory
-
-* Update the base packages and install the dependencies by running the commands:
-
-    ```bash
-    pacman -Syu
-    pacman -S autoconf automake git make mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-hidapi mingw-w64-x86_64-sqlite3 mingw-w64-x86_64-libtool
-    ```
-
-**Building**
-
-- Clone and build the program by running the commands:
-
-    ```bash
-    git clone --recursive https://github.com/oxen-io/oxen-core.git
-    cd oxen-core
-    USE_SINGLE_BUILDDIR=1 make release-static-win64
-    ```
-
-* The resulting executables can be found in `./build/release/bin`
-
-* **Optional**: to build Windows binaries suitable for debugging run:
-
-    ```bash
-    make debug-static-win64
-    ```
-
-### On FreeBSD:
-
-The project can be built from scratch by following instructions for Linux above(but use `gmake` instead of `make`).
-If you are running Equilibria in a jail, you need to add `sysvsem="new"` to your jail configuration, otherwise lmdb will throw the error message: `Failed to open lmdb environment: Function not implemented`.
-
-### On OpenBSD:
-
-You will need to add a few packages to your system. `pkg_add cmake gmake zeromq cppzmq libiconv boost`.
-
-The `doxygen` and `graphviz` packages are optional and require the xbase set.
-Running the test suite also requires `py-requests` package.
-
-Build oxen: `env DEVELOPER_LOCAL_TOOLS=1 BOOST_ROOT=/usr/local gmake release-static`
-
-Note: you may encounter the following error, when compiling the latest version of oxen as a normal user:
-
-```
-LLVM ERROR: out of memory
-c++: error: unable to execute command: Abort trap (core dumped)
-```
-
-Then you need to increase the data ulimit size to 2GB and try again: `ulimit -d 2000000`
-
-### On Solaris:
-
-The default Solaris linker can't be used, you have to install GNU ld, then run cmake manually with the path to your copy of GNU ld:
+The fastest way to run a full node is the published Docker image. It is built from this repository on every release tag and pushed to GitHub Container Registry.
 
 ```bash
-mkdir -p build/release
-cd build/release
-cmake -DCMAKE_LINKER=/path/to/ld -D CMAKE_BUILD_TYPE=Release ../..
-cd ../..
+docker pull ghcr.io/xeqmlabs/equilibria-node:v1.0.2
 ```
 
-Then you can run make as usual.
+A minimal `docker-compose.yml` for a non-service-node full node:
 
-### On Linux for Android (using docker):
+```yaml
+services:
+  xeqm:
+    image: ghcr.io/xeqmlabs/equilibria-node:v1.0.2
+    container_name: xeqm
+    restart: unless-stopped
+    ports:
+      - "9230:9230"   # P2P
+      - "9231:9231"   # RPC
+    volumes:
+      - ./data:/data
+    command:
+      - --data-dir=/data
+      - --p2p-bind-port=9230
+      - --rpc-bind-port=9231
+      - --confirm-external-bind
+      - --log-level=*:warn
+```
 
-**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
+Bring it up with `docker compose up -d`. Tail logs with `docker logs -f xeqm`.
+
+For a service node, add a `--service-node` flag, set `--service-node-public-ip`, and pick a `--quorumnet-port`. See [Running a service node](#running-a-service-node) below.
+
+---
+
+## Pre-built binaries
+
+Each release tag (`core-v*`) publishes static binaries under [GitHub Releases](https://github.com/XEQMLabs/equilibria-core/releases) for:
+
+- Ubuntu 24.04 x86_64
+- Windows x86_64
+- macOS ARM64
+
+The Linux build is fully statically linked against its third-party dependencies (Boost, OpenSSL, libsodium, libzmq, libcurl, sqlite, gmp, zstd, etc.) and only requires glibc + libstdc++ at runtime. It runs unmodified on Ubuntu 22.04+, Debian 11+, and most other modern Linux distributions.
+
+To verify on your machine after extracting the tarball:
 
 ```bash
-# Build image (for ARM 32-bit)
-docker build -f utils/build_scripts/android32.Dockerfile -t oxen-android .
-# Build image (for ARM 64-bit)
-docker build -f utils/build_scripts/android64.Dockerfile -t oxen-android .
-# Create container
-docker create -it --name oxen-android oxen-android bash
-# Get binaries
-docker cp oxen-android:/src/build/release/bin .
+ldd xeqm-d
+# Should show only linux-vdso.so, libc.so, libstdc++.so, libgcc_s.so, libm.so,
+# libpthread.so, libdl.so, librt.so, and the dynamic linker. Anything else
+# (libssl, libboost, libsodium, libzmq, etc.) means the binary is not the
+# release build and won't be portable.
 ```
 
-**END - WORK IN PROGRESS**
+The CI pipeline enforces this check; binaries shipped in releases are guaranteed to be portably linked.
 
-### Building portable statically linked binaries
+---
 
-By default, in either dynamically or statically linked builds, binaries target the specific host processor on which the build happens and are not portable to other processors. Portable binaries can be built using the following targets:
+## Building from source
 
-* ```make release-static-linux-x86_64``` builds binaries on Linux on x86_64 portable across POSIX systems on x86_64 processors
-* ```make release-static-linux-i686``` builds binaries on Linux on x86_64 or i686 portable across POSIX systems on i686 processors
-* ```make release-static-linux-armv8``` builds binaries on Linux portable across POSIX systems on armv8 processors
-* ```make release-static-linux-armv7``` builds binaries on Linux portable across POSIX systems on armv7 processors
-* ```make release-static-linux-armv6``` builds binaries on Linux portable across POSIX systems on armv6 processors
-* ```make release-static-win64``` builds binaries on 64-bit Windows portable across 64-bit Windows systems
-* ```make release-static-win32``` builds binaries on 64-bit or 32-bit Windows portable across 32-bit Windows systems
+You only need to build from source if you want to develop, audit, or run a custom build. Otherwise use the Docker image or pre-built binaries above.
 
-### Cross Compiling
+### Linux (Debian / Ubuntu)
 
-You can also cross-compile static binaries on Linux for Windows and macOS with the `depends` system.
+The build supports two modes. Pick one.
 
-* ```make depends target=x86_64-linux-gnu``` for 64-bit linux binaries.
-* ```make depends target=x86_64-w64-mingw32``` for 64-bit windows binaries.
-  * Requires: `python3 g++-mingw-w64-x86-64 wine1.6 bc`
-* ```make depends target=x86_64-apple-darwin11``` for macOS binaries.
-  * Requires: `cmake imagemagick libcap-dev librsvg2-bin libz-dev libbz2-dev libtiff-tools python-dev`
-* ```make depends target=i686-linux-gnu``` for 32-bit linux binaries.
-  * Requires: `g++-multilib bc`
-* ```make depends target=i686-w64-mingw32``` for 32-bit windows binaries.
-  * Requires: `python3 g++-mingw-w64-i686`
-* ```make depends target=arm-linux-gnueabihf``` for armv7 binaries.
-  * Requires: `g++-arm-linux-gnueabihf`
-* ```make depends target=aarch64-linux-gnu``` for armv8 binaries.
-  * Requires: `g++-aarch64-linux-gnu`
-* ```make depends target=riscv64-linux-gnu``` for RISC V 64 bit binaries.
-  * Requires: `g++-riscv64-linux-gnu`
+**Statically-linked (recommended for redistribution / matching CI):**
 
-The required packages are the names for each toolchain on apt. Depending on your distro, they may have different names.
-
-Using `depends` might also be easier to compile Equilibria on Windows than using MSYS. Activate Windows Subsystem for Linux (WSL) with a distro (for example Ubuntu), install the apt build-essentials and follow the `depends` steps as depicted above.
-
-The produced binaries still link libc dynamically. If the binary is compiled on a current distribution, it might not run on an older distribution with an older installation of libc. Passing `-DBACKCOMPAT=ON` to cmake will make sure that the binary will run on systems having at least libc version 2.17.
-
-## Installing Equilibria from a package
-
-Pre-built packages are available for recent Debian and Ubuntu systems (and are often usable on
-Debian or Ubuntu-derived Linux distributions).  For more details see https://deb.imaginary.stream
-
-**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
-
-You can also build a docker package using:
-
-    ```bash
-    # Build using all available cores
-    docker build -t oxen-daemon-image .
-
-    # or build using a specific number of cores (reduce RAM requirement)
-    docker build --build-arg NPROC=1 -t oxen .
-
-    # either run in foreground
-    docker run -it -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
-
-    # or in background
-    docker run -it -d -v /oxen/chain:/root/.oxen -v /oxen/wallet:/wallet -p 22022:22022 oxen
-    ```
-
-**END - WORK IN PROGRESS**
-
-* The build needs 3 GB space.
-* Wait one hour or more. For docker, the collect_from_docker_container.sh script will automate downloading the binaries from the docker container.
-
-## Running xeq-d
-
-The build places the binary in `bin/` sub-directory within the build directory
-from which cmake was invoked (repository root by default). To run in
-foreground:
+This builds Boost, OpenSSL, libsodium, libzmq, libcurl, etc. from source and links them into the binary. Same configuration the release pipeline uses. Slow first build (~30 min), produces portable binaries.
 
 ```bash
-./bin/xeq-d
+sudo apt update && sudo apt install -y \
+  git build-essential cmake pkg-config ccache \
+  libreadline-dev libhidapi-dev libusb-1.0-0-dev \
+  libpgm-dev libsystemd-dev
+
+git clone --recursive https://github.com/XEQMLabs/equilibria-core.git
+cd equilibria-core
+
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_DEPS=ON -DBoost_NO_BOOST_CMAKE=ON
+make -j"$(nproc)"
 ```
 
-To list all available options, run `./bin/xeq-d --help`.  Options can be
-specified either on the command line or in a configuration file passed by the
-`--config-file` argument.  To specify an option in the configuration file, add
-a line with the syntax `argumentname=value`, where `argumentname` is the name
-of the argument without the leading dashes, for example `log-level=1`.
+**Dynamically-linked (faster, dev-only):**
 
-To run in background:
+Links against system libraries from apt. Faster builds, but the resulting binary only runs on your build host (and exact-version matching systems).
 
 ```bash
-./bin/xeq-d --log-file xeq-d.log --detach
+sudo apt update && sudo apt install -y \
+  git build-essential cmake pkg-config \
+  libssl-dev libzmq3-dev libsodium-dev libsqlite3-dev libcurl4-openssl-dev \
+  libboost-all-dev libgmp-dev libzstd-dev libreadline-dev libhidapi-dev \
+  libusb-1.0-0-dev libpgm-dev libsystemd-dev libunbound-dev
+
+git clone --recursive https://github.com/XEQMLabs/equilibria-core.git
+cd equilibria-core
+
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBoost_NO_BOOST_CMAKE=ON
+make -j"$(nproc)"
 ```
 
-**NOTE: THIS SECTION NEEDS TO BE REVIEWED AND UPDATED - BEGIN - WORK IN PROGRESS**
+Either way, binaries land in `build/bin/`.
 
-To run as a systemd service, copy
-[equilibriad.service](utils/systemd/equilibriad.service) to `/etc/systemd/system/` and
-[equilibriad.conf](utils/conf/equilibriad.conf) to `/etc/`. The [example
-service](utils/systemd/equilibriad.service) assumes that the user `oxen` exists
-and its home is the data directory specified in the [example
-config](utils/conf/equilibriad.conf).
+### Windows
 
-**END - WORK IN PROGRESS**
+Builds use the MSYS2 MinGW64 toolchain. See `.github/workflows/build-core-binaries.yml` for the exact package list and CMake invocation. The CI builds windows binaries as fully static using `make release-static-win64`.
 
-If you're on Mac, you may need to add the `--max-concurrency 1` option to
-xeq-wallet-cli, and possibly xeq-d, if you get crashes refreshing.
+### macOS (Apple Silicon)
 
-## Internationalization
+Requires Homebrew. The build uses pinned Boost 1.85 and bundles required Homebrew dylibs alongside the binary via `dylibbundler` so the resulting package is self-contained and runnable on any macOS 12+ ARM64 machine. See `.github/workflows/build-core-binaries.yml` for the full recipe.
 
-See [README.i18n.md](README.i18n.md).
+---
 
-## Debugging
+## Running the daemon
 
-This section contains general instructions for debugging failed installs or problems encountered with Equilibria. First ensure you are running the latest version built from the Github repo.
+Common configuration goes in `xeqm.conf` next to your data directory, or as command-line flags. Flags from the config file follow `key=value` syntax with no leading dashes.
 
-### Obtaining stack traces and core dumps on Unix systems
+### Minimum useful config (full node)
 
-We generally use the tool `gdb` (GNU debugger) to provide stack trace functionality, and `ulimit` to provide core dumps in builds which crash or segfault.
+```ini
+data-dir=/var/lib/xeqm
+p2p-bind-ip=0.0.0.0
+p2p-bind-port=9230
+rpc-bind-ip=0.0.0.0
+rpc-bind-port=9231
+confirm-external-bind=1
+log-level=*:warn
+```
 
-* To use `gdb` in order to obtain a stack trace for a build that has stalled:
-
-Run the build.
-
-Once it stalls, enter the following command:
+Run with:
 
 ```bash
-gdb /path/to/xeq-d `pidof xeq-d`
+xeqm-d --config-file=/etc/xeqm/xeqm.conf
 ```
 
-Type `thread apply all bt` within gdb in order to obtain the stack trace
+To run as a systemd service, create a unit similar to:
 
-* If however the core dumps or segfaults:
+```ini
+[Unit]
+Description=XEQM Daemon
+After=network-online.target
+Wants=network-online.target
 
-Enter `ulimit -c unlimited` on the command line to enable unlimited filesizes for core dumps
+[Service]
+User=xeqm
+Group=xeqm
+ExecStart=/usr/local/bin/xeqm-d --config-file=/etc/xeqm/xeqm.conf --non-interactive
+Restart=on-failure
+RestartSec=10s
+LimitNOFILE=65535
 
-Enter `echo core | sudo tee /proc/sys/kernel/core_pattern` to stop cores from being hijacked by other tools
+[Install]
+WantedBy=multi-user.target
+```
 
-Run the build.
+### Default network ports
 
-When it terminates with an output along the lines of "Segmentation fault (core dumped)", there should be a core dump file in the same directory as xeq-d. It may be named just `core`, or `core.xxxx` with numbers appended.
+| Network | P2P | RPC | Quorumnet |
+| ------- | --- | --- | --------- |
+| Mainnet | 9230 | 9231 | 9232 |
 
-You can now analyse this core dump with `gdb` as follows:
+### Useful runtime commands
+
+The daemon listens on a local OMQ admin socket and responds to JSON-RPC. A few commonly useful queries from outside the container:
 
 ```bash
-gdb /path/to/xeq-d /path/to/dumpfile`
+# Daemon status and current chain height
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"get_info"}' | jq .
+
+# Service node status (only for SN daemons)
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"get_service_node_status"}' | jq .
+
+# Change log level on the running daemon (no restart)
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"set_log_level","params":{"categories":"*:warn,qnet:debug"}}'
 ```
 
-Print the stack trace with `bt`
+---
 
- * If a program crashed and cores are managed by systemd, the following can also get a stack trace for that crash:
+## Running a service node
+
+Service nodes earn rewards in exchange for participating in consensus (Pulse block production, checkpoint quorums, obligations quorums) and providing network reachability.
+
+### Hardware
+
+A modest VPS (2 vCPU, 4GB RAM, 80GB SSD, 1Gbps egress) is comfortable. CPU usage is low (single-digit percent) once synced; RAM use is dominated by the LMDB chain database.
+
+### Network requirements
+
+Three ports must be reachable from the public internet:
+
+- P2P (default `9230`) — block / transaction propagation
+- RPC (default `9231`) — daemon administration and JSON-RPC; restrict to localhost in production unless you know what you're doing
+- Quorumnet (default `9232`) — service node ↔ service node messaging (Pulse, votes, timestamp tests)
+
+A typical multi-node operator binds each daemon's quorumnet port to a unique value (9232, 9242, 9252, ...) so multiple SNs can share a single host.
+
+### Economics
+
+| Constant | Mainnet value |
+| -------- | ------------- |
+| Full stake | 200,000 XEQ |
+| Minimum operator contribution | 100,000 XEQ (50% of stake) |
+| Maximum operator fee | 10% (1,000 / 10,000 basis points) |
+| Uptime proof frequency | 10 min |
+| Uptime proof validity window | 21 min |
+
+### Registration
+
+Generate a registration string from the daemon, then submit a stake transaction with that string from your wallet. From the running daemon's interactive console (or via `xeqm-d <cmd>` for one-shot):
+
+```
+prepare_registration
+```
+
+Follow the prompts to set your operator fee and any reserved contributor allocations. The output is a registration command to run from your wallet:
+
+```
+xeqm-wallet register_service_node <registration string>
+```
+
+Once the transaction confirms (one block), the daemon will begin participating in pulse rounds, checkpoint quorums, and obligations quorums.
+
+### Monitoring
+
+The single most useful per-SN status check is:
+
+```bash
+PUBKEY=$(curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"get_service_node_status"}' \
+  | jq -r '.result.service_node_state.service_node_pubkey')
+
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"get_service_nodes\",\"params\":{\"service_node_pubkeys\":[\"${PUBKEY}\"]}}" | jq .
+```
+
+Key fields to watch:
+
+- `active`, `funded`, `payable` — should all be `true`
+- `decommission_count` — should remain flat over time; rapid increase indicates trouble
+- `earned_downtime_blocks` — credit toward future decom recovery; should grow, not shrink
+- `last_uptime_proof` — should be recent (< proof frequency × 2)
+- `pulse_votes`, `checkpoint_votes` — `voted` should approach 8, `missed` should be ~0
+
+---
+
+## Troubleshooting
+
+### "Segfault on startup" / "GLIBC_2.x not found"
+
+You're running a binary built against a newer system library set than your distro provides. Use the v1.0.2+ release tarballs, which are statically linked and portable, or pull the Docker image. Builds from before v1.0.2 binary releases were not properly statically linked and are known to fail this way on non-Ubuntu-24.04 hosts.
+
+### "decommission_count keeps increasing"
+
+This was a known bug fixed in v1.0.2 — `x25519_to_pub` reverse-map staleness over uptime caused outbound timestamp tests to fail with `TIMEOUT`, leading to cyclic decommissions. Update to v1.0.2+ and the issue will resolve.
+
+### Inspecting OMQ-level behavior
+
+To enable detailed OMQ proxy and quorumnet debug logging on a running daemon without restarting:
+
+```bash
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"set_log_level","params":{"categories":"*:warn,oxenmq:debug,qnet:debug,service_nodes:debug,core:debug"}}'
+```
+
+To revert to defaults:
+
+```bash
+curl -s http://127.0.0.1:9231/json_rpc -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"0","method":"set_log_level","params":{"categories":"*:warn"}}'
+```
+
+### Stack traces from crashes
+
+If the daemon has crashed and produced a coredump (`ulimit -c unlimited` enabled):
+
+```bash
+gdb /usr/local/bin/xeqm-d /path/to/core
+(gdb) bt
+(gdb) thread apply all bt
+```
+
+Or with systemd-coredump:
 
 ```bash
 coredumpctl -1 gdb
 ```
 
-#### To run Equilibria within gdb:
+Build with `-DSANITIZE=ON -DCMAKE_BUILD_TYPE=Debug` to get ASAN-instrumented binaries for memory-corruption analysis. Performance roughly halves.
 
-Type `gdb /path/to/xeq-d`
+---
 
-Pass command-line options with `--args` followed by the relevant arguments
+## Development
 
-Type `run` to run xeq-d
-
-### Analysing memory corruption
-
-There are two tools available:
-
-#### ASAN
-
-Configure Equilibria with the -D SANITIZE=ON cmake flag, eg:
+### Tests
 
 ```bash
-cd build/debug && cmake -D SANITIZE=ON -D CMAKE_BUILD_TYPE=Debug ../..
+cd build
+make release-test
 ```
 
-You can then run the oxen tools normally. Performance will typically halve.
+The `core_tests` suite is slow (hours). Unit tests are fast.
 
-#### valgrind
+### Local devnet
 
-Install valgrind and run as `valgrind /path/to/xeq-d`. It will be very slow.
-
-### LMDB
-
-Instructions for debugging suspected blockchain corruption as per @HYC
-
-There is an `mdb_stat` command in the LMDB source that can print statistics about the database but it's not routinely built. This can be built with the following command:
+For developing against a local cluster of service nodes:
 
 ```bash
-cd ~/equilibria-core/external/db_drivers/liblmdb && make
+python3 utils/local-devnet/service_node_network.py \
+  --eth-sn-contracts-dir ../eth-sn-contracts/ \
+  --oxen-bin-dir ./build/bin
 ```
 
-The output of `mdb_stat -ea <path to blockchain dir>` will indicate inconsistencies in the blocks, block_heights and block_info table.
+Note: requires a local Ethereum dev node (Foundry's `anvil` recommended) for full functionality, but most consensus-layer testing works without it.
 
-The output of `mdb_dump -s blocks <path to blockchain dir>` and `mdb_dump -s block_info <path to blockchain dir>` is useful for indicating whether blocks and block_info contain the same keys.
+### CI
 
-These records are dumped as hex data, where the first line is the key and the second line is the data.
+CI is in `.github/workflows/`:
 
-## Testing tools
+- `build-core-binaries.yml` — builds and publishes binary releases on `core-v*` tags
+- `docker-publish.yml` — builds and publishes the docker image on push to `dev`
 
-### Local Devnet
+### Contributing
 
-The local devnet script in `utils/local-devnet/service_node_network.py` will
-spin up a series of service nodes that can be interacted with locally for
-testing. This script requires that:
+Pull requests welcome. Patches should be self-contained, logically separate from unrelated changes, and follow the surrounding code style. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-- A development Ethereum environment and node is setup at `localhost:8545`
-  (which is the default for port for these environments). Currently we only
-  support Foundry's `anvil` testnet. (Hardhat's node does not support
-  `eth_getProof` calls). An easy way of getting started is to clone the
-  [eth-sn-contracts](https://github.com/oxen-io/eth-sn-contracts) repo and
-  running it with `make node`. Make sure `npx` is installed.
+---
 
-- Thereafter the script can be invoked to launch the local network. This
-  command is a standard way to get going (refer to additional flags
-  in `service_node_network.py`):
-  `python3 utils/local-devnet/service_node_network.py --eth-sn-contracts-dir ../eth-sn-contracts/ --oxen-bin-dir ./build/bin`
+## Vulnerability disclosure
 
-# Known Issues
+For sensitive security issues, please coordinate disclosure privately rather than opening a public issue. Contact information for the team is available via the repository's GitHub organization page.
 
-## Protocols
+---
 
-### Socket-based
+## License
 
-Because of the nature of the socket-based protocols that drive Equilibria, certain protocol weaknesses are somewhat unavoidable at this time. While these weaknesses can theoretically be fully mitigated, the effort required (the means) may not justify the ends. As such, please consider taking the following precautions if you are a Equilibria node operator:
+Distributed under the BSD 3-Clause License. See [LICENSE](LICENSE) for the full text.
 
-- Run `xeq-d` on a "secured" machine. If operational security is not your forte, at a very minimum, have a dedicated a computer running `xeq-d` and **do not** browse the web, use email clients, or use any other potentially harmful apps on your `xeq-d` machine. **Do not click links or load URL/MUA content on the same machine**. Doing so may potentially exploit weaknesses in commands which accept "localhost" and "127.0.0.1".
-- If you plan on hosting a public "remote" node, start `xeq-d` with `--restricted-rpc`. This is a must.
-
-### Blockchain-based
-
-Certain blockchain "features" can be considered "bugs" if misused correctly. Consequently, please consider the following:
-
-- When receiving Equilibria, be aware that it may be locked for an arbitrary time if the sender elected to, preventing you from spending that Equilibria until the lock time expires. You may want to hold off acting upon such a transaction until the unlock time lapses. To get a sense of that time, you can consider the remaining blocktime until unlock as seen in the `show_transfers` command.
+Copyright notices:
+- Copyright © 2024-present XEQMLabs
+- Portions copyright © 2018-2024 The Oxen Project / The Loki Project
+- Portions copyright © 2014-2024 The Monero Project
+- Portions copyright © 2012-2013 The Cryptonote developers

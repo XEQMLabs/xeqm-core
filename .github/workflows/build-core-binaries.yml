@@ -15,6 +15,13 @@ on:
 permissions:
   contents: write
 
+# On a tag push (a real release) we want the version banner to read e.g.
+# "v1.0.2-release" rather than "v1.0.2-release-dev". The CMakeLists.txt picks
+# up OXEN_RELEASE_SUFFIX from the environment when set, so we just point it
+# at empty for tagged builds and leave it as the default ("-dev") otherwise.
+env:
+  OXEN_RELEASE_SUFFIX: ${{ github.ref_type == 'tag' && '' || '-dev' }}
+
 jobs:
   linux-ubuntu-2404:
     name: Build Ubuntu 24.04 x64 binaries
@@ -49,13 +56,19 @@ jobs:
             external/SQLiteCpp/include/SQLiteCpp/Statement.h \
             external/SQLiteCpp/include/SQLiteCpp/Column.h
 
-      - name: Configure
+      - name: Configure (statically-linked dependencies)
         run: |
+          # BUILD_STATIC_DEPS=ON makes cmake build Boost/OpenSSL/libsodium/libzmq/libcurl/etc.
+          # from source and link them in statically. The resulting binaries depend only on
+          # glibc and libstdc++, which makes them portable across most Linux distributions.
+          # Without this, the produced binaries link to whatever versions the runner happens
+          # to have installed and segfault on operators' machines due to ABI mismatch.
           rm -rf build
           mkdir -p build
           cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_STATIC_DEPS=ON \
             -DBoost_NO_BOOST_CMAKE=ON
 
       - name: Build
@@ -71,6 +84,34 @@ jobs:
           file build/bin/xeqm-d
           file build/bin/xeqm-wallet
           file build/bin/xeqm-rpc
+
+      - name: Confirm binaries link only against the portable runtime set
+        run: |
+          # Acceptable runtime dependencies for a portable Linux binary are limited to glibc,
+          # libstdc++, libgcc_s, libm, libpthread, libdl, librt, linux-vdso, and the dynamic
+          # linker. Anything else (libboost*, libssl*, libsodium*, libzmq*, libcurl*, libsqlite3*,
+          # libgmp*, libzstd*, libreadline*, libhidapi*, libusb*, libunbound*) means
+          # BUILD_STATIC_DEPS did not capture that dependency and the binary will not be
+          # portable. We fail the build loudly so a regression doesn't quietly ship to operators.
+          set -e
+          ALLOW='^[[:space:]]*(linux-vdso\.so|libc\.so|libstdc\+\+\.so|libgcc_s\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|/lib(64)?/ld-linux)'
+          fail=0
+          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+            echo "=== $bin ==="
+            ldd "build/bin/$bin"
+            unexpected=$(ldd "build/bin/$bin" | awk '{print $1}' | grep -Ev "$ALLOW" || true)
+            if [ -n "$unexpected" ]; then
+              echo "FAIL: $bin has non-portable runtime dependencies:"
+              echo "$unexpected"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "One or more binaries are not portably linked. Aborting release."
+            exit 1
+          fi
+          echo "All binaries are portably linked."
 
       - name: Package Ubuntu binaries
         run: |

@@ -1,7 +1,0 @@
-FROM ubuntu:20.04
-
-ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update && apt-get -y install apt-utils ca-certificates
-COPY oxen-deb-key.gpg /etc/apt/trusted.gpg.d/oxen.gpg
-RUN echo "deb https://deb.oxen.io focal main" > /etc/apt/sources.list.d/oxen.list && \
-    apt-get update
