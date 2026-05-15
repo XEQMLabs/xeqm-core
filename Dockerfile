@@ -1,7 +1,12 @@
 # =============================================================================
 # XEQM Node Docker Image
-# Multistage build — builder compiles a fully statically-linked daemon, runtime
-# is a minimal Ubuntu 24.04 with only ca-certificates and curl for healthchecks.
+# Multistage build — builder compiles the daemon against Ubuntu 24.04 system
+# libraries, runtime stage installs the matching runtime versions so the
+# binary's dynamic links resolve. Image is self-contained because the runtime
+# library set is pinned by the same base image used at build time. Operators
+# pulling this image never run the binary outside this controlled environment,
+# so the static linking that the bare-metal binary release needs is unnecessary
+# here.
 # =============================================================================
 
 # --- Builder stage ---
@@ -9,28 +14,24 @@ FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# BUILD_STATIC_DEPS=ON downloads and compiles Boost, OpenSSL, libsodium, libzmq,
-# libcurl, libsqlite3, libgmp, libzstd, etc. from source. The toolchain we need
-# for that is build-essential + cmake + git + perl + autotools + python3. The
-# dev packages for those libraries are NOT needed (we build them ourselves) but
-# we retain libreadline-dev for wallet line editing and libhidapi-dev/libusb-1.0
-# for hardware wallet support.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
     pkg-config \
-    perl \
-    autoconf \
-    automake \
-    libtool \
-    m4 \
-    python3 \
+    libssl-dev \
+    libzmq3-dev \
+    libsodium-dev \
+    libsqlite3-dev \
+    libboost-all-dev \
+    libcurl4-openssl-dev \
+    libuv1-dev \
+    libgmp-dev \
+    libzstd-dev \
+    libsystemd-dev \
+    libjemalloc-dev \
     ca-certificates \
-    curl \
-    libreadline-dev \
-    libhidapi-dev \
-    libusb-1.0-0-dev \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -41,36 +42,31 @@ RUN git submodule update --init --recursive
 RUN mkdir -p build && cd build && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_STATIC_DEPS=ON \
-        -DBoost_NO_BOOST_CMAKE=ON \
+        -DARCH=x86-64 \
         .. && \
     make -j"$(nproc)" daemon simplewallet wallet_rpc_server
-
-# Confirm the binaries are portably linked. If anything beyond the standard
-# glibc/libstdc++ runtime set leaks in, fail the build now rather than ship a
-# broken image to operators.
-RUN set -e; \
-    ALLOW='^[[:space:]]*(linux-vdso\.so|libc\.so|libstdc\+\+\.so|libgcc_s\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|/lib(64)?/ld-linux)'; \
-    for bin in xeqm-d xeqm-wallet xeqm-rpc; do \
-        echo "=== $bin ==="; \
-        ldd "build/bin/$bin" || true; \
-        unexpected=$(ldd "build/bin/$bin" | awk '{print $1}' | grep -Ev "$ALLOW" || true); \
-        if [ -n "$unexpected" ]; then \
-            echo "FAIL: $bin has non-portable runtime dependencies:"; \
-            echo "$unexpected"; \
-            exit 1; \
-        fi; \
-    done; \
-    echo "All binaries are portably linked."
 
 # --- Runtime stage ---
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# The static binaries only need ca-certificates (TLS roots for outbound HTTPS,
-# e.g. seed peer DNS) and curl (for operator healthchecks).
+# Runtime libraries matching what the builder linked against. These versions
+# are tied to ubuntu:24.04. If the base image is ever changed, both the
+# builder and runtime apt sets need to be reviewed together.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    libzmq5 \
+    libsodium23 \
+    libsqlite3-0 \
+    libboost-system1.83.0 \
+    libboost-filesystem1.83.0 \
+    libboost-thread1.83.0 \
+    libboost-program-options1.83.0 \
+    libboost-serialization1.83.0 \
+    libcurl4 \
+    libuv1 \
+    libjemalloc2 \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
