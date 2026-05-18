@@ -164,7 +164,7 @@ daemon::daemon(boost::program_options::variables_map vm_) :
         log::info(
                 logcat,
                 fg(fmt::terminal_color::red) | fmt::emphasis::bold,
-                "{} options are deprecated and will be removed from a future oxend version; use "
+                "{} options are deprecated and will be removed from a future xeqm-d version; use "
                 "--rpc-public/--rpc-admin instead",
                 deprecated_option_names);
 
@@ -399,7 +399,7 @@ bool daemon::run(bool interactive) {
                     [&p](oxenmq::ConnectionID, std::string_view err) {
                         try {
                             throw oxen::traced<std::runtime_error>{
-                                    "Internal oxend RPC connection failed: " + std::string{err}};
+                                    "Internal xeqm-d RPC connection failed: " + std::string{err}};
                         } catch (...) {
                             p.set_exception(std::current_exception());
                         }

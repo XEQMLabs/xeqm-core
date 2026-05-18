@@ -70,7 +70,7 @@ class http_client {
     explicit http_client(std::string base_url_ = "") {
         if (!base_url_.empty())
             set_base_url(std::move(base_url_));
-        session.SetUserAgent("oxen rpc client v" + std::string{OXEN_VERSION_STR});
+        session.SetUserAgent("xeqm rpc client v" + std::string{OXEN_VERSION_STR});
     }
 
     /// Sets the base_url to the given one. Will have / appended if it doesn't already end in /. The

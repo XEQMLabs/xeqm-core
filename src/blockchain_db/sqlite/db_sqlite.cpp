@@ -452,7 +452,7 @@ void BlockchainSQLite::upgrade_schema() {
                         return sqlite3_result_blob(
                                 ctx, &info.address, sizeof(info.address), SQLITE_TRANSIENT);
                     return sqlite3_result_error(
-                            ctx, "Invalid value: failed to parse input as an OXEN address", -1);
+                            ctx, "Invalid value: failed to parse input as a XEQM address", -1);
                 });
 
         for (auto table :

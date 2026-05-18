@@ -65,7 +65,7 @@ namespace {
             "Adds an unencrypted OxenMQ RPC listener with full, unrestricted capabilities and "
             "no authentication at the given address. "
 #ifndef _WIN32
-            "Listens at ipc://<data-dir>/oxend.sock if not specified. Specify 'none' to "
+            "Listens at ipc://<data-dir>/xeqm-d.sock if not specified. Specify 'none' to "
             "disable the default. "
 #endif
             "WARNING: Do not use this on a publicly accessible address!"};
@@ -161,7 +161,7 @@ omq_rpc::omq_rpc(
         // Windows version is new enough to support unix domain sockets, but for now the Windows
         // default is just "don't listen"
 #ifndef _WIN32
-        // Push default .oxen/oxend.sock
+        // Push default .oxen/xeqm-d.sock
         locals.push_back(
                 "ipc://" +
                 tools::path_to_str(core.get_config_directory() / cryptonote::SOCKET_FILENAME));

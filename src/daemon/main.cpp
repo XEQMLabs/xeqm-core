@@ -371,7 +371,7 @@ int main(int argc, char const* argv[]) {
                         command_line::get_arg(vm, cryptonote::rpc::http_server::arg_rpc_admin)[0];
                 if (rpc_addr == "none")
                     throw oxen::traced<std::runtime_error>{
-                            "Cannot invoke oxend command: --rpc-admin is disabled"};
+                            "Cannot invoke xeqm-d command: --rpc-admin is disabled"};
             }
 
             // Throws if invalid:

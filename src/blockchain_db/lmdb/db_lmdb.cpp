@@ -1581,7 +1581,7 @@ void BlockchainLMDB::open(
                         logcat,
                         "Existing lmdb database needs to be converted, which cannot be done on a "
                         "read-only database.");
-                log::error(logcat, "Please run oxend once to convert the database.");
+                log::error(logcat, "Please run xeqm-d once to convert the database.");
                 failed = true;
             } else {
                 txn.commit();

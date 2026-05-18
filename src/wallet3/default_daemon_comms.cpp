@@ -248,7 +248,7 @@ void DefaultDaemonComms::set_remote(std::string_view address) {
         throw;
     }
 
-    oxen::log::info(logcat, "Trying to connect to remote oxend");
+    oxen::log::info(logcat, "Trying to connect to remote xeqm-d");
     conn = omq->connect_remote(
             remote,
             // Callback for success case of connect remote
@@ -257,7 +257,7 @@ void DefaultDaemonComms::set_remote(std::string_view address) {
             [](auto, auto reason) {
                 oxen::log::error(
                         logcat,
-                        "Daemon Comms was not successful in connecting to remote oxend. Reason: {}",
+                        "Daemon Comms was not successful in connecting to remote xeqm-d. Reason: {}",
                         reason);
             });
 

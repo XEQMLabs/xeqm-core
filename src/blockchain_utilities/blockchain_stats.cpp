@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
     }
 
     auto m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
-    auto log_file_path = m_config_folder + "oxen-blockchain-stats.log";
+    auto log_file_path = m_config_folder + "xeqm-blockchain-stats.log";
     oxen::logging::init(log_file_path, command_line::get_arg(vm, arg_log_level));
     log::warning(logcat, "Starting...");
 
@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
     /*
      * The default output can be plotted with GnuPlot using these commands:
     set key autotitle columnhead
-    set title "Oxen Blockchain Growth"
+    set title "XEQMLabs Blockchain Growth"
     set timefmt "%Y-%m-%d"
     set xdata time
     set xrange ["2014-04-17":*]

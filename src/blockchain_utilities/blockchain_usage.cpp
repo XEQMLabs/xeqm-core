@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
     }
 
     auto m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
-    auto log_file_path = m_config_folder + "oxen-blockchain-usage.log";
+    auto log_file_path = m_config_folder + "xeqm-blockchain-usage.log";
     oxen::logging::init(log_file_path, command_line::get_arg(vm, arg_log_level));
     log::warning(logcat, "Starting...");
 

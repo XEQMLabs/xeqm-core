@@ -742,7 +742,7 @@ namespace {
                 json_binary_proxy{parent[key], format} = owner.ed25519;
         }
         void operator()(const tx_extra_oxen_name_system& x) {
-            set("type", "oxen_name_system");
+            set("type", "xeqm_name_system");
             json ons{};
             if (auto maybe_exp = ons::expiry_blocks(nettype, x.type))
                 ons["blocks"] = *maybe_exp;
@@ -1323,7 +1323,7 @@ void core_rpc_server::invoke(MINING_STATUS& mining_status, rpc_context) {
     const auto major_version = m_core.blockchain.get_network_version();
 
     mining_status.response["pow_algorithm"] = major_version >= hf::hf12_checkpointing ? "RandomX "
-                                                                                        "(OXEN "
+                                                                                        "(XEQM "
                                                                                         "variant)"
                                             : major_version == hf::hf11_infinite_staking
                                                     ? "Cryptonight Turtle Light (Variant 2)"
@@ -2762,7 +2762,7 @@ void core_rpc_server::invoke(
 //------------------------------------------------------------------------------------------------------------------------------
 void core_rpc_server::invoke(CONTRACT_REGISTRATION& rpc, rpc_context) {
     if (!m_core.service_node())
-        throw rpc_error{ERROR_NOT_A_SERVICE_NODE, "This oxend is not running in service node mode"};
+        throw rpc_error{ERROR_NOT_A_SERVICE_NODE, "This xeqm-d is not running in service node mode"};
 
     const auto response = m_core.bls_registration(rpc.request.operator_address);
     rpc.response["status"] = STATUS_OK;
@@ -3650,7 +3650,7 @@ void core_rpc_server::invoke(GET_SN_STATE_CHANGES& get_sn_state_changes, rpc_con
 void core_rpc_server::invoke(GET_L2_TRACKER_STATE& req, rpc_context) {
     if (!m_core.have_l2_tracker())
         throw rpc_error{
-                ERROR_NO_L2_TRACKER, "This oxend does not currently have an active L2 tracker"};
+                ERROR_NO_L2_TRACKER, "This xeqm-d does not currently have an active L2 tracker"};
 
     auto state = m_core.l2_tracker().get_state();
     serialization::json_archiver ja{

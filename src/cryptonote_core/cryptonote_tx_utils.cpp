@@ -494,7 +494,7 @@ std::pair<bool, uint64_t> construct_miner_tx(
         assert(hard_fork_version >= hf::hf19_reward_batching);
         for (const auto& reward : sn_rwds) {
             assert(!reward.amount.has_subatomic() &&
-                   "Check that the thousandth's OXEN has been truncated off");
+                   "Check that the thousandth's XEQM has been truncated off");
             auto atomic_amt = reward.amount.to_coin();
             rewards.emplace_back(reward_type::snode, reward.address, atomic_amt);
             total_sn_rewards += atomic_amt;
@@ -676,7 +676,7 @@ bool get_oxen_block_reward(
             else
                 log::error(
                         globallogcat,
-                        "We allocated reward but there was still {} oxen left to distribute.",
+                        "We allocated reward but there was still {} XEQM left to distribute.",
                         cryptonote::print_money(remainder));
             return false;
         }

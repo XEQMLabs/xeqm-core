@@ -47,7 +47,7 @@ std::optional<std::string> check_authorization(
 bool http_server_base::check_auth(HttpRequest& req, HttpResponse& res) {
     if (auto www_auth = check_authorization(
                 req.getHeader("authorization"),
-                "oxend rpc",
+                "xeqm-d rpc",
                 [this](const std::string_view user, const std::string_view pass) {
                     return user == m_login->username && pass == m_login->password.password().view();
                 })) {

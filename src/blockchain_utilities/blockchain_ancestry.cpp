@@ -379,7 +379,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     auto m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
-    auto log_file_path = m_config_folder + "oxen-blockchain-ancestry.log";
+    auto log_file_path = m_config_folder + "xeqm-blockchain-ancestry.log";
     oxen::logging::init(log_file_path, command_line::get_arg(vm, arg_log_level));
     log::warning(logcat, "Starting...");
 

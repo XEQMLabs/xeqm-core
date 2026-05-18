@@ -598,7 +598,7 @@ int main(int argc, char* argv[]) {
 
     auto net_type = command_line::get_network(vm);
     m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
-    auto log_file_path = m_config_folder + "oxen-blockchain-import.log";
+    auto log_file_path = m_config_folder + "xeqm-blockchain-import.log";
     oxen::logging::init(log_file_path, command_line::get_arg(vm, arg_log_level));
     log::info(logcat, "Starting...");
 

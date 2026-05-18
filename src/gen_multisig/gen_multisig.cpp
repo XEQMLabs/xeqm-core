@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
     auto [maybe_vm, should_terminate] = wallet_args::main(
             argc,
             argv,
-            "oxen-gen-multisig [(--testnet|--devnet)] [--filename-base=<filename>] [--scheme=M/N] "
+            "xeqm-gen-trusted-multisig [(--testnet|--devnet)] [--filename-base=<filename>] [--scheme=M/N] "
             "[--threshold=M] [--participants=N]",
             genms::tr("This program generates a set of multisig wallets - use this simpler scheme "
                       "only if all the participants trust each other"),
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
             po::options_description{},
             boost::program_options::positional_options_description(),
             [](const std::string& s) { tools::msg_writer() + s; },
-            "oxen-gen-multisig.log");
+            "xeqm-gen-trusted-multisig.log");
     if (!maybe_vm)
         return 1;
     if (should_terminate)

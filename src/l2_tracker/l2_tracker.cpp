@@ -109,7 +109,7 @@ L2Tracker::L2Tracker(
                   }} {
 
     if (oxend_proxies.empty())
-        throw std::logic_error{"Cannot set up a proxying L2Tracker without any oxend proxies"};
+        throw std::logic_error{"Cannot set up a proxying L2Tracker without any xeqm-d proxies"};
 
     // NOTE: we reference elements of l2_oxend_proxies in various lambdas, so the vector itself must
     // not be modified after this constructor.
@@ -117,7 +117,7 @@ L2Tracker::L2Tracker(
     for (const auto& [addr, edpk] : oxend_proxies) {
         if (addr.tcp() && !addr.curve())
             throw std::invalid_argument{
-                    "L2Tracker oxend proxying does not allow unencrypted TCP connections"};
+                    "L2Tracker xeqm-d proxying does not allow unencrypted TCP connections"};
         l2_oxend_proxies.emplace_back(
                 addr,
                 addr.curve() ? "{}...{} @ {}"_format(
@@ -179,7 +179,7 @@ void L2Tracker::set_height(uint64_t l2_height, bool take_lock) {
         log::warning(
                 globallogcat,
                 fg(fmt::terminal_color::red) | fmt::emphasis::bold,
-                "Latest RPC provider reported height ({}) is too far behind the latest Oxen "
+                "Latest RPC provider reported height ({}) is too far behind the latest XEQM "
                 "chain reported height ({})",
                 state.latest_height,
                 latest_blockchain_l2_height);
@@ -601,7 +601,7 @@ void L2Tracker::update_logs_internal() {
 
                             log::error(
                                     logcat,
-                                    "Failed to convert L2 state change transaction to an Oxen "
+                                    "Failed to convert L2 state change transaction to a XEQM "
                                     "state change transaction: {}\n\n{}",
                                     e.what(),
                                     fmt::to_string(buffer));

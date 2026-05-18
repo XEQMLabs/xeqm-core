@@ -771,7 +771,7 @@ void validate_registration(
     ZoneScoped;
     if (hf_version == feature::ETH_TRANSITION)
         throw invalid_registration{
-                "New registrations are disabled during OXEN->SESH transition period"};
+                "New registrations are disabled during XEQM->SESH transition period"};
     if (reg.uses_portions) {
         if (hf_version >= hf::hf19_reward_batching)
             throw invalid_registration{"Portion-based registrations are not permitted in HF19+"};
@@ -795,7 +795,7 @@ void validate_registration(
         if (reg.eth_contributions.empty())
             throw invalid_registration{"No operator contribution given"};
         if (!reg.reserved.empty())
-            throw invalid_registration{"Operator contributions through oxen no longer an option"};
+            throw invalid_registration{"Operator contributions through XEQM no longer an option"};
         if (reg.eth_contributions.size() > max_contributors)
             throw invalid_registration{"Too many contributors"};
         std::transform(
@@ -1482,7 +1482,7 @@ bool service_node_list::state_t::process_key_image_unlock_tx(
     if (hf_version >= feature::ETH_BLS) {
         log::warning(
                 logcat,
-                "Invalid OXEN unlock tx ({} @ {}): SN unlocks must come from ethereum",
+                "Invalid XEQM unlock tx ({} @ {}): SN unlocks must come from ethereum",
                 cryptonote::get_transaction_hash(tx),
                 block_height);
         return false;
@@ -1634,7 +1634,7 @@ bool is_registration_tx(
     if (hf_version >= feature::ETH_TRANSITION) {
         log::warning(
                 logcat,
-                "Invalid registration ({} @ {}): direct OXEN registrations/stakes are no longer "
+                "Invalid registration ({} @ {}): direct XEQM registrations/stakes are no longer "
                 "permitted in HF{}+",
                 cryptonote::get_transaction_hash(tx),
                 block_height,
@@ -2537,7 +2537,7 @@ bool service_node_list::state_t::process_contribution_tx(
     if (hf_version >= feature::ETH_BLS) {
         log::warning(
                 logcat,
-                "Invalid contribution ({} @ {}): OXEN contributions are no longer "
+                "Invalid contribution ({} @ {}): XEQM contributions are no longer "
                 "permitted in HF{}+",
                 cryptonote::get_transaction_hash(tx),
                 block_height,
@@ -4054,7 +4054,7 @@ block_add_result service_node_list::state_t::update_from_block(
 
     // Remove incomplete oxen registrations at hf20, as oxen contributions are no
     // longer allowed at this point.  Contributions to these nodes will be unlocked.
-    TracyCZoneN(remove_incomplete_oxen_regs_at_hf20, "Remove incomplete Oxen regs at HF20", true);
+    TracyCZoneN(remove_incomplete_oxen_regs_at_hf20, "Remove incomplete XEQM regs at HF20", true);
     auto hf20_height = hard_fork_begins(nettype, hf::hf20_eth_transition);
     if (hf20_height && height == *hf20_height) {
         auto info_iter = service_nodes_infos.begin();
@@ -5804,7 +5804,7 @@ bool service_node_list::handle_uptime_proof(
             if (proof->version < min.oxend) {
                 log::debug(
                         logcat,
-                        "Rejecting uptime proof from {}: v{}+ oxend version is required for "
+                        "Rejecting uptime proof from {}: v{}+ xeqm-d version is required for "
                         "v{}.{}+ network proofs",
                         proof->pubkey_ed25519,
                         tools::join(".", min.oxend),

@@ -757,13 +757,13 @@ bool command_parser_executor::prune_blockchain(const std::vector<std::string>& a
         return false;
 
     if (args.empty() || args[0] != "confirm") {
-        std::cout << "Warning: pruning from within oxend will not shrink the database file size."
+        std::cout << "Warning: pruning from within xeqm-d will not shrink the database file size."
                   << std::endl;
         std::cout << "Instead, parts of the file will be marked as free, so the file will not grow"
                   << std::endl;
         std::cout << "until that newly free space is used up. If you want a smaller file size now,"
                   << std::endl;
-        std::cout << "exit oxend and run oxen-blockchain-prune (you will temporarily need more"
+        std::cout << "exit xeqm-d and run xeqm-blockchain-prune (you will temporarily need more"
                   << std::endl;
         std::cout << "disk space for the database conversion though). If you are OK with the "
                      "database"

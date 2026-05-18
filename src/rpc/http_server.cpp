@@ -700,7 +700,7 @@ void http_server::start() {
         throw oxen::traced<std::logic_error>{"Cannot call http_server::start() more than once"};
 
     auto net = m_server.nettype();
-    m_server_header = "oxend/{} {}"_format(
+    m_server_header = "xeqm-d/{} {}"_format(
             (m_restricted ? std::to_string(OXEN_VERSION[0]) : std::string{OXEN_VERSION_FULL}),
             network_type_to_string(net));
 

@@ -365,7 +365,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                 "{}"_format(m_sqlite_db ? std::to_string(m_sqlite_db->height + 1) : "N/A");
         log::info(
                 globallogcat,
-                "Loading blocks into oxen subsystems, scanning blockchain from height: {} to: {} "
+                "Loading blocks into XEQM subsystems, scanning blockchain from height: {} to: {} "
                 "(snl: {}, sql: {}, ons: {})",
                 start_height,
                 end_height,
@@ -393,7 +393,7 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
                         height, block_load_context::CHUNK_SIZE, next_chunk.blocks, &blocks_size)) {
                 log::critical(
                         logcat,
-                        "Unable to get checkpointed historical blocks [{}-{}] for updating oxen "
+                        "Unable to get checkpointed historical blocks [{}-{}] for updating XEQM "
                         "subsystems",
                         height,
                         std::min(height + block_load_context::CHUNK_SIZE - 1, end_height));
@@ -3759,7 +3759,7 @@ bool Blockchain::is_node_removable(const eth::bls_public_key& bls_pubkey, bool l
     if (!m_l2_tracker) {
         log::debug(
                 logcat,
-                "No L2 tracker configured; skipping in-contract-but-not-oxend removable check of "
+                "No L2 tracker configured; skipping in-contract-but-not-xeqm-d removable check of "
                 "{}",
                 bls_pubkey);
         return false;
@@ -3767,7 +3767,7 @@ bool Blockchain::is_node_removable(const eth::bls_public_key& bls_pubkey, bool l
 
     if (m_l2_tracker->is_in_contract(bls_pubkey).value_or(false)) {
         log::debug(
-                logcat, "{} is removable: found in contract but not in oxend SN list", bls_pubkey);
+                logcat, "{} is removable: found in contract but not in xeqm-d SN list", bls_pubkey);
         return true;
     }
 
@@ -5296,7 +5296,7 @@ void Blockchain::max_sync_height(uint64_t max_height) {
     if (m_max_sync_height > 0)
         log::warning(
                 logcat,
-                "Blockchain max sync height enabled; oxend will not sync beyond height {}",
+                "Blockchain max sync height enabled; xeqm-d will not sync beyond height {}",
                 m_max_sync_height);
 }
 

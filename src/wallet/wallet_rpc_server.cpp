@@ -85,7 +85,7 @@ namespace {
     const command_line::arg_flag arg_prompt_for_password = {
             "prompt-for-password", "Prompts for password when not provided"};
 
-    constexpr const char default_rpc_username[] = "oxen";
+    constexpr const char default_rpc_username[] = "xeqm";
 
     std::optional<tools::password_container> password_prompter(const char* prompt, bool verify) {
         auto pwd_container = tools::password_container::prompt(verify, prompt);
@@ -540,7 +540,7 @@ bool wallet_rpc_server::init() {
 
     m_restricted = command_line::get_arg(m_vm, arg_restricted);
 
-    m_server_header = "oxen-wallet-rpc/"s + (m_restricted ? std::to_string(OXEN_VERSION[0])
+    m_server_header = "xeqm-wallet-rpc/"s + (m_restricted ? std::to_string(OXEN_VERSION[0])
                                                           : std::string{OXEN_VERSION_STR});
 
     m_cors = {rpc_config.access_control_origins.begin(), rpc_config.access_control_origins.end()};

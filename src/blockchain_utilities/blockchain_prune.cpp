@@ -577,7 +577,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    mlog_configure(mlog_get_default_log_path("oxen-blockchain-prune.log"), true);
+    mlog_configure(mlog_get_default_log_path("xeqm-blockchain-prune.log"), true);
     if (!command_line::is_arg_defaulted(vm, arg_log_level))
         mlog_set_log(command_line::get_arg(vm, arg_log_level).c_str());
     else

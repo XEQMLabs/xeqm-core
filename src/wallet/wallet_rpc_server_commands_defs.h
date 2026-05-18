@@ -1613,7 +1613,7 @@ struct CREATE_WALLET : RPC_COMMAND {
 };
 
 OXEN_RPC_DOC_INTROSPECT
-// Open a wallet. You need to have set the argument "--wallet-dir" when launching oxen-wallet-rpc to
+// Open a wallet. You need to have set the argument "--wallet-dir" when launching xeqm-wallet-rpc to
 // make this work. The wallet rpc executable may only open wallet files within the same directory as
 // wallet-dir, otherwise use the
 // "--wallet-file" flag to open specific wallets.

@@ -56,7 +56,7 @@ inline constexpr std::string_view to_string(txtype type) {
         case txtype::state_change: return "state_change"sv;
         case txtype::key_image_unlock: return "key_image_unlock"sv;
         case txtype::stake: return "stake"sv;
-        case txtype::oxen_name_system: return "oxen_name_system"sv;
+        case txtype::oxen_name_system: return "xeqm_name_system"sv;
         case txtype::ethereum_new_service_node_v2: return "ethereum_new_service_node_V2"sv;
         case txtype::ethereum_service_node_exit_request:
             return "ethereum_service_node_exit_request"sv;

@@ -211,7 +211,7 @@ std::pair<std::optional<boost::program_options::variables_map>, bool> main(
     if (!command_line::is_arg_defaulted(vm, arg_log_level))
         log::info(logcat, "Setting log level = {}", command_line::get_arg(vm, arg_log_level));
     else {
-        const char* logs = getenv("OXEN_LOGS");
+        const char* logs = getenv("XEQM_LOGS");
         log::info(logcat, "Setting log levels = {}", (logs ? logs : "<default>"));
     }
     if (!log_path.empty())

@@ -196,23 +196,23 @@ static const command_line::arg_descriptor<int> arg_l2_check_threshold = {
         ETH_L2_DEFAULT_CHECK_THRESHOLD};
 static const command_line::arg_flag arg_l2_skip_chainid = {
         "l2-skip-chainid",
-        "Skips the oxend startup chainId check that ensures the configured L2 provider(s) are "
+        "Skips the xeqm-d startup chainId check that ensures the configured L2 provider(s) are "
         "providing data for the the correct L2 chain."};
 static const command_line::arg_descriptor<std::string> arg_l2_proxy = {
         "l2-proxy",
         "Enables this node to act as an L2 state proxy.  This option takes a filename containing "
         "service node Ed25519 pubkeys (one per line) that are allowed to access this node's L2 "
-        "state.  Listed service nodes can then use l2-provider=oxend://IP:PORT/PUBKEY to "
-        "retrieve information from this oxend as their L2 provider. If this node is running in "
+        "state.  Listed service nodes can then use l2-provider=xeqm-d://IP:PORT/PUBKEY to "
+        "retrieve information from this xeqm-d as their L2 provider. If this node is running in "
         "service node mode, PORT will be the quorumnet port (22025 by default on mainnet); for "
         "non-service the --lmq-curve option should be used to configure the listening address.",
         ""};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_oxend = {
-        "l2-oxend",
-        "Specify the address (\"IP:PORT/PUBKEY\", or \"ipc://PATH.sock\") of another oxend to use "
-        "as an L2 information proxy.  The remote oxend must be running with the `--l2-proxy` "
+        "l2-xeqm-d",
+        "Specify the address (\"IP:PORT/PUBKEY\", or \"ipc://PATH.sock\") of another xeqm-d to use "
+        "as an L2 information proxy.  The remote xeqm-d must be running with the `--l2-proxy` "
         "option and must have listed this node's pubkey in its allowed pubkey file. Can be "
-        "specified multiple times to add redundant oxend L2 information sources. This option "
+        "specified multiple times to add redundant xeqm-d L2 information sources. This option "
         "cannot be used with --l2-provider or --l2-proxy options and other --l2-... options are "
         "ignored when this option is enabled."};
 
@@ -410,7 +410,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     if (!command_line::get_arg(vm, arg_l2_oxend).empty() &&
         (!command_line::get_arg(vm, arg_l2_provider).empty() ||
          !command_line::get_arg(vm, arg_l2_proxy).empty())) {
-        log::error(globallogcat, "--l2-oxend cannot be used with --l2-provider or --l2-proxy");
+        log::error(globallogcat, "--l2-xeqm-d cannot be used with --l2-provider or --l2-proxy");
         return false;
     }
 
@@ -441,7 +441,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
                             logcat,
                             "Address given for public-ip is not public; allowing it because "
                             "dev-allow-local-ips was specified. This service node WILL NOT WORK ON "
-                            "THE PUBLIC OXEN NETWORK!");
+                            "THE PUBLIC XEQM NETWORK!");
                 } else {
                     log::error(
                             logcat,
@@ -470,7 +470,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
             if (latest_hf_known.version >= hf::hf21_eth) {
                 log::error(
                         logcat,
-                        "At least one ethereum L2 provider (or L2 oxend proxy) must be specified "
+                        "At least one ethereum L2 provider (or L2 xeqm-d proxy) must be specified "
                         "for a service node");
                 args_okay = false;
             }
@@ -480,7 +480,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
             log::error(
                     logcat,
                     "IMPORTANT: One or more required service node-related configuration "
-                    "settings/options were omitted or invalid please fix them and restart oxend.");
+                    "settings/options were omitted or invalid please fix them and restart xeqm-d.");
             return false;
         }
     }
@@ -823,7 +823,7 @@ bool core::init(
         }
 
         if (proxy_addrs.empty()) {
-            log::error(globallogcat, "--l2-oxend value cannot be empty");
+            log::error(globallogcat, "--l2-xeqm-d value cannot be empty");
             return false;
         }
 
@@ -860,7 +860,7 @@ bool core::init(
                     proxies.emplace_back(std::move(a), std::move(edpk));
                 }
             } catch (const std::invalid_argument& e) {
-                log::error(globallogcat, "Invalid l2-oxend proxy address '{}': {}", addr, e.what());
+                log::error(globallogcat, "Invalid l2-xeqm-d proxy address '{}': {}", addr, e.what());
                 return false;
             }
         }
@@ -2645,7 +2645,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from the storage server "
                         "recently. Make sure that it is running! It is required to run "
-                        "alongside the Oxen daemon");
+                        "alongside the XEQM daemon");
                 return;
             }
             if (netconf.HAVE_LOKINET &&
@@ -2656,7 +2656,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from lokinet recently. "
                         "Make sure that it is running! It is required to run alongside the "
-                        "Oxen daemon");
+                        "XEQM daemon");
                 return;
             }
             if (netconf.HAVE_SESSION_ROUTER && !check_external_ping(
@@ -2668,7 +2668,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from Session Router "
                         "recently. Make sure that it is running! It is required to run "
-                        "alongside the Oxen daemon");
+                        "alongside the XEQM daemon");
                 return;
             }
 

@@ -1843,7 +1843,7 @@ struct CREATE_WALLET : RPC_COMMAND {
     } request;
 };
 
-/// Open a wallet. You need to have set the argument "--wallet-dir" when launching oxen-wallet-rpc
+/// Open a wallet. You need to have set the argument "--wallet-dir" when launching xeqm-wallet-rpc
 /// to make this work. The wallet rpc executable may only open wallet files within the same
 /// directory as wallet-dir, otherwise use the
 /// "--wallet-file" flag to open specific wallets.
@@ -2422,7 +2422,7 @@ struct ONS_BUY_MAPPING : RESTRICTED {
     static constexpr auto names() { return NAMES("ons_buy_mapping"); }
 
     static constexpr const char* description =
-            R"(Buy an Oxen Name System (ONS) mapping that maps a unique name to a Session ID, Oxen Address or Lokinet address.
+            R"(Buy a XEQM Name System (ONS) mapping that maps a unique name to a Session ID, XEQM Address or Lokinet address.
 
 Currently supports Session, Wallet and Lokinet registrations. Lokinet registrations can be for 1, 2, 5, or 10 years by specifying a type value of "lokinet", "lokinet_2y", "lokinet_5y", "lokinet_10y". Session and Wallet registrations do not expire.
 

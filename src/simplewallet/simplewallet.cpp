@@ -166,7 +166,7 @@ namespace {
             ""};
     const command_line::arg_flag arg_do_not_relay{
             "do-not-relay",
-            sw::tr("The newly created transaction will not be relayed to the oxen network")};
+            sw::tr("The newly created transaction will not be relayed to the xeqm network")};
     const command_line::arg_flag arg_create_address_file{
             "create-address-file", sw::tr("Create an address file for new wallets")};
     const command_line::arg_descriptor<std::string> arg_create_hwdev_txt = {
@@ -279,7 +279,7 @@ namespace {
             "mms init <required_signers>/<authorized_signers> <own_label> <own_transport_address>");
     const char* USAGE_MMS_INFO("mms info");
     const char* USAGE_MMS_SIGNER(
-            "mms signer [<number> <label> [<transport_address> [<oxen_address>]]]");
+            "mms signer [<number> <label> [<transport_address> [<xeqm_address>]]]");
     const char* USAGE_MMS_LIST("mms list");
     const char* USAGE_MMS_NEXT("mms next [sync]");
     const char* USAGE_MMS_SYNC("mms sync");
@@ -1539,7 +1539,7 @@ bool simple_wallet::export_raw_multisig(const std::vector<std::string>& args) {
         std::string filenames;
         for (auto& ptx : txs.m_ptx) {
             const crypto::hash txid = cryptonote::get_transaction_hash(ptx.tx);
-            const fs::path fn = tools::utf8_path("raw_multisig_oxen_tx_" + tools::hex_guts(txid));
+            const fs::path fn = tools::utf8_path("raw_multisig_xeqm_tx_" + tools::hex_guts(txid));
             if (!filenames.empty())
                 filenames += ", ";
             filenames += "{}"_format(fn);
@@ -2007,7 +2007,7 @@ bool simple_wallet::welcome(const std::vector<std::string>& args) {
             "of the layers of privacy XEQMLabs provides. Be safe and practice defense in depth.");
     message_writer() << "";
     message_writer() << tr(
-            "Welcome to XEQMLabs and financial privacy. For more information, see https://oxen.io");
+            "Welcome to XEQMLabs and financial privacy. For more information, see http://xeqmlabs.com/");
     return true;
 }
 
@@ -3135,7 +3135,7 @@ Pending or Failed: "failed"|"pending",  "out", Lock, Checkpointed, Time, Amount*
             tr(USAGE_REGISTER_SERVICE_NODE),
             tr("Send <amount> to this wallet's main account and lock it as an operator stake for a "
                "new Service Node. This command is typically generated on the Service Node via the "
-               "`prepare_registration' oxend command. The optional index= and <priority> "
+               "`prepare_registration' xeqm-d command. The optional index= and <priority> "
                "parameters work as in the `transfer' command."));
     m_cmd_binder.set_handler(
             "stake",
@@ -5906,14 +5906,14 @@ bool simple_wallet::confirm_and_send_tx(
         } else
 #endif
         {
-            bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_oxen_tx");
+            bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_xeqm_tx");
             if (!r) {
                 fail_msg_writer() << tr("Failed to write transaction(s) to file");
                 return false;
             } else {
                 success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to "
                                                "file: ")
-                                         << "multisig_oxen_tx";
+                                         << "multisig_xeqm_tx";
             }
         }
     } else if (m_wallet->get_account().get_device().has_tx_cold_sign()) {
@@ -5937,13 +5937,13 @@ bool simple_wallet::confirm_and_send_tx(
             return false;
         }
     } else if (m_wallet->watch_only()) {
-        bool r = m_wallet->save_tx(ptx_vector, "unsigned_oxen_tx");
+        bool r = m_wallet->save_tx(ptx_vector, "unsigned_xeqm_tx");
         if (!r) {
             fail_msg_writer() << tr("Failed to write transaction(s) to file");
             return false;
         } else {
             success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ")
-                                     << "unsigned_oxen_tx";
+                                     << "unsigned_xeqm_tx";
         }
     } else {
         commit_or_save(ptx_vector, m_do_not_relay, blink);
@@ -6059,7 +6059,7 @@ bool simple_wallet::transfer_main(
             de.original = local_args[i];
             i += 2;
         } else {
-            if (local_args[i].starts_with("oxen:"))
+            if (local_args[i].starts_with("xeqm:"))
                 fail_msg_writer() << tr("Invalid last argument: ") << local_args.back() << ": "
                                   << error;
             else
@@ -6354,9 +6354,9 @@ bool simple_wallet::request_stake_unlock(const std::vector<std::string>& args_) 
 
     std::vector<tools::wallet2::pending_tx> ptx_vector = {unlock_result.ptx};
     if (m_wallet->watch_only()) {
-        if (m_wallet->save_tx(ptx_vector, "unsigned_oxen_tx"))
+        if (m_wallet->save_tx(ptx_vector, "unsigned_xeqm_tx"))
             success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ")
-                                     << "unsigned_oxen_tx";
+                                     << "unsigned_xeqm_tx";
         else
             fail_msg_writer() << tr("Failed to write transaction(s) to file");
 
@@ -6914,8 +6914,8 @@ bool simple_wallet::ons_update_mapping(std::vector<std::string> args) {
 
         auto enc_hex = record["encrypted_value"].get<std::string>();
         if (!oxenc::is_hex(enc_hex) || enc_hex.size() > 2 * ons::mapping_value::BUFFER_SIZE) {
-            log::error(logcat, "invalid ONS data returned from oxend");
-            fail_msg_writer() << tr("invalid ONS data returned from oxend");
+            log::error(logcat, "invalid ONS data returned from xeqm-d");
+            fail_msg_writer() << tr("invalid ONS data returned from xeqm-d");
             return true;
         }
 
@@ -7248,22 +7248,22 @@ bool simple_wallet::sweep_unmixable(const std::vector<std::string>& args_) {
 
         // actually commit the transactions
         if (m_wallet->multisig()) {
-            bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_oxen_tx");
+            bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_xeqm_tx");
             if (!r) {
                 fail_msg_writer() << tr("Failed to write transaction(s) to file");
             } else {
                 success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to "
                                                "file: ")
-                                         << "multisig_oxen_tx";
+                                         << "multisig_xeqm_tx";
             }
         } else if (m_wallet->watch_only()) {
-            bool r = m_wallet->save_tx(ptx_vector, "unsigned_oxen_tx");
+            bool r = m_wallet->save_tx(ptx_vector, "unsigned_xeqm_tx");
             if (!r) {
                 fail_msg_writer() << tr("Failed to write transaction(s) to file");
             } else {
                 success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to "
                                                "file: ")
-                                         << "unsigned_oxen_tx";
+                                         << "unsigned_xeqm_tx";
             }
         } else {
             commit_or_save(ptx_vector, m_do_not_relay, false /* don't blink */);
@@ -7355,12 +7355,12 @@ bool simple_wallet::sweep_main_internal(
     // actually commit the transactions
     bool submitted_to_network = false;
     if (m_wallet->multisig()) {
-        bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_oxen_tx");
+        bool r = m_wallet->save_multisig_tx(ptx_vector, "multisig_xeqm_tx");
         if (!r) {
             fail_msg_writer() << tr("Failed to write transaction(s) to file");
         } else {
             success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ")
-                                     << "multisig_oxen_tx";
+                                     << "multisig_xeqm_tx";
         }
     } else if (m_wallet->get_account().get_device().has_tx_cold_sign()) {
         try {
@@ -7387,12 +7387,12 @@ bool simple_wallet::sweep_main_internal(
             fail_msg_writer() << tr("unknown error");
         }
     } else if (m_wallet->watch_only()) {
-        bool r = m_wallet->save_tx(ptx_vector, "unsigned_oxen_tx");
+        bool r = m_wallet->save_tx(ptx_vector, "unsigned_xeqm_tx");
         if (!r) {
             fail_msg_writer() << tr("Failed to write transaction(s) to file");
         } else {
             success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ")
-                                     << "unsigned_oxen_tx";
+                                     << "unsigned_xeqm_tx";
         }
     } else {
         commit_or_save(ptx_vector, m_do_not_relay, blink);
@@ -7879,8 +7879,8 @@ bool simple_wallet::sign_transfer(const std::vector<std::string>& args_) {
     std::vector<tools::wallet2::pending_tx> ptx;
     try {
         bool r = m_wallet->sign_tx(
-                "unsigned_oxen_tx",
-                "signed_oxen_tx",
+                "unsigned_xeqm_tx",
+                "signed_xeqm_tx",
                 ptx,
                 [&](const tools::wallet2::unsigned_tx_set& tx) { return accept_loaded_tx(tx); },
                 export_raw);
@@ -7899,7 +7899,7 @@ bool simple_wallet::sign_transfer(const std::vector<std::string>& args_) {
             txids_as_text += (", ");
         txids_as_text += tools::hex_guts(get_transaction_hash(t.tx));
     }
-    success_msg_writer(true) << tr("Transaction successfully signed to file ") << "signed_oxen_tx"
+    success_msg_writer(true) << tr("Transaction successfully signed to file ") << "signed_xeqm_tx"
                              << ", txid " << txids_as_text;
     if (export_raw) {
         std::string rawfiles_as_text;
@@ -7907,7 +7907,7 @@ bool simple_wallet::sign_transfer(const std::vector<std::string>& args_) {
             if (i > 0)
                 rawfiles_as_text += ", ";
             rawfiles_as_text +=
-                    "signed_oxen_tx_raw" + (ptx.size() == 1 ? "" : ("_" + std::to_string(i)));
+                    "signed_xeqm_tx_raw" + (ptx.size() == 1 ? "" : ("_" + std::to_string(i)));
         }
         success_msg_writer(true) << tr("Transaction raw hex data exported to ") << rawfiles_as_text;
     }
@@ -7925,7 +7925,7 @@ bool simple_wallet::submit_transfer(const std::vector<std::string>& args_) {
     try {
         std::vector<tools::wallet2::pending_tx> ptx_vector;
         bool r = m_wallet->load_tx(
-                "signed_oxen_tx", ptx_vector, [&](const tools::wallet2::signed_tx_set& tx) {
+                "signed_xeqm_tx", ptx_vector, [&](const tools::wallet2::signed_tx_set& tx) {
                     return accept_loaded_tx(tx);
                 });
         if (!r) {
@@ -7933,7 +7933,7 @@ bool simple_wallet::submit_transfer(const std::vector<std::string>& args_) {
             return true;
         }
 
-        // FIXME: store the blink status in the signed_oxen_tx somehow?
+        // FIXME: store the blink status in the signed_xeqm_tx somehow?
         constexpr bool FIXME_blink = false;
 
         commit_or_save(ptx_vector, false, FIXME_blink);
@@ -8056,7 +8056,7 @@ bool simple_wallet::get_tx_proof(const std::vector<std::string>& args) {
     try {
         std::string sig_str = m_wallet->get_tx_proof(
                 txid, info.address, info.is_subaddress, args.size() == 3 ? args[2] : "");
-        const fs::path filename{"oxen_tx_proof"};
+        const fs::path filename{"xeqm_tx_proof"};
         if (tools::dump_file(filename, sig_str))
             success_msg_writer() << tr("signature file saved to: ") << filename;
         else
@@ -8251,7 +8251,7 @@ bool simple_wallet::get_spend_proof(const std::vector<std::string>& args) {
     try {
         const std::string sig_str =
                 m_wallet->get_spend_proof(txid, args.size() == 2 ? args[1] : "");
-        const fs::path filename{"oxen_spend_proof"};
+        const fs::path filename{"xeqm_spend_proof"};
         if (tools::dump_file(filename, sig_str))
             success_msg_writer() << tr("signature file saved to: ") << filename;
         else
@@ -8329,7 +8329,7 @@ bool simple_wallet::get_reserve_proof(const std::vector<std::string>& args) {
     try {
         const std::string sig_str =
                 m_wallet->get_reserve_proof(account_minreserve, args.size() == 2 ? args[1] : "");
-        const fs::path filename{"oxen_reserve_proof"};
+        const fs::path filename{"xeqm_reserve_proof"};
         if (tools::dump_file(filename, sig_str))
             success_msg_writer() << tr("signature file saved to: ") << filename;
         else
@@ -10006,7 +10006,7 @@ void simple_wallet::commit_or_save(
             std::string blob;
             tx_to_blob(ptx.tx, blob);
             const std::string blob_hex = oxenc::to_hex(blob);
-            fs::path filename{u8"raw_oxen_tx"};
+            fs::path filename{u8"raw_xeqm_tx"};
             if (ptx_vector.size() > 1)
                 filename += "_" + std::to_string(i++);
             bool success = tools::dump_file(filename, blob_hex);

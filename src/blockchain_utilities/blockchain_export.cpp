@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     block_stop = command_line::get_arg(vm, arg_block_stop);
 
     auto m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
-    auto log_file_path = m_config_folder + "oxen-blockchain-export.log";
+    auto log_file_path = m_config_folder + "xeqm-blockchain-export.log";
     oxen::logging::init(log_file_path, command_line::get_arg(vm, arg_log_level));
     log::warning(logcat, "Starting...");
 

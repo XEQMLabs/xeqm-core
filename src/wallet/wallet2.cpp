@@ -1999,12 +1999,12 @@ void wallet2::scan_output(
             THROW_WALLET_EXCEPTION_IF(
                     !pwd,
                     error::password_needed,
-                    tr("Password is needed to compute key image for incoming OXEN"));
+                    tr("Password is needed to compute key image for incoming XEQM"));
             THROW_WALLET_EXCEPTION_IF(
                     !verify_password(*pwd),
                     error::password_needed,
                     tr("Invalid password: password is needed to compute key image for incoming "
-                       "OXEN"));
+                       "XEQM"));
             decrypt_keys(*pwd);
             m_encrypt_keys_after_refresh = *pwd;
         }
@@ -7189,7 +7189,7 @@ std::string wallet2::transfers_to_csv(
                 log::error(
                         logcat,
                         "Warning: Unhandled pay type, this is most likely a developer error, "
-                        "please report it to the Oxen developers.");
+                        "please report it to the XEQM developers.");
                 break;
         }
 
@@ -9149,7 +9149,7 @@ wallet2::stake_result wallet2::check_stake_allowed(
 
     if (max_contrib_total == 0) {
         result.status = stake_result_status::service_node_contribution_maxed;
-        result.msg = tr("The service node cannot receive any more Oxen from this wallet");
+        result.msg = tr("The service node cannot receive any more XEQM from this wallet");
         return result;
     }
 
@@ -9178,7 +9178,7 @@ wallet2::stake_result wallet2::check_stake_allowed(
             result.msg.reserve(128);
             result.msg = tr("You must contribute at least ");
             result.msg += print_money(min_contrib_total);
-            result.msg += tr(" oxen to become a contributor for this service node.");
+            result.msg += tr(" XEQM to become a contributor for this service node.");
             return result;
         }
     }
@@ -9186,7 +9186,7 @@ wallet2::stake_result wallet2::check_stake_allowed(
     if (amount > max_contrib_total) {
         result.msg += tr("You may only contribute up to ");
         result.msg += print_money(max_contrib_total);
-        result.msg += tr(" more oxen to this service node. ");
+        result.msg += tr(" more XEQM to this service node. ");
         result.msg += tr("Reducing your stake from ");
         result.msg += print_money(amount);
         result.msg += tr(" to ");
@@ -9592,7 +9592,7 @@ wallet2::request_stake_unlock_result wallet2::can_request_stake_unlock(
                 result.msg.append("You are requesting to unlock a stake of: ");
                 result.msg.append(cryptonote::print_money(contribution["amount"]));
                 result.msg.append(
-                        " Oxen which is a small contributor stake.\nSmall contributors need to "
+                        "XEQM which is a small contributor stake.\nSmall contributors need to "
                         "wait ");
                 result.msg.append(std::to_string(small_contributor_unlock_blocks));
                 result.msg.append(" blocks before being allowed to unlock.");
@@ -9607,7 +9607,7 @@ wallet2::request_stake_unlock_result wallet2::can_request_stake_unlock(
             result.msg.append("You are requesting to unlock a stake of: ");
             result.msg.append(cryptonote::print_money(contribution["amount"]));
             result.msg.append(
-                    " Oxen from the service node network.\nThis will schedule the service node: ");
+                    "XEQM from the service node network.\nThis will schedule the service node: ");
             result.msg.append(node_info["service_node_pubkey"]);
             result.msg.append(" for deactivation.");
             if (node_info["contributors"].size() > 1) {
@@ -9726,7 +9726,7 @@ static ons_prepared_args prepare_tx_extra_oxen_name_system_values(
     ons_prepared_args result = {};
     if (priority == tools::tx_priority_blink) {
         if (reason)
-            *reason = "Can not request a blink TX for Oxen Name Service transactions";
+            *reason = "Can not request a blink TX for XEQM Name Service transactions";
         return {};
     }
 
@@ -10296,7 +10296,7 @@ void wallet2::get_outs(
         if (output_blacklist.size() * 0.05 > (double)rct_offsets.size()) {
             log::warning(
                     logcat,
-                    "More than 5% of outputs are blacklisted ({}/{}), please notify the Oxen "
+                    "More than 5% of outputs are blacklisted ({}/{}), please notify the XEQM "
                     "developers",
                     output_blacklist.size(),
                     rct_offsets.size());
@@ -12246,7 +12246,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(
         THROW_WALLET_EXCEPTION_IF(
                 dsts.size() != 0,
                 error::wallet_internal_error,
-                "oxen name system txs must not have any destinations set, has: " +
+                "XEQM name system txs must not have any destinations set, has: " +
                         std::to_string(dsts.size()));
         dsts.emplace_back(
                 0,
@@ -16662,7 +16662,7 @@ epee::wipeable_string wallet2::decrypt_with_view_secret_key(
     return decrypt(ciphertext, get_account().get_keys().m_view_secret_key, authenticated);
 }
 
-static constexpr auto uri_prefix = "oxen:"sv;
+static constexpr auto uri_prefix = "xeqm:"sv;
 
 //----------------------------------------------------------------------------------------------------
 std::string wallet2::make_uri(

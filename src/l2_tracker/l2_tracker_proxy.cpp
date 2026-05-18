@@ -407,7 +407,7 @@ void L2Tracker::proxy_request_generic(
                         proxy_disconnect(to);
                     } else if (data[0] == "UNKNOWNCOMMAND"sv) {
                         log_error = true;
-                        data[0] = "Remote oxend is not configured in l2-proxy mode!";
+                        data[0] = "Remote xeqm-d is not configured in l2-proxy mode!";
                     }
 
                     if (log_error)
@@ -434,19 +434,19 @@ void L2Tracker::proxy_connect_and_subscribe() {
 
     for (auto& oxend : l2_oxend_proxies) {
         if (!oxend.connid) {
-            log::debug(logcat, "Establishing connection to oxend L2 proxy {}", oxend.id);
+            log::debug(logcat, "Establishing connection to xeqm-d L2 proxy {}", oxend.id);
             oxend.pending_connect = true;
             oxend.connid = omq.connect_remote(
                     oxend.address,
                     [this, &oxend](ConnectionID cid) {
-                        log::info(logcat, "Connected to remote oxend L2 proxy {}", oxend.id);
+                        log::info(logcat, "Connected to remote xeqm-d L2 proxy {}", oxend.id);
                         oxend.pending_connect = false;
                         proxy_send_subscribe(oxend);
                     },
                     [this, &oxend](ConnectionID cid, std::string_view reason) {
                         log::error(
                                 logcat,
-                                "Failed to connect to remote oxend L2 proxy {}: {}",
+                                "Failed to connect to remote xeqm-d L2 proxy {}: {}",
                                 oxend.id,
                                 reason);
                         // Clear it so that we retry at the next subscribe interval
