@@ -46,6 +46,7 @@ static constexpr std::array mainnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
         hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
         hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
+        hard_fork{hf::hf20_governance_payouts_fix, 0, 35000, 1780353319},
 };
 
 static constexpr std::array testnet_hard_forks = {
@@ -62,6 +63,7 @@ static constexpr std::array testnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
         hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
         hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
+        hard_fork{hf::hf20_governance_payouts_fix, 0, 760, 1780353319},
 };
 
 static constexpr std::array devnet_hard_forks = {
@@ -77,6 +79,7 @@ static constexpr std::array local_devnet_hard_forks = {
         hard_fork{hf::hf17, 0, 45, 1716310017},
         hard_fork{hf::hf18, 0, 46, 1716310018},
         hard_fork{hf::hf19_reward_batching, 0, 47, 1716310019},
+        hard_fork{hf::hf20_governance_payouts_fix, 0, 50, 1716310020},
         hard_fork{hf::hf20_eth_transition, 0, 170, 1716310020},
         hard_fork{hf::hf21_eth, 0, 171, 1716310020},
 };

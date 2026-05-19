@@ -474,17 +474,23 @@ std::pair<bool, uint64_t> construct_miner_tx(
                     "Governance reward can NOT be 0 before hardfork 10, hard_fork_version: {}",
                     static_cast<int>(hard_fork_version));
         }
-        // Governance reward paid out through SN rewards batching from HF19
-        else if (hard_fork_version < hf::hf19_reward_batching) {
+        else {
             cryptonote::address_parse_info governance_wallet_address;
             cryptonote::get_account_address_from_str(
                     governance_wallet_address,
                     nettype,
                     cryptonote::get_config(nettype).governance_wallet_address(hard_fork_version));
-            rewards.push_back(
-                    {reward_type::governance,
-                     governance_wallet_address.address,
-                     reward_parts.governance_paid});
+
+            if (hard_fork_version >= hf::hf20_governance_payouts_fix) {
+                batched_rewards.emplace_back(
+                        governance_wallet_address.address,
+                        reward_money::from_coin(reward_parts.governance_paid));
+            } else {
+                rewards.push_back(
+                        {reward_type::governance,
+                         governance_wallet_address.address,
+                         reward_parts.governance_paid});
+            }
         }
     }
 
