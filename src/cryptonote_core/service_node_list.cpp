@@ -3208,6 +3208,14 @@ void service_node_list::block_add(
     ZoneScoped;
     block_add_result result = {};
 
+    // Hold m_sn_mutex across all m_state reads/writes in this function,
+    // including the sql_db->add_block() call below which previously ran after
+    // the inner lock was released — exposing m_state to concurrent mutation
+    // during the SQL write and producing intermittent heap corruption around
+    // v19+ pulse blocks. m_sn_mutex is recursive so nested locking in process_block
+    // and friends remains safe.
+    std::lock_guard lock(m_sn_mutex);
+
     if (block.major_version < hf::hf9_service_nodes) {
         m_state.height = block.get_height();
     } else {
@@ -3219,7 +3227,6 @@ void service_node_list::block_add(
                     "{})"_format(m_state.height, blockchain.sqlite_db().height));
         }
 
-        std::lock_guard lock(m_sn_mutex);
         result = process_block(block, txs);
         if (!rescan || !rescan->skip_verify)
             verify_block(block, false /*alt_block*/, checkpoint);
