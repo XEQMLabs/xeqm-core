@@ -55,7 +55,7 @@ constexpr uint16_t pulse_validator_bit_mask() {
 // decommission time: the first quorum test after the credit expires determines whether the server
 // gets recommissioned or decommissioned).
 inline constexpr auto DECOMMISSION_CREDIT_PER_DAY = 24 * 60min / 30;  // 24h credit per 30 days
-inline constexpr auto DECOMMISSION_INITIAL_CREDIT = 2h;
+inline constexpr auto DECOMMISSION_INITIAL_CREDIT = 12h;
 inline constexpr auto DECOMMISSION_MAX_CREDIT = 48h;
 inline constexpr auto DECOMMISSION_MINIMUM = 2h;
 

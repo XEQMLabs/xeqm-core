@@ -191,24 +191,31 @@ service_node_test_results quorum_cop::check_service_node(
         }
     }
 
-    // These checks will not be performed when a node is being considered for recommission
+    // These checks will not be performed when a node is being considered for recommission.
+    // Participation-window guard: require a full QUORUM_VOTE_CHECK_COUNT window of votes
+    // before a failure count can produce a verdict (otherwise fresh nodes get marked failing
+    // before the window is even populated).
     if (!info.is_decommissioned()) {
         if (check_checkpoint_obligation &&
+            checkpoint_participation.size() >= checkpoint_participation.max_size() &&
             checkpoint_participation.failures() > CHECKPOINT_MAX_MISSABLE_VOTES) {
             log::info(logcat, "Service Node: {}, failed checkpoint obligation check", pubkey);
             result.checkpoint_participation = false;
         }
 
-        if (pulse_participation.failures() > PULSE_MAX_MISSABLE_VOTES) {
+        if (pulse_participation.size() >= pulse_participation.max_size() &&
+            pulse_participation.failures() > PULSE_MAX_MISSABLE_VOTES) {
             log::info(logcat, "Service Node: {}, failed pulse obligation check", pubkey);
             result.pulse_participation = false;
         }
 
-        if (timestamp_participation.failures() > TIMESTAMP_MAX_MISSABLE_VOTES) {
+        if (timestamp_participation.size() >= timestamp_participation.max_size() &&
+            timestamp_participation.failures() > TIMESTAMP_MAX_MISSABLE_VOTES) {
             log::info(logcat, "Service Node: {}, failed timestamp obligation check", pubkey);
             result.timestamp_participation = false;
         }
-        if (timesync_status.failures() > TIMESYNC_MAX_UNSYNCED_VOTES) {
+        if (timesync_status.size() >= timesync_status.max_size() &&
+            timesync_status.failures() > TIMESYNC_MAX_UNSYNCED_VOTES) {
             log::info(logcat, "Service Node: {}, failed timesync obligation check", pubkey);
             result.timesync_status = false;
         }
