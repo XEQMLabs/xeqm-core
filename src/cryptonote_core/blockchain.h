@@ -807,6 +807,7 @@ class Blockchain {
      */
     bool check_fee(
             size_t tx_weight,
+            size_t tx_ins,
             size_t tx_outs,
             uint64_t fee,
             uint64_t burned,

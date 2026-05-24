@@ -45,6 +45,9 @@ namespace cryptonote {
 
 inline constexpr uint64_t MAX_BLOCK_NUMBER = 500000000;
 inline constexpr size_t MAX_TX_SIZE = 1000000;
+// Relay/mempool size limit for standard type-0 transfer transactions specifically.
+// State-change and other non-standard types are not subject to this cap.
+inline constexpr size_t STANDARD_TX_WEIGHT_LIMIT = 50000;
 inline constexpr uint64_t MAX_TX_PER_BLOCK = 0x10000000;
 inline constexpr uint64_t MINED_MONEY_UNLOCK_WINDOW = 30;
 inline constexpr uint64_t DEFAULT_TX_SPENDABLE_AGE = 6;
@@ -124,10 +127,22 @@ inline constexpr uint64_t L2_REWARD_MAX_DECREASE_DIVISOR = 25000;
 inline constexpr uint64_t L2_HEIGHT_DELAY_THRESHOLD = 1h / 250ms;
 
 // Fallback used in wallet if no fee is available from RPC:
-inline constexpr uint64_t FEE_PER_BYTE_V13 = 200;
+inline constexpr uint64_t FEE_PER_BYTE_V13 = 2000;
 // 0.005 OXEN per tx output (in addition to the per-byte fee), starting in v18:
 inline constexpr uint64_t FEE_PER_OUTPUT_V18 = 5000000;
-inline constexpr uint64_t DYNAMIC_FEE_REFERENCE_TRANSACTION_WEIGHT = 3000;
+// Per-input fee component: ring-signature verification scales with input count, so inputs
+// beyond the base are priced explicitly to reflect actual validation work.
+inline constexpr uint64_t FEE_PER_INPUT_V13 = 2000000;
+// Reference weight used in the dynamic fee formula.  Raising this raises the dynamic minimum
+// proportionally for all transactions.
+inline constexpr uint64_t DYNAMIC_FEE_REFERENCE_TRANSACTION_WEIGHT = 30000;
+// Standard transfers above this byte threshold pay a multiplied weight-fee component.
+inline constexpr size_t LARGE_TX_WEIGHT_THRESHOLD = 30000;
+// Multiplier applied to the weight-fee for standard transactions that exceed LARGE_TX_WEIGHT_THRESHOLD.
+inline constexpr uint64_t LARGE_TX_FEE_MULTIPLIER = 3;
+// Maximum number of standard (type-0) transactions above LARGE_TX_WEIGHT_THRESHOLD that the
+// block-template builder will include in a single block.
+inline constexpr size_t MAX_LARGE_STANDARD_TXS_PER_BLOCK = 1;
 inline constexpr uint64_t FEE_QUANTIZATION_DECIMALS = 8;
 
 // by default, blocks ids count in synchronizing

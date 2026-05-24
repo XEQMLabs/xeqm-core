@@ -4871,6 +4871,7 @@ byte_and_output_fees Blockchain::get_dynamic_base_fee(
 //------------------------------------------------------------------
 bool Blockchain::check_fee(
         size_t tx_weight,
+        size_t tx_ins,
         size_t tx_outs,
         uint64_t fee,
         uint64_t burned,
@@ -4901,12 +4902,26 @@ bool Blockchain::check_fee(
                         ? std::min<uint64_t>(median, m_long_term_effective_median_block_weight)
                         : median,
                 version);
+
+        // Weight-fee component: apply a multiplier for large transactions to
+        // price the extra CPU, bandwidth, and relay cost they impose.
+        uint64_t weight_fee = tx_weight * fees.first;
+        if (tx_weight > LARGE_TX_WEIGHT_THRESHOLD)
+            weight_fee *= LARGE_TX_FEE_MULTIPLIER;
+
+        // Per-input fee: ring-signature verification scales with input count.
+        uint64_t input_fee = tx_ins * FEE_PER_INPUT_V13;
+
         log::debug(
                 logcat,
-                "Using {}/byte + {}/out fee",
+                "Using {}/byte ({}x for {}B+ tx) + {}/out + {}/in fee",
                 print_money(fees.first),
-                print_money(fees.second));
-        needed_fee = tx_weight * fees.first + tx_outs * fees.second;
+                tx_weight > LARGE_TX_WEIGHT_THRESHOLD ? LARGE_TX_FEE_MULTIPLIER : 1,
+                LARGE_TX_WEIGHT_THRESHOLD,
+                print_money(fees.second),
+                print_money(FEE_PER_INPUT_V13));
+
+        needed_fee = weight_fee + tx_outs * fees.second + input_fee;
         // quantize fee up to 8 decimals
         const uint64_t mask = get_fee_quantization_mask();
         needed_fee = (needed_fee + mask - 1) / mask * mask;

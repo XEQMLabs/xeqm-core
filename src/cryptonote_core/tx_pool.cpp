@@ -352,13 +352,11 @@ bool tx_memory_pool::add_tx(
         return false;
     }
 
-    if (hf_version < hf::hf19_reward_batching) {
-        if (!opts.kept_by_block && tx.is_transfer() &&
-            !m_blockchain.check_fee(tx_weight, tx.vout.size(), fee, burned, opts)) {
-            tvc.m_verifivation_failed = true;
-            tvc.m_fee_too_low = true;
-            return false;
-        }
+    if (!opts.kept_by_block && tx.is_transfer() &&
+        !m_blockchain.check_fee(tx_weight, tx.vin.size(), tx.vout.size(), fee, burned, opts)) {
+        tvc.m_verifivation_failed = true;
+        tvc.m_fee_too_low = true;
+        return false;
     }
 
     size_t tx_weight_limit = get_transaction_weight_limit(hf_version);
@@ -369,6 +367,20 @@ bool tx_memory_pool::add_tx(
                 "transaction is too heavy: {} bytes, maximum weight: {}",
                 tx_weight,
                 tx_weight_limit);
+        tvc.m_verifivation_failed = true;
+        tvc.m_too_big = true;
+        return false;
+    }
+
+    // Standard (type-0) transfers are additionally capped below the global limit to prevent
+    // large-input block-stuffing attacks.  State-change and other non-standard types are exempt.
+    if (!opts.kept_by_block && tx.type == txtype::standard &&
+        tx_weight > STANDARD_TX_WEIGHT_LIMIT) {
+        log::info(
+                logcat,
+                "standard transfer is too heavy: {} bytes, relay limit: {}",
+                tx_weight,
+                STANDARD_TX_WEIGHT_LIMIT);
         tvc.m_verifivation_failed = true;
         tvc.m_too_big = true;
         return false;
@@ -1927,6 +1939,8 @@ bool tx_memory_pool::fill_block_template(
     if (state_change_txes)
         state_change_txes->clear();
 
+    size_t large_standard_tx_count = 0;
+
     for (const auto& pooltx : m_txs_by_priority) {
         const auto& txid = std::get<crypto::hash>(pooltx);
         txpool_tx_meta_t meta;
@@ -2034,6 +2048,16 @@ bool tx_memory_pool::fill_block_template(
                 log::debug(logcat, "  conflicting ONS buy in mempool");
                 continue;
             }
+        }
+
+        // Limit the number of large standard transactions per block regardless of fee density.
+        // This caps attack throughput even when the coin price makes fees cheap.
+        if (tx.type == txtype::standard && meta.weight > LARGE_TX_WEIGHT_THRESHOLD) {
+            if (large_standard_tx_count >= MAX_LARGE_STANDARD_TXS_PER_BLOCK) {
+                log::debug(logcat, "  large standard tx cap reached for this block, skipping");
+                continue;
+            }
+            ++large_standard_tx_count;
         }
 
         bl.tx_hashes.push_back(txid);
