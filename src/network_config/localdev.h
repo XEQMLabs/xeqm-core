@@ -55,6 +55,8 @@ inline constexpr network_config config{
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 1,
+        .BATCHING_INTERVAL_V2 = mainnet::config.BATCHING_INTERVAL_V2,
+        .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT_V2,
         .DEREGISTRATION_LOCK_DURATION = 10 * TARGET_BLOCK_TIME,
         // There's no unlock duration in localdev tests. This means when the
         // unlock is confirmed by the nodes, the node can immediately exit the

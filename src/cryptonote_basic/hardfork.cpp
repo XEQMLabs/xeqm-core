@@ -46,6 +46,10 @@ static constexpr std::array mainnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
         hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
         hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
+        // HF19 rev 4: switch SN reward batching to 24h cadence and raise min payout 10x
+        // (0.1 XEQM -> 1 XEQM).  Reduces operator UTXO accumulation that previously enabled
+        // sweep_all storms.  Activation height/timestamp: 35000 / 2026-05-30 ~22:14 UTC.
+        hard_fork{hf::hf19_reward_batching, 4, 35000, 1780179252},
 };
 
 static constexpr std::array testnet_hard_forks = {

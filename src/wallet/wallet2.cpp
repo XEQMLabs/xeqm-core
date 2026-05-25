@@ -15245,7 +15245,9 @@ uint64_t wallet2::get_next_batch_payout(std::optional<std::string> address) cons
     } else {
         addr = get_address();
     }
-    return addr.next_payout_height(get_blockchain_current_height(), conf.BATCHING_INTERVAL);
+    auto current_height = get_blockchain_current_height();
+    auto [hf_v, hf_rev] = cryptonote::get_network_version_revision(nettype(), current_height);
+    return addr.next_payout_height(current_height, conf.batching_interval(hf_v, hf_rev));
 }
 
 void wallet2::set_tx_note(const crypto::hash& txid, const std::string& note) {

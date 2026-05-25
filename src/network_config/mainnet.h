@@ -69,9 +69,11 @@ inline constexpr network_config config{
         .PULSE_MAX_START_ADJUSTMENT = 15s,
         .PULSE_MIN_SERVICE_NODES = 12,
         .BATCHING_INTERVAL = 20,
-        .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,  // 1 OXEN (in atomic units)
+        .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,  // 0.1 XEQM (atomic units; COIN = 1e9)
         .LIMIT_BATCH_OUTPUTS = 15,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
+        .BATCHING_INTERVAL_V2 = 1440,                  // HF19 rev 4: ~24h at 1min blocks
+        .MIN_BATCH_PAYMENT_AMOUNT_V2 = 1'000'000'000,  // HF19 rev 4: 1 XEQM (10x prior)
         .DEREGISTRATION_LOCK_DURATION = 7 * 24h,
         .UNLOCK_DURATION = 14 * 24h,
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD = 5 * 24h / TARGET_BLOCK_TIME,

@@ -114,13 +114,33 @@ struct network_config final {
     // offset from this to still receive every BATCHING_INTERVAL, but different wallets receive at
     // different offsets within the block cycle.
     const uint64_t BATCHING_INTERVAL;
-    // The minimum payout (in atomic OXEN) required for the batch rewards to issue a payment
+    // The minimum payout (in atomic XEQM) required for the batch rewards to issue a payment
     const uint64_t MIN_BATCH_PAYMENT_AMOUNT;
     // Maximum number of batch payments in a single block:
     const uint64_t LIMIT_BATCH_OUTPUTS;
     // Number of blocks that a SN must be active before they start earning a share of the block
     // reward.
     const uint64_t SERVICE_NODE_PAYABLE_AFTER_BLOCKS;
+
+    // HF19 rev 4: extended batching interval and raised minimum payout, reducing reward UTXO
+    // churn for large operators (preventing sweep_all from creating block-fill storms).  These
+    // values apply at heights where (hf, snode_revision) >= (hf19_reward_batching, 4); below that
+    // the BATCHING_INTERVAL / MIN_BATCH_PAYMENT_AMOUNT values above remain in effect.
+    const uint64_t BATCHING_INTERVAL_V2;
+    const uint64_t MIN_BATCH_PAYMENT_AMOUNT_V2;
+
+    constexpr uint64_t batching_interval(hf v, uint8_t rev) const {
+        if (v > hf::hf19_reward_batching ||
+            (v == hf::hf19_reward_batching && rev >= 4))
+            return BATCHING_INTERVAL_V2;
+        return BATCHING_INTERVAL;
+    }
+    constexpr uint64_t min_batch_payment_amount(hf v, uint8_t rev) const {
+        if (v > hf::hf19_reward_batching ||
+            (v == hf::hf19_reward_batching && rev >= 4))
+            return MIN_BATCH_PAYMENT_AMOUNT_V2;
+        return MIN_BATCH_PAYMENT_AMOUNT;
+    }
 
     // Amount of time a stake remains locked after a deregistration:
     const std::chrono::seconds DEREGISTRATION_LOCK_DURATION;

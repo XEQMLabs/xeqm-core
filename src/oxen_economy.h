@@ -38,8 +38,8 @@ inline constexpr uint64_t BLOCK_REWARD_HF17 = 18'333'333'333;
 inline constexpr uint64_t FOUNDATION_REWARD_HF17 = 1'833'333'333;
 
 // HF19 reward parameters:
-inline constexpr uint64_t SN_REWARD_HF19 = 8'250'000'000;  // 8.25 XEQ per block
-inline constexpr uint64_t FOUNDATION_REWARD_HF19 = 12'400'000'000;  // 12.4 XEQ per block (~17,856 XEQ/day)
+inline constexpr uint64_t SN_REWARD_HF19 = 8'250'000'000;  // 8.25 XEQM per block
+inline constexpr uint64_t FOUNDATION_REWARD_HF19 = 12'400'000'000;  // 12.4 XEQM per block (~17,856 XEQM/day)
 
 static_assert(MINER_REWARD_HF15 + SN_REWARD_HF15 + FOUNDATION_REWARD_HF15 == BLOCK_REWARD_HF15);
 static_assert(

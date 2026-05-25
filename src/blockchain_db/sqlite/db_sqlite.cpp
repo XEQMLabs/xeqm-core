@@ -709,6 +709,23 @@ void BlockchainSQLite::upgrade_schema() {
         transaction->commit();
 }
 
+void BlockchainSQLite::migrate_payout_offsets(uint64_t new_interval) {
+    auto update_st = prepared_st(
+            "UPDATE batched_payments_accrued SET payout_offset = ? WHERE address = ?");
+
+    int updated = 0;
+    for (auto addr : prepared_results<blob_guts<account_public_address>>(
+                 "SELECT address FROM batched_payments_accrued"
+                 " WHERE payout_offset IS NOT NULL"s)) {
+        int offset = static_cast<int>(addr.value.modulus(new_interval));
+        exec_query(update_st, offset, bind_guts(addr.value));
+        update_st->reset();
+        ++updated;
+    }
+
+    log::info(globallogcat, "Recomputed payout_offset on {} accrued-payment rows", updated);
+}
+
 void BlockchainSQLite::reset_database() {
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
 
@@ -955,7 +972,13 @@ void BlockchainSQLite::add_sn_rewards(
                         amount.to_db_atomic(),
                         payment.liquidation.to_db_atomic());
         } else {
-            int offset = std::get<account_public_address>(vaddr).modulus(netconf.BATCHING_INTERVAL);
+            // add_sn_rewards (pre-HF21 path) is called from reward_handler() while the DB's
+            // member `height` still points at the previous block; the payments belong to the
+            // block being added (height + 1).  Use that height to pick the active batching
+            // interval (HF19 rev 4 expands it from 20 to 1440 blocks).
+            auto [hf_v, hf_rev] = get_network_version_revision(nettype, height + 1);
+            int offset = std::get<account_public_address>(vaddr)
+                                 .modulus(netconf.batching_interval(hf_v, hf_rev));
             exec_query(insert_payment, addr_blob, offset, amount.to_db_amount(hf_version));
         }
         insert_payment->reset();
@@ -1004,11 +1027,14 @@ std::vector<batch_sn_payment> BlockchainSQLite::get_sn_payments(uint64_t block_h
 
     std::vector<std::pair<account_public_address, reward_money>> accrued_pairs;
     {
+        auto [hf_v, hf_rev] = get_network_version_revision(nettype, block_height);
+        const auto interval = conf.batching_interval(hf_v, hf_rev);
+        const auto min_payment = conf.min_batch_payment_amount(hf_v, hf_rev);
         auto accrued_amounts = prepared_results<blob_guts<account_public_address>, int64_t>(
                 "SELECT address, amount FROM batched_payments_accrued"
                 " WHERE payout_offset = ? AND amount >= ? ORDER BY address ASC",
-                static_cast<int>(block_height % conf.BATCHING_INTERVAL),
-                static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+                static_cast<int>(block_height % interval),
+                static_cast<int64_t>(min_payment * BATCH_REWARD_FACTOR));
 
         for (auto [address, amount] : accrued_amounts)
             accrued_pairs.emplace_back(
@@ -1472,6 +1498,31 @@ bool BlockchainSQLite::add_block(
         log::debug(logcat, "Batching of Service Node Rewards Begins");
         reset_database();
         update_height(block_height - 1);
+    }
+
+    // HF19 rev 4 activation: switch SN reward batching from ~20-block (~20min) to 1440-block
+    // (~24h) cadence.  This is a hard consensus change because the miner_tx payout list at any
+    // block depends on (address mod BATCHING_INTERVAL) matching (block_height mod
+    // BATCHING_INTERVAL).  When we cross the activation block we must rewrite every stored
+    // payout_offset using the new modulus before validating this block's payments.
+    {
+        const auto& nc = get_config(nettype);
+        auto is_rev4 = [](hf v, uint8_t r) {
+            return v > hf::hf19_reward_batching ||
+                   (v == hf::hf19_reward_batching && r >= 4);
+        };
+        auto [v_now, rev_now] = get_network_version_revision(nettype, block_height);
+        auto [v_prev, rev_prev] = block_height == 0
+                                          ? std::pair<hf, uint8_t>{hf::none, 0}
+                                          : get_network_version_revision(nettype, block_height - 1);
+        if (is_rev4(v_now, rev_now) && !is_rev4(v_prev, rev_prev)) {
+            log::info(
+                    globallogcat,
+                    "HF19 rev 4 activation at height {}: migrating batching offsets to interval {}",
+                    block_height,
+                    nc.batching_interval(v_now, rev_now));
+            migrate_payout_offsets(nc.batching_interval(v_now, rev_now));
+        }
     }
 
     if (block_height != height + 1) {

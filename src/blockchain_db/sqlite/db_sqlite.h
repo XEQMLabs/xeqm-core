@@ -124,6 +124,11 @@ class BlockchainSQLite : public db::Database {
     bool index_exists(const std::string& name);
     bool trigger_exists(const std::string& name);
 
+    // Recompute the stored payout_offset for every accrued-payments row using the supplied
+    // batching interval.  Called once when the chain crosses an HF activation that changes
+    // BATCHING_INTERVAL (see hf19_reward_batching rev 4).
+    void migrate_payout_offsets(uint64_t new_interval);
+
     // Long rescans can take quite a while to process.  Batching block inserts into one database
     // transaction speeds this up considerably.  This is called automatically if a rescan is
     // larger than 5000 blocks.
