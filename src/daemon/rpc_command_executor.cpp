@@ -2295,7 +2295,7 @@ namespace {
         cryptonote::address_parse_info info;
         bool valid = get_account_address_from_str(info, nettype, addr);
         if (!valid)
-            return "Invalid OXEN address"sv;
+            return "Invalid XEQM address"sv;
         if (info.is_subaddress)
             return "Staking from subaddresses is not supported"sv;
         if (info.has_payment_id)
@@ -2499,11 +2499,11 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
                 bool is_operator = state.contributions.empty();
                 std::string prompt;
                 if (is_operator)
-                    prompt = "\n\nEnter the OXEN address of the the Service Node operator\n";
+                    prompt = "\n\nEnter the XEQM address of the the Service Node operator\n";
                 else
                     prompt = fmt::format(
                             "\n\nThis service node requires an additional stake of {}.\n\n"
-                            "To add a reserved contribution spot enter the contributor's OXEN "
+                            "To add a reserved contribution spot enter the contributor's XEQM "
                             "address now.\n"
                             "Leave this blank to leave the remaining stake open to public "
                             "contributors.\n",
@@ -2523,7 +2523,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
                                  state.contributions.end(),
                                  [a = address_str](auto& b) { return b.first == a; }))
                     tools::fail_msg_writer(
-                            "Invalid OXEN address: you cannot provide the same address twice\n");
+                            "Invalid XEQM address: you cannot provide the same address twice\n");
                 else {
                     state.contributions.emplace_back(std::move(address_str), 0);
                     next_step(register_step::ask_amount);
@@ -2545,7 +2545,7 @@ bool rpc_command_executor::prepare_registration(bool force_registration) {
                 auto [result, contribution_str] = input_line_value(
                         fmt::format(
                                 "\n\nThe {} must stake between {} and {}.\n\n"
-                                "How much OXEN does {} want to stake?",
+                                "How much XEQM does {} want to stake?",
                                 is_operator ? "operator" : "next contributor",
                                 highlight_money(min_contribution),
                                 highlight_money(amount_left),
@@ -2901,7 +2901,7 @@ bool rpc_command_executor::prepare_eth_registration(
 }
 
 bool rpc_command_executor::prune_blockchain() {
-    tools::fail_msg_writer("Blockchain pruning is not supported in Oxen yet");
+    tools::fail_msg_writer("Blockchain pruning is not supported in XEQM yet");
     return true;
 }
 

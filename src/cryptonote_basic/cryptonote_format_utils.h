@@ -295,7 +295,7 @@ bool check_inputs_overflow(const transaction& tx);
 std::vector<uint64_t> relative_output_offsets_to_absolute(const std::vector<uint64_t>& off);
 std::vector<uint64_t> absolute_output_offsets_to_relative(const std::vector<uint64_t>& off);
 constexpr std::string_view get_unit() {
-    return "OXEN"sv;
+    return "XEQM"sv;
 }
 
 enum class strip_zeros {
@@ -309,7 +309,7 @@ std::string print_money(
         strip_zeros strip_z = strip_zeros::no,
         size_t decimal_point = oxen::DISPLAY_DECIMAL_POINT);
 
-// Returns a formatted monetary value including the unit, e.g. "1.234567 OXEN"; strips
+// Returns a formatted monetary value including the unit, e.g. "1.234567 XEQM"; strips
 // insignificant trailing 0s by default (unlike the above) but can be overridden to not do that.
 std::string format_money(
         uint64_t amount,

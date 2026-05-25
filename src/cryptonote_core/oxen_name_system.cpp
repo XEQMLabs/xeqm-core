@@ -1290,7 +1290,7 @@ static bool validate_against_previous_mapping(
         if (check_condition(
                     data.empty(),
                     reason,
-                    "{}, {} unexpectedly failed to generate signature, please inform the Oxen "
+                    "{}, {} unexpectedly failed to generate signature, please inform the XEQM Labs "
                     "developers",
                     tx,
                     ons_extra_string(ons_db.network_type(), ons_extra)))
@@ -1568,7 +1568,7 @@ bool name_system_db::validate_ons_tx(
         if (check_condition(
                     burn != burn_required,
                     reason,
-                    "{}, {} burned {} OXEN={}, required={}",
+                    "{}, {} burned {} XEQM={}, required={}",
                     tx,
                     ons_extra_string(nettype, ons_extra),
                     burn > burn_required ? "too much" : "insufficient",

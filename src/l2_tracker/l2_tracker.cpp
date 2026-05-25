@@ -179,7 +179,7 @@ void L2Tracker::set_height(uint64_t l2_height, bool take_lock) {
         log::warning(
                 globallogcat,
                 fg(fmt::terminal_color::red) | fmt::emphasis::bold,
-                "Latest RPC provider reported height ({}) is too far behind the latest Oxen "
+                "Latest RPC provider reported height ({}) is too far behind the latest XEQM "
                 "chain reported height ({})",
                 state.latest_height,
                 latest_blockchain_l2_height);
@@ -601,7 +601,7 @@ void L2Tracker::update_logs_internal() {
 
                             log::error(
                                     logcat,
-                                    "Failed to convert L2 state change transaction to an Oxen "
+                                    "Failed to convert L2 state change transaction to an XEQM "
                                     "state change transaction: {}\n\n{}",
                                     e.what(),
                                     fmt::to_string(buffer));

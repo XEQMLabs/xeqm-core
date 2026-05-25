@@ -441,7 +441,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
                             logcat,
                             "Address given for public-ip is not public; allowing it because "
                             "dev-allow-local-ips was specified. This service node WILL NOT WORK ON "
-                            "THE PUBLIC OXEN NETWORK!");
+                            "THE PUBLIC XEQM NETWORK!");
                 } else {
                     log::error(
                             logcat,
@@ -2645,7 +2645,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from the storage server "
                         "recently. Make sure that it is running! It is required to run "
-                        "alongside the Oxen daemon");
+                        "alongside the XEQM daemon");
                 return;
             }
             if (netconf.HAVE_LOKINET &&
@@ -2656,7 +2656,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from lokinet recently. "
                         "Make sure that it is running! It is required to run alongside the "
-                        "Oxen daemon");
+                        "XEQM daemon");
                 return;
             }
             if (netconf.HAVE_SESSION_ROUTER && !check_external_ping(
@@ -2668,7 +2668,7 @@ void core::do_uptime_proof_call() {
                         fg(fmt::terminal_color::red) | fmt::emphasis::bold,
                         "Failed to submit uptime proof: have not heard from Session Router "
                         "recently. Make sure that it is running! It is required to run "
-                        "alongside the Oxen daemon");
+                        "alongside the XEQM daemon");
                 return;
             }
 

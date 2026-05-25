@@ -1323,7 +1323,7 @@ void core_rpc_server::invoke(MINING_STATUS& mining_status, rpc_context) {
     const auto major_version = m_core.blockchain.get_network_version();
 
     mining_status.response["pow_algorithm"] = major_version >= hf::hf12_checkpointing ? "RandomX "
-                                                                                        "(OXEN "
+                                                                                        "(XEQM "
                                                                                         "variant)"
                                             : major_version == hf::hf11_infinite_staking
                                                     ? "Cryptonight Turtle Light (Variant 2)"

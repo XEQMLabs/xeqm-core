@@ -215,7 +215,7 @@ namespace {
                                     missing_count++;
                                     oxen::log::warning(
                                             logcat,
-                                            "Service node {} exists in Oxen but not in the "
+                                            "Service node {} exists in XEQM but not in the "
                                             "contract",
                                             sn_info.pubkey);
                                 }

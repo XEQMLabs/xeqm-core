@@ -24,7 +24,7 @@ OXEN_ATOMIC_UNITS = 1e9
 # @click.option('--wallet-password')
 @click.pass_context
 def walletcli(click_ctx, **options):
-    """Command line interface for Oxen Wallet CLI."""
+    """Command line interface for XEQM Labs Wallet CLI."""
     if context.configured:
         # In repl mode run configuration once only
         return
@@ -40,7 +40,7 @@ def walletcli(click_ctx, **options):
     context.configure(options)
 
     if click_ctx.invoked_subcommand is None:
-        click.echo("Oxen wallet started, you will need to load a wallet to continue")
+        click.echo("XEQM wallet started, you will need to load a wallet to continue")
         click.echo("Please use load-from-file or load-from-seed")
         click.echo("Run 'help' for help information, or 'quit' to quit.")
         click_repl.repl(click_ctx)
@@ -170,7 +170,7 @@ def balance():
     get_balance_future = context.rpc_future("rpc.get_balance");
     get_balance_response = get_balance_future.get();
     balance = get_balance_response['balance']
-    click.echo("Balance: {:.{oxen_precision}f} Oxen".format(balance/OXEN_ATOMIC_UNITS, oxen_precision=context.options["rounding"]))
+    click.echo("Balance: {:.{oxen_precision}f} XEQM".format(balance/OXEN_ATOMIC_UNITS, oxen_precision=context.options["rounding"]))
 
 @walletcli.command()
 def unlocked_balance():
@@ -180,7 +180,7 @@ def unlocked_balance():
     get_balance_future = context.rpc_future("rpc.get_balance");
     get_balance_response = get_balance_future.get();
     unlocked_balance = get_balance_response['unlocked_balance']
-    click.echo("Unlocked Balance: {:.{oxen_precision}f} Oxen".format(unlocked_balance/OXEN_ATOMIC_UNITS, oxen_precision=context.options["rounding"]))
+    click.echo("Unlocked Balance: {:.{oxen_precision}f} XEQM".format(unlocked_balance/OXEN_ATOMIC_UNITS, oxen_precision=context.options["rounding"]))
 
 @walletcli.command()
 def height():

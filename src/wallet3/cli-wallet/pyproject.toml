@@ -7,7 +7,7 @@ name = 'oxen_wallet_cli'
 authors = [
     {name = "Sean Darcy", email = "sean@oxen.io"},
 ]
-description = "CLI wallet for Oxen"
+description = "CLI wallet for XEQM"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
