@@ -20,7 +20,7 @@ permissions:
 # up OXEN_RELEASE_SUFFIX from the environment when set, so we just point it
 # at empty for tagged builds and leave it as the default ("-dev") otherwise.
 env:
-  OXEN_RELEASE_SUFFIX: ${{ github.ref_type == 'tag' && '' || '-dev' }}
+  OXEN_RELEASE_SUFFIX: ${{ github.ref_type != 'tag' && '-dev' || '' }}
 
 jobs:
   linux-ubuntu-2404:
