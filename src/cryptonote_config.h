@@ -260,6 +260,7 @@ enum class hf : uint8_t {
     hf17,
     hf18,
     hf19_reward_batching,
+    hf20_governance_payouts_fix,  // Governance reward paid via batching at HF19+
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
     hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
