@@ -3,12 +3,12 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - dev
+      - main
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: xeqmlabs/equilibria-node
+  IMAGE_NAME: xeqmlabs/xeqm-node
 
 jobs:
   build-and-push:
@@ -38,7 +38,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v1.0.2
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v1.0.3
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
