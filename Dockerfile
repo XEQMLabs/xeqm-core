@@ -43,6 +43,7 @@ RUN mkdir -p build && cd build && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         -DARCH=x86-64 \
+        -DOXEN_RELEASE_SUFFIX="" \
         .. && \
     make -j"$(nproc)" daemon simplewallet wallet_rpc_server
 
