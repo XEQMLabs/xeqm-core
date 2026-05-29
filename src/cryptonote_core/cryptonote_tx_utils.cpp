@@ -473,8 +473,7 @@ std::pair<bool, uint64_t> construct_miner_tx(
                     std::make_pair(false, block_rewards),
                     "Governance reward can NOT be 0 before hardfork 10, hard_fork_version: {}",
                     static_cast<int>(hard_fork_version));
-        }
-        else if (hard_fork_version < hf::hf19_reward_batching) {
+        } else if (hard_fork_version < hf::hf19_reward_batching) {
             cryptonote::address_parse_info governance_wallet_address;
             cryptonote::get_account_address_from_str(
                     governance_wallet_address,
@@ -484,8 +483,7 @@ std::pair<bool, uint64_t> construct_miner_tx(
                     {reward_type::governance,
                      governance_wallet_address.address,
                      reward_parts.governance_paid});
-        }
-        else if (hard_fork_version >= hf::hf20_governance_payouts_fix) {
+        } else if (hard_fork_version >= hf::hf20_governance_payouts_fix) {
             cryptonote::address_parse_info governance_wallet_address;
             cryptonote::get_account_address_from_str(
                     governance_wallet_address,
@@ -494,7 +492,6 @@ std::pair<bool, uint64_t> construct_miner_tx(
             batched_rewards.emplace_back(
                     governance_wallet_address.address,
                     reward_money::from_coin(reward_parts.governance_paid));
-        }
         }
     }
 
