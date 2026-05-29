@@ -189,6 +189,9 @@ struct network_config final {
     const uint64_t L2_NODE_LIST_PURGE_MIN_OXEN_AGE;
 
     constexpr std::string_view governance_wallet_address(hf hard_fork_version) const {
+        // HF20+ routes governance to the real wallet [0]; hf<HF20 keeps the historical (empty [1]) result so old blocks stay reproducible.
+        if (hard_fork_version >= hf::hf20_governance_payouts_fix)
+            return GOVERNANCE_WALLET_ADDRESS[0];
         const auto wallet_switch =
                 (NETWORK_TYPE == network_type::MAINNET || NETWORK_TYPE == network_type::FAKECHAIN)
                         ? hf::hf11_infinite_staking

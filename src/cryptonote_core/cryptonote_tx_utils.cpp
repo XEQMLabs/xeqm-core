@@ -483,16 +483,8 @@ std::pair<bool, uint64_t> construct_miner_tx(
                     {reward_type::governance,
                      governance_wallet_address.address,
                      reward_parts.governance_paid});
-        } else if (hard_fork_version >= hf::hf20_governance_payouts_fix) {
-            cryptonote::address_parse_info governance_wallet_address;
-            cryptonote::get_account_address_from_str(
-                    governance_wallet_address,
-                    nettype,
-                    cryptonote::get_config(nettype).governance_wallet_address(hard_fork_version));
-            batched_rewards.emplace_back(
-                    governance_wallet_address.address,
-                    reward_money::from_coin(reward_parts.governance_paid));
         }
+        // HF19+: governance is accrued and paid through the SN batching DB (db_sqlite), not emitted here.
     }
 
     uint64_t total_sn_rewards = 0;
