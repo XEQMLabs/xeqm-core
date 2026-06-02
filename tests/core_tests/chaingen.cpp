@@ -973,7 +973,7 @@ bool oxen_chain_generator::block_begin(oxen_blockchain_entry &entry, oxen_create
   cryptonote::block &blk   = entry.block;
   blk.major_version        = params.hf_version;
   blk.minor_version        = static_cast<uint8_t>(params.hf_version);
-  if (blk.major_version == hf::hf19_reward_batching || blk.major_version >= hf::hf21_eth)
+  if (blk.major_version == hf::hf19_reward_batching || blk.major_version == hf::hf20_governance_payouts_fix || blk.major_version >= hf::hf21_eth)
       blk._height          = height;
   blk.timestamp            = params.timestamp;
   blk.prev_id              = get_block_hash(params.prev.block);
@@ -1540,7 +1540,7 @@ bool test_generator::construct_block_manually(
   blk.tx_hashes     = actual_params & bf_tx_hashes ? tx_hashes : std::vector<crypto::hash>();
 
   size_t height = prev_block.get_height() + 1;
-  if (blk.major_version == hf::hf19_reward_batching || blk.major_version >= hf::hf21_eth)
+  if (blk.major_version == hf::hf19_reward_batching || blk.major_version == hf::hf20_governance_payouts_fix || blk.major_version >= hf::hf21_eth)
       blk._height = height;
   uint64_t already_generated_coins = get_already_generated_coins(prev_block);
   std::vector<uint64_t> block_weights;

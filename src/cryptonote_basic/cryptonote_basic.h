@@ -572,7 +572,7 @@ void serialize_object(Archive& ar, block& b) {
 
     if (b.major_version >= hf::hf16_pulse)
         field(ar, "signatures", b.signatures);
-    if (b.major_version == hf::hf19_reward_batching) {
+    if (b.major_version == hf::hf19_reward_batching || b.major_version == hf::hf20_governance_payouts_fix) {
         // Oxen 10.x included three fields here, height, service_node_winner_key (which was actually
         // the pulse block producer, not necessarily the winner), and reward.  None are actually
         // needed (because we can always compute the values they must have), and only reward is used
