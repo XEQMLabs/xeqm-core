@@ -310,8 +310,13 @@ bool tx_memory_pool::add_tx(
         const tx_pool_options& opts,
         hf hf_version,
         uint64_t* blink_rollback_height) {
-    // this should already be called with that lock, but let's make it explicit for clarity
-    std::unique_lock lock{m_transactions_lock};
+    // 2026-06-14 (XEQMLabs/xeqm-core#33): acquire both the tx_pool and blockchain locks
+    // atomically. The body below calls into m_blockchain (check_fee, check_tx_outputs)
+    // which acquires the blockchain mutex; without this atomic acquisition the tx_pool→
+    // blockchain ordering here deadlocked with the (tx_pool, blockchain) order used by
+    // find_transactions et al. (every other tx_pool method uses tools::unique_locks).
+    // ABBA observed on seed-2 + seed-5 under inbound P2P NOTIFY_NEW_TRANSACTIONS traffic.
+    auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
     if (blob.size() == 0) {
         oxen::log::error(logcat, "Could not add to txpool, blob is empty of tx: {}", id);
         throw oxen::traced<std::runtime_error>("Could not add to txpool, blob empty");
