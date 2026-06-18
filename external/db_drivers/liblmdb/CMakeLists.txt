@@ -55,3 +55,18 @@ if (BUILD_GUI_DEPS)
         ARCHIVE DESTINATION ${lib_folder}
         LIBRARY DESTINATION ${lib_folder})
 endif()
+
+# LMDB hot-backup / inspection tools, built from this exact vendored source so
+# their on-disk format always matches xeqm-d's database. A stock distro mdb_copy
+# (e.g. lmdb-utils) fails against this fork with MDB_VERSION_MISMATCH; linking the
+# `lmdb` target above means these tools inherit the same compile definitions
+# (MDB_VL32 on 32-bit builds, etc.) automatically on every platform. Shipped as
+# xeqm-mdb_copy / xeqm-mdb_stat so operators can take consistent live snapshots:
+#   xeqm-mdb_copy -c <data-dir>/lmdb <dest>
+foreach(_lmdb_tool mdb_copy mdb_stat)
+  add_executable(${_lmdb_tool} ${_lmdb_tool}.c)
+  target_link_libraries(${_lmdb_tool} PRIVATE lmdb Threads::Threads)
+  set_target_properties(${_lmdb_tool} PROPERTIES
+    OUTPUT_NAME "xeqm-${_lmdb_tool}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endforeach()
