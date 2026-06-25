@@ -69,7 +69,9 @@ inline constexpr network_config config{
         .PULSE_MAX_START_ADJUSTMENT = 15s,
         .PULSE_MIN_SERVICE_NODES = 12,
         .BATCHING_INTERVAL = 20,
-        .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,  // 1 OXEN (in atomic units)
+        .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,        // 0.1 XEQM (COIN = 1e9)
+        .BATCHING_INTERVAL_V2 = 10080,                  // 7 days at 60s blocks
+        .MIN_BATCH_PAYMENT_AMOUNT_V2 = 1'000'000'000,   // 1 XEQM (10x prior)
         .LIMIT_BATCH_OUTPUTS = 15,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
         .DEREGISTRATION_LOCK_DURATION = 7 * 24h,

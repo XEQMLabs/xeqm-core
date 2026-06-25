@@ -261,6 +261,10 @@ enum class hf : uint8_t {
     hf18,
     hf19_reward_batching,
     hf20_governance_payouts_fix,  // Governance reward paid via batching at HF19+
+    // SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM. On-chain major_version 21.
+    // NOTE: distinct from hf21_eth below (the unused-on-mainnet ETH fork, numeric 23). Anything named
+    // hf21_eth / ETH_BLS / pre_hf21_final_payout refers to the ETH fork, NOT this batching change.
+    hf21_weekly_batching,
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
     hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
@@ -279,7 +283,7 @@ constexpr auto hf_prev(hf x) {
 
 // This is here to make sure the numeric value of the top hf enum value is correct (i.e.
 // hf21_sent == 21 numerically); bump this when adding a new hf.
-static_assert(static_cast<uint8_t>(hf_max) == 23);
+static_assert(static_cast<uint8_t>(hf_max) == 24);
 
 // Constants for which hardfork activates various features:
 namespace feature {
