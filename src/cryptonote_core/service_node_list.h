@@ -1400,6 +1400,7 @@ class service_node_list {
 
     void reset(bool delete_db_entry = false);
     bool load(uint64_t current_height);
+    void rebuild_key_image_cache();  // call whenever m_state changes, under m_sn_mutex
 
     mutable std::recursive_mutex m_sn_mutex;
     const service_node_keys* m_service_node_keys;
@@ -1419,6 +1420,12 @@ class service_node_list {
 
     // Stores SNL data
     state_t m_state;
+
+    // O(1) key-image lookup index rebuilt on every m_state change (under m_sn_mutex).
+    // Eliminates the O(n*contributors*contributions) triple scan in is_key_image_locked().
+    std::unordered_map<crypto::key_image,
+            std::pair<uint64_t, service_node_info::contribution_t>>
+            m_key_image_cache;
 
     // nodes that can't yet be liquidated; the .second value is the expiry block height at which we
     // remove them (and thus allow liquidation):
