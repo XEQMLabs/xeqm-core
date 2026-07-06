@@ -48,7 +48,7 @@ static constexpr std::array mainnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
         hard_fork{hf::hf20_governance_payouts_fix, 0, 37000, 1781064000},
         // HF21: SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM.
-        hard_fork{hf::hf21_weekly_batching, 0, 87900, 1783353252},  // ~2026-07-06 15:54 UTC
+        hard_fork{hf::hf21_weekly_batching, 0, 99000, 1784045460},  // ~2026-07-14 16:11 UTC (9:11am PT)
 };
 
 static constexpr std::array testnet_hard_forks = {
