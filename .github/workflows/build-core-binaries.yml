@@ -101,7 +101,7 @@ jobs:
           set -e
           ALLOW='^[[:space:]]*(linux-vdso\.so|libc\.so|libstdc\+\+\.so|libgcc_s\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|/lib(64)?/ld-linux)'
           fail=0
-          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+          for bin in xeqm-d xeqm-wallet xeqm-rpc xeqm-mdb_copy xeqm-mdb_stat; do
             echo "=== $bin ==="
             ldd "build/bin/$bin"
             unexpected=$(ldd "build/bin/$bin" | awk '{print $1}' | grep -Ev "$ALLOW" || true)
@@ -133,6 +133,8 @@ jobs:
           cp build/bin/xeqm-d "$PKG/"
           cp build/bin/xeqm-wallet "$PKG/"
           cp build/bin/xeqm-rpc "$PKG/"
+          cp build/bin/xeqm-mdb_copy "$PKG/"
+          cp build/bin/xeqm-mdb_stat "$PKG/"
           chmod +x "$PKG"/*
 
           {
@@ -141,7 +143,9 @@ jobs:
             printf "Included:\\n"
             printf "  xeqm-d\\n"
             printf "  xeqm-wallet\\n"
-            printf "  xeqm-rpc\\n\\n"
+            printf "  xeqm-rpc\\n"
+            printf "  xeqm-mdb_copy\\n"
+            printf "  xeqm-mdb_stat\\n\\n"
             printf "Version output:\\n\\n"
             ./build/bin/xeqm-d --version
             ./build/bin/xeqm-wallet --version
@@ -285,6 +289,8 @@ jobs:
           cp "$BIN_DIR/xeqm-d.exe" "$PKG/"
           cp "$BIN_DIR/xeqm-wallet.exe" "$PKG/"
           cp "$BIN_DIR/xeqm-rpc.exe" "$PKG/"
+          cp "$BIN_DIR/xeqm-mdb_copy.exe" "$PKG/"
+          cp "$BIN_DIR/xeqm-mdb_stat.exe" "$PKG/"
 
           find "$BIN_DIR" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$PKG/" \; || true
 
@@ -294,7 +300,9 @@ jobs:
             printf "Included:\n"
             printf "  xeqm-d.exe\n"
             printf "  xeqm-wallet.exe\n"
-            printf "  xeqm-rpc.exe\n\n"
+            printf "  xeqm-rpc.exe\n"
+            printf "  xeqm-mdb_copy.exe\n"
+            printf "  xeqm-mdb_stat.exe\n\n"
             printf "Version output:\n\n"
             wine "$BIN_DIR/xeqm-d.exe" --version || true
             wine "$BIN_DIR/xeqm-wallet.exe" --version || true
@@ -442,7 +450,7 @@ jobs:
         shell: bash
         run: |
           cmake --build build-macos-arm64 \
-            --target daemon simplewallet wallet_rpc_server \
+            --target daemon simplewallet wallet_rpc_server mdb_copy mdb_stat \
             --parallel "$(sysctl -n hw.ncpu)"
 
       - name: Bundle Homebrew dylibs into binaries
@@ -500,8 +508,10 @@ jobs:
           cp build-macos-arm64/bin/xeqm-d "$PKG/"
           cp build-macos-arm64/bin/xeqm-wallet "$PKG/"
           cp build-macos-arm64/bin/xeqm-rpc "$PKG/"
+          cp build-macos-arm64/bin/xeqm-mdb_copy "$PKG/"
+          cp build-macos-arm64/bin/xeqm-mdb_stat "$PKG/"
           cp -R build-macos-arm64/bin/libs "$PKG/"
-          chmod +x "$PKG"/xeqm-d "$PKG"/xeqm-wallet "$PKG"/xeqm-rpc
+          chmod +x "$PKG"/xeqm-d "$PKG"/xeqm-wallet "$PKG"/xeqm-rpc "$PKG"/xeqm-mdb_copy "$PKG"/xeqm-mdb_stat
 
           {
             printf "XEQM Core macOS ARM64 binaries\n\n"
@@ -510,6 +520,8 @@ jobs:
             printf "  xeqm-d\n"
             printf "  xeqm-wallet\n"
             printf "  xeqm-rpc\n"
+            printf "  xeqm-mdb_copy\n"
+            printf "  xeqm-mdb_stat\n"
             printf "  libs/  (bundled runtime dylibs — keep next to the binaries)\n\n"
             printf "Version output:\n\n"
             ./build-macos-arm64/bin/xeqm-d --version
