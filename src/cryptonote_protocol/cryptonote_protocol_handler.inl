@@ -2593,7 +2593,7 @@ You are now synchronized with the network.
       log::info(logcat, "Target height decreasing from {} to {}", previous_target, target);
       m_core.set_target_blockchain_height(target);
       if (target == 0 && context.m_state > cryptonote_connection_context::state_before_handshake && !m_stopping)
-        log::warning(logcat, fg(fmt::terminal_color::yellow), "oxend is now disconnected from the network");
+        log::warning(logcat, fg(fmt::terminal_color::yellow), "xeqm-d is now disconnected from the network");
     }
 
     m_block_queue.flush_spans(context.m_connection_id, false);
