@@ -630,26 +630,37 @@ bool service_node_list::is_funded_service_node(const crypto::public_key& pubkey)
     return is_service_node(pubkey, [](const auto& sni) { return sni.is_fully_funded(); });
 }
 
+// Rebuild the O(1) key-image lookup index from current m_state.
+// Must be called whenever m_state.service_nodes_infos changes.  Callers that hold
+// m_sn_mutex satisfy the thread-safety requirement; load/reset paths are single-
+// threaded at startup so the mutex is not strictly needed there.
+void service_node_list::rebuild_key_image_cache() {
+    m_key_image_cache.clear();
+    for (const auto& [pubkey, info_ptr] : m_state.service_nodes_infos) {
+        const service_node_info& info = *info_ptr;
+        for (const auto& contributor : info.contributors) {
+            for (const auto& contribution : contributor.locked_contributions) {
+                m_key_image_cache.emplace(
+                        contribution.key_image,
+                        std::make_pair(info.requested_unlock_height, contribution));
+            }
+        }
+    }
+}
+
 bool service_node_list::is_key_image_locked(
         crypto::key_image const& check_image,
         uint64_t* unlock_height,
         service_node_info::contribution_t* the_locked_contribution) const {
-    for (const auto& pubkey_info : m_state.service_nodes_infos) {
-        const service_node_info& info = *pubkey_info.second;
-        for (const service_node_info::contributor_t& contributor : info.contributors) {
-            for (const service_node_info::contribution_t& contribution :
-                 contributor.locked_contributions) {
-                if (check_image == contribution.key_image) {
-                    if (the_locked_contribution)
-                        *the_locked_contribution = contribution;
-                    if (unlock_height)
-                        *unlock_height = info.requested_unlock_height;
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
+    std::lock_guard lock{m_sn_mutex};
+    auto it = m_key_image_cache.find(check_image);
+    if (it == m_key_image_cache.end())
+        return false;
+    if (unlock_height)
+        *unlock_height = it->second.first;
+    if (the_locked_contribution)
+        *the_locked_contribution = it->second.second;
+    return true;
 }
 
 std::optional<registration_details> reg_tx_extract_fields(const cryptonote::transaction& tx) {
@@ -3228,6 +3239,7 @@ void service_node_list::block_add(
         }
 
         result = process_block(block, txs);
+        rebuild_key_image_cache();
         if (!rescan || !rescan->skip_verify)
             verify_block(block, false /*alt_block*/, checkpoint);
         if (block.has_pulse()) {
@@ -4768,6 +4780,7 @@ void service_node_list::blockchain_detached(uint64_t height) {
             auto it = m_transient->state_archive.find(archive_height);
             m_state = std::move(*it);
             cleanup_zombies_from_state();
+            rebuild_key_image_cache();
             m_transient->state_archive.erase(std::next(it), m_transient->state_archive.end());
             detach_label = " (from archive history)";
         } break;
@@ -4777,6 +4790,7 @@ void service_node_list::blockchain_detached(uint64_t height) {
             auto it = m_transient->state_history.find(target_height);
             m_state = std::move(*it);
             cleanup_zombies_from_state();
+            rebuild_key_image_cache();
             m_transient->state_history.erase(std::next(it), m_transient->state_history.end());
             detach_label = " (from recent history)";
         } break;
@@ -6800,6 +6814,7 @@ bool service_node_list::load(const uint64_t current_height) {
     // else the x25519 map is part of state_t
 
     cleanup_zombies_from_state();
+    rebuild_key_image_cache();
 
     log::info(
             globallogcat,
@@ -6855,6 +6870,7 @@ void service_node_list::reset(bool delete_db_entry) {
     ZoneScoped;
     m_transient = std::make_unique<service_node_list_transient_storage>();
     m_state = state_t{this};
+    rebuild_key_image_cache();
 
     if (blockchain.has_db() && delete_db_entry) {
         cryptonote::db_wtxn_guard txn_guard{blockchain.db()};
