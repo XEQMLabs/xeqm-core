@@ -66,6 +66,8 @@ endif()
 foreach(_lmdb_tool mdb_copy mdb_stat)
   add_executable(${_lmdb_tool} ${_lmdb_tool}.c)
   target_link_libraries(${_lmdb_tool} PRIVATE lmdb Threads::Threads)
+  # getopt/optarg are hidden by -std=c11 (CMAKE_C_EXTENSIONS OFF) on glibc
+  target_compile_definitions(${_lmdb_tool} PRIVATE _GNU_SOURCE)
   set_target_properties(${_lmdb_tool} PROPERTIES
     OUTPUT_NAME "xeqm-${_lmdb_tool}"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
