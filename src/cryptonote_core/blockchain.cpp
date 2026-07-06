@@ -1194,7 +1194,10 @@ bool Blockchain::reset_and_set_genesis_block(const block& b) {
 std::pair<uint64_t, crypto::hash> Blockchain::get_tail_id() const {
     log::trace(logcat, "Blockchain::{}", __func__);
     std::pair<uint64_t, crypto::hash> result;
-    std::unique_lock lock{*this};
+    // LMDB provides MVCC read-consistency; the blockchain mutex is not needed
+    // for a top-block read. Holding it here blocks OMQ worker threads (pulse,
+    // p2p handshake) behind long write-path LMDB locks, starving quorumnet.
+    // See: XEQMLabs/xeqm-core#35
     result.second = m_db->top_block_hash(&result.first);
     return result;
 }
