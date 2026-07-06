@@ -1004,18 +1004,27 @@ std::vector<batch_sn_payment> BlockchainSQLite::get_sn_payments(uint64_t block_h
 
     std::vector<std::pair<account_public_address, reward_money>> accrued_pairs;
     {
+        // Compute the payout slot on the fly so the result depends only on (address, height,
+        // interval) and never on stored DB state -- identical for the producer, the validator, and
+        // SQL add_block, and with no boundary mutation there is nothing to (mis)restore on a reorg
+        // across the fork.
+        const auto interval = conf.batching_interval(hf_version);
+        const auto min_payment = conf.min_batch_payment_amount(hf_version);
+        const auto target = static_cast<int>(block_height % interval);
         auto accrued_amounts = prepared_results<blob_guts<account_public_address>, int64_t>(
                 "SELECT address, amount FROM batched_payments_accrued"
-                " WHERE payout_offset = ? AND amount >= ? ORDER BY address ASC",
-                static_cast<int>(block_height % conf.BATCHING_INTERVAL),
-                static_cast<int64_t>(conf.MIN_BATCH_PAYMENT_AMOUNT * BATCH_REWARD_FACTOR));
+                " WHERE amount >= ? ORDER BY address ASC",
+                static_cast<int64_t>(min_payment * BATCH_REWARD_FACTOR));
 
         for (auto [address, amount] : accrued_amounts)
-            accrued_pairs.emplace_back(
-                    address.value, reward_money::from_db_amount(amount, hf_version));
+            if (static_cast<int>(address.value.modulus(interval)) == target)
+                accrued_pairs.emplace_back(
+                        address.value, reward_money::from_db_amount(amount, hf_version));
     }
 
-    // The block before HF21, addresses which have not registered an ETH address for the
+    // NOTE: "HF21" / hf21_eth here is the (unused-on-mainnet) ETH transition fork, NOT
+    // hf21_weekly_batching. This final-payout logic is unrelated to the 7-day batching change.
+    // The block before the ETH fork, addresses which have not registered an ETH address for the
     // SESH transition will have their balances paid out, regardless of balance.
     bool pre_hf21_final_payout = false;
     auto hf21_begins = hard_fork_begins(nettype, hf::hf21_eth);

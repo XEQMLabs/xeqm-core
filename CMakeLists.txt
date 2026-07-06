@@ -51,7 +51,7 @@ message(STATUS "CMake version ${CMAKE_VERSION}")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "macOS deployment target (Apple clang only)")
 
 project(equilibria
-    VERSION 1.0.6
+    VERSION 1.0.7
     LANGUAGES CXX C)
 set(OXEN_RELEASE_CODENAME "Ragnarok")
 # Version update notes:

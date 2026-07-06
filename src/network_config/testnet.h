@@ -62,6 +62,8 @@ inline constexpr network_config config{
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
+        .BATCHING_INTERVAL_V2 = mainnet::config.BATCHING_INTERVAL_V2,
+        .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT_V2,
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
         .DEREGISTRATION_LOCK_DURATION = 48h,

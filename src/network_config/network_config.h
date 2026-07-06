@@ -114,8 +114,18 @@ struct network_config final {
     // offset from this to still receive every BATCHING_INTERVAL, but different wallets receive at
     // different offsets within the block cycle.
     const uint64_t BATCHING_INTERVAL;
-    // The minimum payout (in atomic OXEN) required for the batch rewards to issue a payment
+    // The minimum payout (in atomic XEQM) required for the batch rewards to issue a payment
     const uint64_t MIN_BATCH_PAYMENT_AMOUNT;
+    // HF21: weekly cadence + higher dust floor. Active at hf >= hf21_weekly_batching; below that the
+    // V1 values above remain in effect (keeps historical blocks reproducible across sync/reorg).
+    const uint64_t BATCHING_INTERVAL_V2;
+    const uint64_t MIN_BATCH_PAYMENT_AMOUNT_V2;
+    constexpr uint64_t batching_interval(hf v) const {
+        return v >= hf::hf21_weekly_batching ? BATCHING_INTERVAL_V2 : BATCHING_INTERVAL;
+    }
+    constexpr uint64_t min_batch_payment_amount(hf v) const {
+        return v >= hf::hf21_weekly_batching ? MIN_BATCH_PAYMENT_AMOUNT_V2 : MIN_BATCH_PAYMENT_AMOUNT;
+    }
     // Maximum number of batch payments in a single block:
     const uint64_t LIMIT_BATCH_OUTPUTS;
     // Number of blocks that a SN must be active before they start earning a share of the block
