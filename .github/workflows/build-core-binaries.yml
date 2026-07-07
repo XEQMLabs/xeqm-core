@@ -71,9 +71,11 @@ jobs:
           rm -rf build
           mkdir -p build
           cd build
+          # ARCH=x86-64 overrides the -march=native default so binaries run on any x86-64 CPU
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_STATIC_DEPS=ON \
+            -DARCH=x86-64 \
             -DBoost_NO_BOOST_CMAKE=ON
 
       - name: Build
@@ -422,8 +424,10 @@ jobs:
           ZEROMQ_ROOT="$(brew --prefix zeromq)"
           HIDAPI_ROOT="$(brew --prefix hidapi)"
 
+          # ARCH=default avoids -march=native so binaries run on all Apple Silicon generations
           cmake .. -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DARCH=default \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \

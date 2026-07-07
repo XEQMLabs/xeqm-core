@@ -75,7 +75,7 @@ For a service node, add a `--service-node` flag, set `--service-node-public-ip`,
 
 ## Pre-built binaries
 
-Each release tag (`core-v*`) publishes static binaries under [GitHub Releases](https://github.com/XEQMLabs/equilibria-core/releases) for:
+Each release tag (`core-v*`) publishes static binaries under [GitHub Releases](https://github.com/XEQMLabs/xeqm-core/releases) for:
 
 - Ubuntu 24.04 x86_64
 - Windows x86_64
@@ -111,12 +111,12 @@ This builds Boost, OpenSSL, libsodium, libzmq, libcurl, etc. from source and lin
 
 ```bash
 sudo apt update && sudo apt install -y \
-  git build-essential cmake pkg-config ccache \
+  git build-essential cmake pkg-config ccache gperf \
   libreadline-dev libhidapi-dev libusb-1.0-0-dev \
   libpgm-dev libsystemd-dev
 
-git clone --recursive https://github.com/XEQMLabs/equilibria-core.git
-cd equilibria-core
+git clone --recursive https://github.com/XEQMLabs/xeqm-core.git
+cd xeqm-core
 
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_DEPS=ON -DBoost_NO_BOOST_CMAKE=ON
@@ -134,8 +134,8 @@ sudo apt update && sudo apt install -y \
   libboost-all-dev libgmp-dev libzstd-dev libreadline-dev libhidapi-dev \
   libusb-1.0-0-dev libpgm-dev libsystemd-dev libunbound-dev
 
-git clone --recursive https://github.com/XEQMLabs/equilibria-core.git
-cd equilibria-core
+git clone --recursive https://github.com/XEQMLabs/xeqm-core.git
+cd xeqm-core
 
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DBoost_NO_BOOST_CMAKE=ON
