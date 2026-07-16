@@ -7,14 +7,6 @@ on:
         description: "Version label, for example 23.0.0-dev"
         required: true
         type: string
-      build_type:
-        description: "CMake build type (Release or RelWithDebInfo for debug symbols)"
-        required: false
-        type: choice
-        options:
-          - Release
-          - RelWithDebInfo
-        default: Release
 
   push:
     tags:
@@ -81,7 +73,7 @@ jobs:
           cd build
           # ARCH=x86-64 overrides the -march=native default so binaries run on any x86-64 CPU
           cmake .. \
-            -DCMAKE_BUILD_TYPE=${{ inputs.build_type || 'Release' }} \
+            -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_STATIC_DEPS=ON \
             -DARCH=x86-64 \
             -DBoost_NO_BOOST_CMAKE=ON
