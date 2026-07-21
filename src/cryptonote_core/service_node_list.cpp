@@ -37,6 +37,7 @@
 #include <zstd.h>
 
 #include <algorithm>
+#include <unordered_set>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/seed_seq.hpp>
 #include <chrono>
@@ -1333,9 +1334,10 @@ bool service_node_list::state_t::process_state_change_tx(
                                                              // in key_image_blacklist_entry
                         key_image_blacklist_entry& entry = key_image_blacklist.back();
                         entry.key_image = contribution.key_image;
-                        entry.unlock_height =
-                                block_height +
-                                netconf.BLOCKS_IN(netconf.DEREGISTRATION_LOCK_DURATION);
+                        auto lock_dur = (hf_version >= hf::hf22_sn_policy)
+                                              ? std::chrono::hours(14 * 24)
+                                              : netconf.DEREGISTRATION_LOCK_DURATION;
+                        entry.unlock_height = block_height + netconf.BLOCKS_IN(lock_dur);
                         entry.amount = contribution.amount;
                     }
                 }
@@ -3555,6 +3557,17 @@ service_nodes::quorum generate_pulse_quorum(
     std::sort(pulse_candidates.begin(), pulse_candidates.end(), pulse_candidates_sorter);
     TracyCZoneEnd(sort_pulse_candidates);
 
+    // HF22: deduplicate pulse candidates by operator address (1 seat per operator per quorum).
+    if (hf_version >= hf::hf22_sn_policy) {
+        std::unordered_set<cryptonote::account_public_address> seen_ops;
+        auto end = std::remove_if(
+                pulse_candidates.begin(), pulse_candidates.end(),
+                [&seen_ops](const pubkey_and_sninfo& p) {
+                    return !seen_ops.insert(p.second->operator_address).second;
+                });
+        pulse_candidates.erase(end, pulse_candidates.end());
+    }
+
     service_nodes::quorum result = generate_pulse_quorum_with_candidates(
             nettype,
             block_leader,
@@ -3676,8 +3689,19 @@ static void generate_other_quorums(
         quorum->workers.reserve(num_workers);
 
         size_t i = 0;
-        for (; i < num_validators; i++) {
-            quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+        if (hf_version >= hf::hf22_sn_policy && num_validators > 0) {
+            // HF22: deduplicate validators by operator address (1 seat per operator per quorum).
+            std::unordered_set<cryptonote::account_public_address> seen_ops;
+            for (size_t k = 0; k < num_validators; k++) {
+                const auto& entry = active_snode_list[pub_keys_indexes[k]];
+                if (seen_ops.insert(entry.info->operator_address).second)
+                    quorum->validators.push_back(entry.pubkey);
+            }
+            i = num_validators;  // workers still start at original offset
+        } else {
+            for (; i < num_validators; i++) {
+                quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+            }
         }
 
         for (; i < num_validators + num_workers; i++) {

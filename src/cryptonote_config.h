@@ -268,6 +268,7 @@ enum class hf : uint8_t {
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
     hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
+    hf22_sn_policy,       // 14-day forced deregistration lock, quorum dedup per operator, Lokinet
 
     _next,
     none = 0
@@ -283,7 +284,7 @@ constexpr auto hf_prev(hf x) {
 
 // This is here to make sure the numeric value of the top hf enum value is correct (i.e.
 // hf21_sent == 21 numerically); bump this when adding a new hf.
-static_assert(static_cast<uint8_t>(hf_max) == 24);
+static_assert(static_cast<uint8_t>(hf_max) == 25);
 
 // Constants for which hardfork activates various features:
 namespace feature {
