@@ -54,22 +54,23 @@ static constexpr std::array mainnet_hard_forks = {
 };
 
 static constexpr std::array testnet_hard_forks = {
+        // Private testnet: 5s blocks; HFs 0-15 at genesis heights; HF16+ compressed for rapid testing.
         hard_fork{hf::hf7, 0, 0, 1653632397},
         hard_fork{hf::hf11_infinite_staking, 0, 2, 1653632397},
         hard_fork{hf::hf12_checkpointing, 0, 3, 1653632397},
         hard_fork{hf::hf13_enforce_checkpoints, 0, 4, 1653632397},
         hard_fork{hf::hf14_blink, 0, 5, 1653632397},
         hard_fork{hf::hf15_ons, 0, 6, 1653632397},
-        hard_fork{hf::hf16_pulse, 0, 750, 1653632397},
-        hard_fork{hf::hf17, 0, 751, 1653632397},
-        hard_fork{hf::hf18, 0, 752, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 0, 753, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
-        hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
-        hard_fork{hf::hf20_governance_payouts_fix, 0, 760, 1781064000},
-        hard_fork{hf::hf21_weekly_batching, 0, 1000, 1781064001},
-        hard_fork{hf::hf22_sn_policy, 0, 2000, 1800000001},  // TODO: finalize block + timestamp
+        hard_fork{hf::hf16_pulse, 0, 240, 1653632397},   // ~20min @ 5s/block; register 12 SNs before this
+        hard_fork{hf::hf17, 0, 241, 1653632397},
+        hard_fork{hf::hf18, 0, 242, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 0, 243, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 1, 244, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 2, 245, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 3, 246, 1653632397},
+        hard_fork{hf::hf20_governance_payouts_fix, 0, 247, 1653632397},
+        hard_fork{hf::hf21_weekly_batching, 0, 248, 1653632397},
+        hard_fork{hf::hf22_sn_policy, 0, 249, 1653632397},  // ~20.75min; quorum dedup + 14d lock active
 };
 
 static constexpr std::array devnet_hard_forks = {
