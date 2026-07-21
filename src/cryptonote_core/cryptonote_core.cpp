@@ -461,13 +461,13 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
         if (command_line::get_arg(vm, arg_l2_provider).empty() &&
             command_line::get_arg(vm, arg_l2_oxend).empty()) {
-            // XEQ: L2 connectivity is only required once the chain reaches the ETH_BLS era (HF21+).
-            // Before that, allow service nodes to run without any L2 provider configuration.
-            //
-            // NOTE: We use "latest known" hardfork schedule here (rather than current height)
-            // because this check runs during startup config validation.
-            auto latest_hf_known = get_latest_hard_fork(m_nettype);
-            if (latest_hf_known.version >= hf::hf21_eth) {
+            // XEQ: L2 connectivity is only required when the ETH transition HF (hf20_eth_transition)
+            // is actually present in this network's hard fork schedule. XEQM mainnet/testnet uses
+            // native XEQM staking and never activates hf20_eth_transition, so no L2 is needed.
+            // We intentionally avoid a raw enum-value comparison because hf22_sn_policy has a
+            // higher numeric value than hf21_eth even though it is unrelated to ETH staking.
+            auto [eth_hf_start, _unused] = get_hard_fork_heights(m_nettype, hf::hf20_eth_transition);
+            if (eth_hf_start.has_value()) {
                 log::error(
                         logcat,
                         "At least one ethereum L2 provider (or L2 oxend proxy) must be specified "
