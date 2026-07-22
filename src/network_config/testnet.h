@@ -4,9 +4,8 @@
 
 namespace cryptonote::config::testnet {
 
-inline constexpr std::array seeds = {
-        "84.247.143.210:18080"sv,
-};
+// Private testnet: no hardcoded seeds; SNs connect via --seed-node flag
+inline constexpr std::array<std::string_view, 0> seeds = {};
 
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::TESTNET,
@@ -20,31 +19,32 @@ inline constexpr network_config config{
         .RPC_DEFAULT_PORT = 38157,
         .QNET_DEFAULT_PORT = 38159,
         .NETWORK_ID = {{
-                0x54,
-                0x45,
-                0x53,
-                0x54,  // "TEST"
-                0x45,
-                0x51,
-                0x55,
-                0x49,  // "EQUI"
-                0x4c,
-                0x49,
-                0x42,
-                0x52,  // "LIBR"
-                0x49,
-                0x41,
-                0x4e,
-                0x54,  // "IANT"
+                0x58,  // X
+                0x45,  // E
+                0x51,  // Q
+                0x4d,  // M (private testnet: XEQM-PVTTEST)
+                0x50,  // P
+                0x56,  // V
+                0x54,  // T
+                0x54,  // T
+                0x45,  // E
+                0x53,  // S
+                0x54,  // T
+                0x30,  // 0
+                0x30,  // 0
+                0x31,  // 1
+                0x00,
+                0x00,
         }},
         .P2P_SEED_NODES = seeds,
         .GENESIS_TX =
                 "021e01ff00018080c9db97f4fb270278fe7eed60deb57ea863d65690c40abc5ff09505704f36ba94285a02b9e15f6942014c8f90cc270b3e4e154003ecf48f21b5762e57c52cc70df9c65502e4921cd97872000000000000000000000000000000000000000000000000000000000000000000"sv,
         .GENESIS_NONCE = 12345,
-        .GOVERNANCE_REWARD_INTERVAL = 2000min,
+        .GOVERNANCE_REWARD_INTERVAL = 10min,
         .GOVERNANCE_WALLET_ADDRESS =
                 {
-                        "XEQT8QP2BWFevNjsrvAqipQdCF7C6WdXs5BPWfa2vZRH4h1ZfuRr9wtds5gAwCGqoAd5psteQiTwdH17Fe3Vb7G25BkRFEo2MC",  // HF10
+                        "XEQTCMd5W5jX582CXuuQwzc6KY5mEHvXRNnLxoNQ6nA7Wq1ioBudM64Z835ygvWcrxTHyuuN5suvPiapbjbVAFeZ3NXFhKG2fx",  // HF20+ (index 0)
+                        "XEQTCMd5W5jX582CXuuQwzc6KY5mEHvXRNnLxoNQ6nA7Wq1ioBudM64Z835ygvWcrxTHyuuN5suvPiapbjbVAFeZ3NXFhKG2fx",  // HF10-19 (index 1)
                 },
         .UPTIME_PROOF_TOLERANCE = mainnet::config.UPTIME_PROOF_TOLERANCE,
         .UPTIME_PROOF_STARTUP_DELAY = 5s,
@@ -62,8 +62,8 @@ inline constexpr network_config config{
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
-        .BATCHING_INTERVAL_V2 = mainnet::config.BATCHING_INTERVAL_V2,
-        .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT_V2,
+        .BATCHING_INTERVAL_V2 = 5,
+        .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
         .DEREGISTRATION_LOCK_DURATION = 48h,

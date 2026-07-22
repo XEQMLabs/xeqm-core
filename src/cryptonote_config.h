@@ -262,13 +262,13 @@ enum class hf : uint8_t {
     hf19_reward_batching,
     hf20_governance_payouts_fix,  // Governance reward paid via batching at HF19+
     // SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM. On-chain major_version 21.
-    // NOTE: distinct from hf21_eth below (the unused-on-mainnet ETH fork, numeric 23). Anything named
+    // NOTE: distinct from hf21_eth below (the unused-on-mainnet ETH fork, numeric 24). Anything named
     // hf21_eth / ETH_BLS / pre_hf21_final_payout refers to the ETH fork, NOT this batching change.
     hf21_weekly_batching,
+    hf22_sn_policy,       // 14-day forced deregistration lock, quorum dedup per operator, Lokinet
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
     hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
-    hf22_sn_policy,       // 14-day forced deregistration lock, quorum dedup per operator, Lokinet
 
     _next,
     none = 0
