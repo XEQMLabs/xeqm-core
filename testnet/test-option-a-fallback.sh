@@ -104,7 +104,7 @@ done
 echo ""
 if [ "$FOUND_FALLBACK" -eq 1 ]; then
     echo "PASS: Option A fallback blocks confirmed — governance signature (voter_index=65535) present."
-    echo "PASS: Option C confirmed — fallback fired after ~150s (5 × 30s rounds)."
+    echo "PASS: Option C confirmed — fallback fired after ~${FALLBACK_WAIT}s (PULSE_MINER_FALLBACK_ROUNDS × 30s)."
 else
     echo "FAIL: No Option A governance-signed fallback blocks found in h=${PRE_HEIGHT}..${HEIGHT2}."
     echo "      Check: is --fallback-miner-key set on seed? HF22 active?"
