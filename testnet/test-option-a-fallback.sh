@@ -14,7 +14,7 @@ jrpc() { curl -s "$1" -d "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"$2\",\"
 
 echo "=== Option A Fallback Test ==="
 echo "This test kills all $NUM_SNODES service nodes to simulate catastrophic quorum failure,"
-echo "waits for the Pulse round timeout (150s = 5 rounds × 30s, Option C),"
+echo "waits for the Pulse round timeout (PULSE_MINER_FALLBACK_ROUNDS × 30s, Option C),"
 echo "then verifies the seed produces governance-signed fallback blocks."
 echo ""
 
