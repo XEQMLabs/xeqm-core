@@ -156,6 +156,10 @@ static const command_line::arg_flag arg_omq_quorumnet_public{
         "commands as if passed to --lmq-curve-public. "
         "Note that even without this option the quorumnet port can be used for RPC commands by "
         "--lmq-admin and --lmq-user pubkeys."};
+static const command_line::arg_descriptor<std::string> arg_fallback_miner_key = {
+        "fallback-miner-key",
+        "Hex-encoded spend secret key authorizing this daemon to produce fallback miner blocks "
+        "(Option A: required when GOVERNANCE_WALLET_ADDRESS is set on a pulse-era network)"};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_provider = {
         "l2-provider",
         "Specify a provider HTTP or HTTPS URL to which this service node will query the Ethereum "
@@ -368,6 +372,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_oxend);
     command_line::add_arg(desc, arg_storage_server_port);
     command_line::add_arg(desc, arg_quorumnet_port);
+    command_line::add_arg(desc, arg_fallback_miner_key);
 
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);
@@ -487,6 +492,18 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
     if (!mocknet_read_cli_for_mocknet_arg(vm, m_service_node))
         return false;
+
+    {
+        auto key_hex = command_line::get_arg(vm, arg_fallback_miner_key);
+        if (!key_hex.empty()) {
+            if (!epee::string_tools::hex_to_pod(key_hex, m_fallback_miner_key)) {
+                log::error(logcat, "--fallback-miner-key: invalid hex secret key");
+                return false;
+            }
+            log::info(logcat, "Fallback miner key loaded (Option A enforcement active)");
+        }
+    }
+
     return true;
 }
 //-----------------------------------------------------------------------------------------------
@@ -2400,6 +2417,18 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             log::error(logcat, "Block found, but failed to prepare to add");
             return false;
         }
+        // Option A: sign fallback miner blocks with the governance spend key so that
+        // verify_block_components can authenticate the block came from an authorized miner.
+        if (b.major_version >= static_cast<uint8_t>(hf::hf16_pulse) &&
+                m_fallback_miner_key != crypto::null<crypto::secret_key>) {
+            crypto::public_key fallback_pub;
+            crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
+            crypto::hash blk_hash = get_block_hash(b);
+            crypto::signature sig;
+            crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
+            b.signatures = {sig};
+        }
+
         // add_new_block will verify block and set bvc.m_verification_failed accordingly
         add_new_block(b, bvc, nullptr /*checkpoint*/);
         cleanup_handle_incoming_blocks(true);

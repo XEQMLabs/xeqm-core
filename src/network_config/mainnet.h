@@ -67,6 +67,7 @@ inline constexpr network_config config{
         .PULSE_STAGE_TIMEOUT = 10s,
         .PULSE_ROUND_TIMEOUT = 30s,
         .PULSE_MAX_START_ADJUSTMENT = 15s,
+        .PULSE_MINER_FALLBACK_ROUNDS = 50,  // 50 * 30s = 25 min before miner fallback
         .PULSE_MIN_SERVICE_NODES = 12,
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,        // 0.1 XEQM (COIN = 1e9)
