@@ -2426,7 +2426,7 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             crypto::hash blk_hash = get_block_hash(b);
             crypto::signature sig;
             crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
-            b.signatures = {service_nodes::quorum_signature{0, sig}};
+            b.signatures = {service_nodes::quorum_signature{0xFFFF, sig}};
         }
 
         // add_new_block will verify block and set bvc.m_verification_failed accordingly

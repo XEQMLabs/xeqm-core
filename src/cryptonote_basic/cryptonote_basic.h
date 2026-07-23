@@ -29,6 +29,7 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
+#include <algorithm>
 
 #include <fmt/format.h>
 
@@ -515,7 +516,12 @@ struct block : public block_header {
 
     // True if this block has pulse components, false if pre-pulse or if pulse fields are empty.
     bool has_pulse() const {
-        return major_version >= feature::PULSE && (has_pulse_header() || signatures.size());
+        // voter_index=0xFFFF is reserved for fallback-miner governance auth; don't count
+        // these as Pulse quorum signatures or the block is treated as a Pulse block.
+        bool has_quorum_sigs = std::any_of(
+                signatures.begin(), signatures.end(),
+                [](const service_nodes::quorum_signature& s) { return s.voter_index != 0xFFFF; });
+        return major_version >= feature::PULSE && (has_pulse_header() || has_quorum_sigs);
     }
 };
 
