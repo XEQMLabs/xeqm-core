@@ -2406,6 +2406,21 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             miner.resume();
         };
 
+        // Option A: sign fallback miner blocks with the governance spend key BEFORE
+        // serializing for broadcast. get_block_complete_entry serializes b into blocks[0],
+        // and blocks[0] is what gets relayed to peers via NOTIFY_NEW_FLUFFY_BLOCK. Signing
+        // after serialization leaves blocks[0] unsigned, causing peers to reject the relay.
+        // Note: get_block_hash excludes signatures so the hash is stable before/after signing.
+        if (b.major_version >= hf::hf16_pulse &&
+                m_fallback_miner_key != crypto::null<crypto::secret_key>) {
+            crypto::public_key fallback_pub;
+            crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
+            crypto::hash blk_hash = get_block_hash(b);
+            crypto::signature sig;
+            crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
+            b.signatures = {service_nodes::quorum_signature{0xFFFF, sig}};
+        }
+
         try {
             blocks.push_back(get_block_complete_entry(b, mempool));
         } catch (const std::exception& e) {
@@ -2416,17 +2431,6 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
         if (!prepare_handle_incoming_blocks(blocks, pblocks)) {
             log::error(logcat, "Block found, but failed to prepare to add");
             return false;
-        }
-        // Option A: sign fallback miner blocks with the governance spend key so that
-        // verify_block_components can authenticate the block came from an authorized miner.
-        if (b.major_version >= hf::hf16_pulse &&
-                m_fallback_miner_key != crypto::null<crypto::secret_key>) {
-            crypto::public_key fallback_pub;
-            crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
-            crypto::hash blk_hash = get_block_hash(b);
-            crypto::signature sig;
-            crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
-            b.signatures = {service_nodes::quorum_signature{0xFFFF, sig}};
         }
 
         // add_new_block will verify block and set bvc.m_verification_failed accordingly

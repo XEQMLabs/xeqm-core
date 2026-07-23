@@ -11,8 +11,11 @@ XEQM_RPC   = "/home/svshearer/xeqm-core/build/bin/xeqm-rpc"
 NUM_SNODES  = 20
 STAKING_AMT = 100_000_000_000   # 100 XEQM per SN
 COIN        = 1_000_000_000
-# Wait for (NUM_SNODES * 100) + 100 XEQM margin before registering
-WAIT_FOR_XEQM = (NUM_SNODES + 1) * (STAKING_AMT // COIN)
+# Wait for enough XEQM unlocked: 20×100 + 2000 buffer.
+# Each governance batch output is ~103.25 XEQM. With ring size=11 decoys,
+# we need enough outputs for decoy selection across all 20 registrations.
+# 4000 XEQM → ~38 unlocked governance outputs → ample decoy pool.
+WAIT_FOR_XEQM = 4000
 
 # Fixed governance wallet keys (testnet-only, NOT mainnet keys).
 # These match GOVERNANCE_WALLET_ADDRESS[0] in src/network_config/testnet.h.
@@ -157,7 +160,7 @@ except Exception:
 # Option A: seed signs fallback miner blocks with the governance spend key.
 FALLBACK_MINER_KEY = GOV_SPEND_KEY
 
-print(f"Starting seed (mining to governance wallet) + {NUM_SNODES} SNs...")
+print("Starting seed (mining to governance wallet)...")
 start_daemon("seed", [
     "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=49000",
     "--rpc-admin=127.0.0.1:49001",
@@ -165,8 +168,12 @@ start_daemon("seed", [
     "--fallback-miner-key", FALLBACK_MINER_KEY,
 ])
 
+print("Waiting for seed RPC...")
+wait_for_rpc(SEED_RPC, "seed")
+
 # Port layout: snode N → p2p=49000+N*100, rpc=p2p+1, qnet=p2p+2
 # snode01: 49100/49101/49102 ... snode20: 51000/51001/51002
+print(f"Starting {NUM_SNODES} snode daemons...")
 for i in range(1, NUM_SNODES + 1):
     p2p  = 49000 + i * 100
     rpc_ = p2p + 1
@@ -180,9 +187,27 @@ for i in range(1, NUM_SNODES + 1):
         "--seed-node=127.0.0.1:49000",
         "--add-priority-node=127.0.0.1:49000",
     ])
+print(f"All {NUM_SNODES} snode daemons launched.")
 
-print(f"All {NUM_SNODES + 1} daemons launched. Waiting for seed RPC...")
-wait_for_rpc(SEED_RPC, "seed")
+# The seed needs at least one peer before is_synchronized() returns true.
+# Once a snode connects, mining may auto-start; if not, start it via RPC.
+print("Waiting for mining to become active (snodes provide the required peer)...")
+for _ in range(30):
+    time.sleep(3)
+    try:
+        ms = rpc(SEED_RPC, "mining_status")
+        if ms.get("active"):
+            print(f"  Mining active @ {ms.get('speed',0)} h/s")
+            break
+        # Kick it manually — needed when --start-mining auto-start is blocked by BUSY
+        rpc(SEED_RPC, "start_mining", {
+            "miner_address": WALLET_ADDR,
+            "threads_count": 2,
+        })
+    except Exception:
+        pass
+else:
+    print("  WARNING: mining may not be active — continuing anyway")
 
 # ── 4. Wait for HF19 and enough balance to stake all 20 SNs ──────────────────
 print(f"Waiting for HF19 (block 9) and {WAIT_FOR_XEQM} XEQM unlocked (up to 90 min)...")
