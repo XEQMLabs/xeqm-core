@@ -3566,6 +3566,18 @@ service_nodes::quorum generate_pulse_quorum(
                     return !seen_ops.insert(p.second->operator_address).second;
                 });
         pulse_candidates.erase(end, pulse_candidates.end());
+        // After dedup, fall back to empty quorum if unique-operator candidates are insufficient.
+        // Prevents iterator overflow in generate_pulse_quorum_with_candidates when a single
+        // operator controls all registered SNs (e.g. single-operator private testnets).
+        const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
+        if (pulse_candidates.size() < MIN_NODE_COUNT) {
+            log::debug(
+                    logcat,
+                    "HF22 operator dedup: {} unique-operator candidates, need {}: skipping Pulse quorum",
+                    pulse_candidates.size(),
+                    MIN_NODE_COUNT);
+            return {};
+        }
     }
 
     service_nodes::quorum result = generate_pulse_quorum_with_candidates(
