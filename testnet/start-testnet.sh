@@ -1,6 +1,6 @@
 #!/bin/bash
-# Private XEQM testnet launcher — 1 seed + 12 SNs on Fernando
-# 5s blocks; HF22 fires at block 350 (~20.75 min from genesis)
+# Private XEQM testnet launcher — 1 seed + 20 SNs on Fernando
+# 5s blocks; HF22 fires at block 350 (~29 min from genesis)
 # Usage: ./start-testnet.sh [start|stop|status|logs]
 set -euo pipefail
 
@@ -12,7 +12,7 @@ FERNANDO_IP=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null || h
 
 mkdir -p "$BASE_DIR" "$LOG_DIR" "$PID_DIR"
 
-# Ports: seed=49000, snode1=49100..49102, snode2=49200..49202, ..., snode12=50200..50202
+# Ports: seed=49000, snode1=49100..49102, ..., snode12=50200..50202, ..., snode20=51000..51002
 SEED_P2P=49000; SEED_RPC=49001
 
 start_daemon() {
@@ -60,7 +60,7 @@ status_all() {
 
 start_all() {
     echo "Starting private testnet on $FERNANDO_IP"
-    echo "  5s blocks | HF16/pulse at block 240 | HF22 at block 350"
+    echo "  5s blocks | HF22 at block 600 | 20 SNs | registration after ~2100 XEQM unlocked"
     echo ""
 
     # Seed node (non-SN) — authorized fallback miner.
@@ -80,8 +80,8 @@ start_all() {
         --rpc-admin=127.0.0.1:$SEED_RPC \
         "${mining_args[@]}"
 
-    # 12 service nodes
-    for i in $(seq 1 12); do
+    # 20 service nodes
+    for i in $(seq 1 20); do
         local p2p=$((49000 + i * 100))
         local rpc=$((p2p + 1))
         local qnet=$((p2p + 2))
@@ -98,7 +98,7 @@ start_all() {
 
     echo ""
     echo "Seed RPC: http://127.0.0.1:$SEED_RPC"
-    echo "SN RPCs:  http://127.0.0.1:49101 .. http://127.0.0.1:50201"
+    echo "SN RPCs:  http://127.0.0.1:49101 .. http://127.0.0.1:51001"
     echo "Logs:     $LOG_DIR/"
     echo ""
     echo "Next step: run ./setup-wallet.sh to create testnet wallet and register SNs."
