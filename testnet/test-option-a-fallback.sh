@@ -6,8 +6,8 @@ set -euo pipefail
 
 SEED_RPC="http://127.0.0.1:49001/json_rpc"
 PID_DIR=/home/svshearer/xeqm-testnet/pids
-# Option C: testnet fallback rounds = 5 × 30s = 150s before miner block is accepted
-FALLBACK_WAIT=170   # 150s + 20s margin
+# Option C: testnet fallback rounds = 1 × 30s = 30s before miner block is accepted
+FALLBACK_WAIT=50    # 30s + 20s margin
 NUM_SNODES=20
 
 jrpc() { curl -s "$1" -d "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"$2\",\"params\":{$3}}"; }
@@ -57,7 +57,7 @@ echo ""
 PRE_HEIGHT=$HEIGHT
 
 # Wait for Option C timeout + margin, then check for new blocks
-echo "Waiting ${FALLBACK_WAIT}s for fallback block (Option C: 5×30s rounds)..."
+echo "Waiting ${FALLBACK_WAIT}s for fallback block (Option C: 1×30s round on testnet)..."
 sleep "$FALLBACK_WAIT"
 
 INFO2=$(jrpc "$SEED_RPC" "get_info" "")

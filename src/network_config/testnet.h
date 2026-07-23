@@ -59,7 +59,7 @@ inline constexpr network_config config{
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
         .PULSE_MAX_START_ADJUSTMENT = mainnet::config.PULSE_MAX_START_ADJUSTMENT,
-        .PULSE_MINER_FALLBACK_ROUNDS = 5,  // 5 * 30s = 150s for testnet
+        .PULSE_MINER_FALLBACK_ROUNDS = 1,  // 1 * 30s = 30s for testnet (fast iteration)
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,

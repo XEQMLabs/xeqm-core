@@ -5,7 +5,7 @@ set -euo pipefail
 
 SEED_RPC="http://127.0.0.1:49001/json_rpc"
 NUM_SNODES=20
-HF22_BLOCK=600
+HF22_BLOCK=450
 
 jrpc() { curl -s "$1" -d "{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"method\":\"$2\",\"params\":{$3}}"; }
 
