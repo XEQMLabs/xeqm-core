@@ -106,11 +106,17 @@ try:
 except Exception:
     pass
 
+# Option A: the seed mines fallback blocks and signs them with the governance spend key.
+# Get this key once from the testnet-gov wallet:
+#   curl -s http://127.0.0.1:18183/json_rpc -d '{"jsonrpc":"2.0","id":"0","method":"query_key","params":{"key_type":"spend_key"}}'
+FALLBACK_MINER_KEY = "0c999a88be252215b48735272e5cf3dd86d54f850bb0bc8bfe9aea0de7549405"
+
 print("Starting seed (mining) + 12 SNs...")
 start_daemon("seed", [
     "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=49000",
     "--rpc-admin=127.0.0.1:49001",
     "--start-mining", WALLET_ADDR, "--mining-threads", "2",
+    "--fallback-miner-key", FALLBACK_MINER_KEY,
 ])
 
 for i in range(1, 13):

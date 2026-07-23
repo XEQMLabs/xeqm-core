@@ -63,10 +63,16 @@ start_all() {
     echo "  5s blocks | HF16/pulse at block 240 | HF22 at block 350"
     echo ""
 
-    # Seed node (non-SN) — mining address provided via MINING_ADDR env var
+    # Seed node (non-SN) — authorized fallback miner.
+    # MINING_ADDR: wallet address to mine to (must be the governance wallet for Option A).
+    # FALLBACK_MINER_KEY: governance wallet spend secret key (hex); required for Option A so
+    #   fallback blocks carry a valid governance signature and are accepted by all peers.
     local mining_args=()
     if [ -n "${MINING_ADDR:-}" ]; then
         mining_args=(--start-mining "$MINING_ADDR" --mining-threads 2)
+        if [ -n "${FALLBACK_MINER_KEY:-}" ]; then
+            mining_args+=(--fallback-miner-key "$FALLBACK_MINER_KEY")
+        fi
     fi
     start_daemon "seed" \
         --p2p-bind-ip=0.0.0.0 \
