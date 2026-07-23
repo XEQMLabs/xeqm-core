@@ -2815,7 +2815,7 @@ static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t he
     return true;
 }
 
-static // Option A: returns the public spend key of the governance wallet for this nettype.
+// Option A: returns the public spend key of the governance wallet for this nettype.
 // Fallback miner blocks (pulse era, no quorum) must carry a signature from the
 // corresponding private key.  Returns null_key when the governance address is unset
 // or unparseable (disables the check — open fallback mining).
@@ -2916,7 +2916,7 @@ bool verify_block_components(
                             height);
                 return false;
             }
-            if (!crypto::check_signature(hash, fallback_pubkey, block.signatures[0])) {
+            if (!crypto::check_signature(hash, fallback_pubkey, block.signatures[0].signature)) {
                 if (log_errors)
                     log::warning(
                             globallogcat,

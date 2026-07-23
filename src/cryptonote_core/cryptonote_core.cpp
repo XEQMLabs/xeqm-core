@@ -496,7 +496,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     {
         auto key_hex = command_line::get_arg(vm, arg_fallback_miner_key);
         if (!key_hex.empty()) {
-            if (!epee::string_tools::hex_to_pod(key_hex, m_fallback_miner_key)) {
+            if (!tools::try_load_from_hex_guts(key_hex, m_fallback_miner_key)) {
                 log::error(logcat, "--fallback-miner-key: invalid hex secret key");
                 return false;
             }
@@ -2419,14 +2419,14 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
         }
         // Option A: sign fallback miner blocks with the governance spend key so that
         // verify_block_components can authenticate the block came from an authorized miner.
-        if (b.major_version >= static_cast<uint8_t>(hf::hf16_pulse) &&
+        if (b.major_version >= hf::hf16_pulse &&
                 m_fallback_miner_key != crypto::null<crypto::secret_key>) {
             crypto::public_key fallback_pub;
             crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
             crypto::hash blk_hash = get_block_hash(b);
             crypto::signature sig;
             crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
-            b.signatures = {sig};
+            b.signatures = {service_nodes::quorum_signature{0, sig}};
         }
 
         // add_new_block will verify block and set bvc.m_verification_failed accordingly
