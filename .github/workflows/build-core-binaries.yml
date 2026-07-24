@@ -545,10 +545,139 @@ jobs:
             XEQM-core-*-macos-arm64-*.tar.gz.sha256
 
 
+  linux-arm64:
+    name: Build Ubuntu 24.04 ARM64 binaries
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git build-essential cmake pkg-config ccache curl zip unzip tar \
+            gperf \
+            libssl-dev libzmq3-dev libsodium-dev libunbound-dev \
+            libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
+            libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
+            libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Patch SQLiteCpp headers for GCC
+        shell: bash
+        run: |
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
+            sed -i '/#include <memory>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
+            sed -i '/#include <SQLiteCpp\/Statement.h>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+          grep -n '#include <cstdint>' \
+            external/SQLiteCpp/include/SQLiteCpp/Statement.h \
+            external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+      - name: Configure (statically-linked dependencies)
+        run: |
+          rm -rf build
+          mkdir -p build
+          cd build
+          # ARCH=default avoids -march=native so the binary runs on all ARMv8+ cores
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_STATIC_DEPS=ON \
+            -DARCH=default \
+            -DBoost_NO_BOOST_CMAKE=ON
+
+      - name: Build
+        run: |
+          cd build
+          make -j"$(nproc)"
+
+      - name: Verify binaries
+        run: |
+          build/bin/xeqm-d --version
+          build/bin/xeqm-wallet --version
+          build/bin/xeqm-rpc --version
+          file build/bin/xeqm-d
+          file build/bin/xeqm-wallet
+          file build/bin/xeqm-rpc
+
+      - name: Confirm binaries link only against the portable runtime set
+        run: |
+          set -e
+          ALLOW='^[[:space:]]*(linux-vdso\.so|libc\.so|libstdc\+\+\.so|libgcc_s\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|/lib/aarch64-linux-gnu/ld-linux-aarch64)'
+          fail=0
+          for bin in xeqm-d xeqm-wallet xeqm-rpc xeqm-mdb_copy xeqm-mdb_stat; do
+            echo "=== $bin ==="
+            ldd "build/bin/$bin"
+            unexpected=$(ldd "build/bin/$bin" | awk '{print $1}' | grep -Ev "$ALLOW" || true)
+            if [ -n "$unexpected" ]; then
+              echo "FAIL: $bin has non-portable runtime dependencies:"
+              echo "$unexpected"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "One or more binaries are not portably linked. Aborting release."
+            exit 1
+          fi
+          echo "All binaries are portably linked."
+
+      - name: Package ARM64 Linux binaries
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME#core-v}"
+          fi
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT="$(git rev-parse --short HEAD)"
+          PKG="XEQM-core-${VERSION}-linux-arm64-${SHORT}"
+
+          mkdir -p "$PKG"
+          cp build/bin/xeqm-d "$PKG/"
+          cp build/bin/xeqm-wallet "$PKG/"
+          cp build/bin/xeqm-rpc "$PKG/"
+          cp build/bin/xeqm-mdb_copy "$PKG/"
+          cp build/bin/xeqm-mdb_stat "$PKG/"
+          chmod +x "$PKG"/*
+
+          {
+            printf "XEQM Core Linux ARM64 (aarch64) binaries\n\n"
+            printf "Source commit: %s\n\n" "$COMMIT"
+            printf "Included:\n"
+            printf "  xeqm-d\n"
+            printf "  xeqm-wallet\n"
+            printf "  xeqm-rpc\n"
+            printf "  xeqm-mdb_copy\n"
+            printf "  xeqm-mdb_stat\n\n"
+            printf "Version output:\n\n"
+            ./build/bin/xeqm-d --version
+            ./build/bin/xeqm-wallet --version
+            ./build/bin/xeqm-rpc --version
+          } > "$PKG/README.txt"
+
+          tar -czf "${PKG}.tar.gz" "$PKG"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+
+      - name: Upload ARM64 Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XEQM-core-linux-arm64
+          path: |
+            XEQM-core-*-linux-arm64-*.tar.gz
+            XEQM-core-*-linux-arm64-*.tar.gz.sha256
+
+
   publish:
     name: Publish core release
     needs:
       - linux-ubuntu-2404
+      - linux-arm64
       - windows-x64
       - macos-arm64
     runs-on: ubuntu-24.04
@@ -585,6 +714,7 @@ jobs:
 
             Includes:
             - Ubuntu 24.04 x86_64 tar.gz
+            - Ubuntu 24.04 ARM64 tar.gz
             - Windows x86_64 zip
             - macOS ARM64 tar.gz
 
