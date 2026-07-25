@@ -71,7 +71,7 @@ static constexpr std::array testnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 3, 12, 1653632397},
         hard_fork{hf::hf20_governance_payouts_fix, 0, 13, 1653632397},
         hard_fork{hf::hf21_weekly_batching, 0, 14, 1653632397},
-        hard_fork{hf::hf22_sn_policy, 0, 450, 1653632397},  // test target: dedup + 14d lock
+        hard_fork{hf::hf22_sn_policy, 0, 250, 1653632397},  // HF22 Pulse dedup: fires after 40-SN setup, before stall/recovery test
 };
 
 static constexpr std::array devnet_hard_forks = {

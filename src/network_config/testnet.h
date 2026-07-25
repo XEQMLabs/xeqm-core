@@ -51,7 +51,7 @@ inline constexpr network_config config{
         .UPTIME_PROOF_CHECK_INTERVAL = 5s,
         // Testnet uptime proofs are 6x faster than mainnet (devnet config also uses these)
         .UPTIME_PROOF_FREQUENCY = 30s,
-        .UPTIME_PROOF_VALIDITY = 90s,
+        .UPTIME_PROOF_VALIDITY = 120s,
         .HAVE_STORAGE_SERVER = false,
         .HAVE_SESSION_ROUTER = false,
         .HAVE_LOKINET = false,
@@ -59,7 +59,7 @@ inline constexpr network_config config{
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
         .PULSE_MAX_START_ADJUSTMENT = mainnet::config.PULSE_MAX_START_ADJUSTMENT,
-        .PULSE_MINER_FALLBACK_ROUNDS = 1,  // 1 * 30s = 30s for testnet (fast iteration)
+        .PULSE_MINER_FALLBACK_ROUNDS = 2,  // 2 * 30s = 60s, gives R1 a window after R0 fails
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
@@ -67,8 +67,8 @@ inline constexpr network_config config{
         .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
-        .DEREGISTRATION_LOCK_DURATION = 48h,
-        .UNLOCK_DURATION = 24h,
+        .DEREGISTRATION_LOCK_DURATION = 30s,
+        .UNLOCK_DURATION = 30s,
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD =
                 mainnet::config.HARDFORK_DEREGISTRATION_GRACE_PERIOD,
         .HISTORY_ARCHIVE_INTERVAL = mainnet::config.HISTORY_ARCHIVE_INTERVAL,
