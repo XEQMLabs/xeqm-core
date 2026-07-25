@@ -3550,6 +3550,24 @@ static service_nodes::quorum generate_pulse_quorum_with_candidates(
         return result;
     }
 
+    // Guard: pulse_candidates may be smaller than active_snode_list_size after HF22 operator
+    // dedup and block-leader removal (update_from_block calls us directly with the pre-computed
+    // deduplicated list). Without this check the validator-selection loop walks past the end of
+    // the vector and calls uniform_distribution_portable(rng, 0) -> SIGFPE.
+    {
+        size_t needed = static_cast<size_t>(PULSE_QUORUM_NUM_VALIDATORS);
+        if (pulse_round > 0)
+            needed += 1;  // round>0: one candidate consumed as block producer before the loop
+        if (pulse_candidates.size() < needed) {
+            log::debug(
+                    logcat,
+                    "Insufficient pulse candidates ({}) for quorum (need {}); skipping Pulse",
+                    pulse_candidates.size(),
+                    needed);
+            return result;
+        }
+    }
+
     crypto::public_key block_producer;
     if (pulse_round == 0) {
         block_producer = block_leader;
@@ -4102,6 +4120,19 @@ block_add_result service_node_list::state_t::update_from_block(
                         break;
                     }
                 }
+            }
+
+            // HF22: deduplicate by operator address, matching generate_pulse_quorum()
+            if (hf_version >= hf::hf22_sn_policy) {
+                std::unordered_set<cryptonote::account_public_address> seen_ops;
+                auto end = std::remove_if(
+                        pre_block_precomputed.pulse_candidates.begin(),
+                        pre_block_precomputed.pulse_candidates.end(),
+                        [&seen_ops](const pubkey_and_sninfo& p) {
+                            return !seen_ops.insert(p.second->operator_address).second;
+                        });
+                pre_block_precomputed.pulse_candidates.erase(
+                        end, pre_block_precomputed.pulse_candidates.end());
             }
         }
 
