@@ -26,6 +26,7 @@ jobs:
   linux-ubuntu-2404:
     name: Build Ubuntu 24.04 x64 binaries
     runs-on: ubuntu-24.04
+    if: github.event_name != 'workflow_dispatch'
 
     steps:
       - name: Checkout core repo
@@ -295,6 +296,7 @@ jobs:
   windows-x64:
     name: Build Windows x64 binaries
     runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch'
 
     defaults:
       run:
@@ -453,6 +455,7 @@ jobs:
   macos-arm64:
     name: Build macOS ARM64 binaries
     runs-on: macos-latest
+    if: github.event_name != 'workflow_dispatch'
 
     steps:
       - name: Checkout core repo
