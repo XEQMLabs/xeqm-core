@@ -694,7 +694,43 @@ jobs:
           TAG="core-v${{ inputs.version }}"
           echo "Files to upload:"
           find release-assets -type f | sort
-          gh release upload "$TAG" $(find release-assets -type f | tr '\n' ' ') --clobber
+
+          RELEASE_ID=$(curl -sf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/XEQMLabs/xeqm-core/releases/tags/${TAG}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          echo "Release ID: $RELEASE_ID"
+
+          # Remove any existing aarch64 assets to avoid 422 conflict on re-run
+          curl -sf \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/XEQMLabs/xeqm-core/releases/${RELEASE_ID}/assets" \
+            | python3 -c "
+import json, sys
+for a in json.load(sys.stdin):
+    if 'aarch64' in a['name']:
+        print(a['id'])
+" | while read asset_id; do
+              echo "Removing existing asset $asset_id..."
+              curl -sf -X DELETE \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/XEQMLabs/xeqm-core/releases/assets/$asset_id"
+            done
+
+          # Upload each file
+          find release-assets -type f | sort | while read f; do
+            filename=$(basename "$f")
+            echo "Uploading $filename..."
+            curl -sf -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/XEQMLabs/xeqm-core/releases/${RELEASE_ID}/assets?name=${filename}" \
+              --data-binary "@${f}" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'  OK: {d[\"name\"]} ({d[\"size\"]} bytes)')"
+          done
         env:
           GH_TOKEN: ${{ github.token }}
 
