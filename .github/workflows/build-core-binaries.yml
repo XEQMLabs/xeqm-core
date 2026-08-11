@@ -689,7 +689,9 @@ jobs:
       - name: Upload to existing release
         run: |
           TAG="core-v${{ inputs.version }}"
-          gh release upload "$TAG" release-assets/*.tar.gz release-assets/*.sha256 --clobber
+          echo "Files to upload:"
+          find release-assets -type f | sort
+          gh release upload "$TAG" $(find release-assets -type f | tr '\n' ' ') --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
