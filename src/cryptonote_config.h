@@ -305,6 +305,15 @@ namespace feature {
     constexpr auto ETH_TRANSITION = hf::hf20_eth_transition;
     constexpr auto ETH_BLS = hf::hf21_eth;
     constexpr auto SN_PK_IS_ED25519 = hf::hf21_eth;
+
+    // Sentinels: inserting a new hf entry before hf20_eth_transition or hf21_eth
+    // silently shifts every >= comparison against these aliases (~40 sites for ETH_BLS).
+    // Root cause of HF20 mainnet stall (issues #30 / #32). If intentionally renumbering,
+    // audit every ETH_TRANSITION/ETH_BLS callsite first, then update these values.
+    static_assert(static_cast<uint8_t>(hf::hf20_eth_transition) == 22,
+            "hf20_eth_transition shifted -- audit feature::ETH_TRANSITION callsites (issue #32)");
+    static_assert(static_cast<uint8_t>(hf::hf21_eth) == 23,
+            "hf21_eth shifted -- audit feature::ETH_BLS / SN_PK_IS_ED25519 callsites (issue #32)");
 }  // namespace feature
 
 enum class network_type : uint8_t {
