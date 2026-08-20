@@ -675,6 +675,229 @@ jobs:
             XEQM-core-*-macos-arm64-*.tar.gz.sha256
 
 
+  macos-x86_64:
+    name: Build macOS Intel x86_64 binaries
+    runs-on: macos-13
+    if: github.event_name != 'workflow_dispatch'
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install \
+            cmake ninja pkg-config ccache \
+            zeromq openssl@3 libsodium hidapi \
+            sqlite3 curl gmp zstd doxygen
+
+      - name: Build pinned Boost 1.85 for macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BOOST_VERSION="1.85.0"
+          BOOST_UNDERSCORE="1_85_0"
+          BOOST_ROOT="$PWD/.ci/boost-${BOOST_VERSION}"
+
+          mkdir -p .ci
+          cd .ci
+
+          if [ ! -d "boost_${BOOST_UNDERSCORE}" ]; then
+            curl -L "https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_UNDERSCORE}.tar.gz" -o boost.tar.gz
+            tar -xzf boost.tar.gz
+          fi
+
+          cd "boost_${BOOST_UNDERSCORE}"
+
+          ./bootstrap.sh --prefix="$BOOST_ROOT"
+
+          ./b2 -d0             --prefix="$BOOST_ROOT"             --with-atomic             --with-chrono             --with-program_options             --with-serialization             --with-system             --with-thread             variant=release             link=static             threading=multi             cxxstd=17             architecture=x86             address-model=64             target-os=darwin             install
+
+          echo "BOOST_ROOT=$BOOST_ROOT" >> "$GITHUB_ENV"
+          echo "Boost installed at: $BOOST_ROOT"
+          find "$BOOST_ROOT/lib" -maxdepth 1 -type f | sort
+
+      - name: Patch bundled libzmq for CMake 4 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="external/oxen-mq/cmake/local-libzmq/LocalLibzmq.cmake"
+
+          if ! grep -q 'CMAKE_POLICY_VERSION_MINIMUM' "$FILE"; then
+            python3 -c 'from pathlib import Path; p=Path("external/oxen-mq/cmake/local-libzmq/LocalLibzmq.cmake"); s=p.read_text(); needle="    CMAKE_ARGS ${libzmq_compiler_args}\n"; repl="    CMAKE_ARGS ${libzmq_compiler_args}\n    -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n"; assert needle in s, "Could not find libzmq CMAKE_ARGS line"; p.write_text(s.replace(needle, repl, 1))'
+          fi
+
+          grep -n 'CMAKE_ARGS\|CMAKE_POLICY_VERSION_MINIMUM' "$FILE"
+
+      - name: Patch SQLiteCpp headers for AppleClang
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          patches = [
+              (
+                  Path("external/SQLiteCpp/include/SQLiteCpp/Statement.h"),
+                  "#include <memory>",
+              ),
+              (
+                  Path("external/SQLiteCpp/include/SQLiteCpp/Column.h"),
+                  "#include <SQLiteCpp/Statement.h>",
+              ),
+          ]
+
+          for path, marker in patches:
+              text = path.read_text()
+              if "#include <cstdint>" not in text:
+                  if marker not in text:
+                      raise SystemExit(f"Marker not found in {path}: {marker}")
+                  text = text.replace(marker, marker + "\n#include <cstdint>", 1)
+                  path.write_text(text)
+
+          for path, _ in patches:
+              for i, line in enumerate(path.read_text().splitlines(), 1):
+                  if "#include <cstdint>" in line:
+                      print(f"{path}:{i}:{line}")
+          PY
+
+      - name: Configure macOS Intel x86_64
+        shell: bash
+        run: |
+          rm -rf build-macos-x86_64
+          mkdir -p build-macos-x86_64
+          cd build-macos-x86_64
+
+          BOOST_ROOT="$BOOST_ROOT"
+          OPENSSL_ROOT="$(brew --prefix openssl@3)"
+          ZEROMQ_ROOT="$(brew --prefix zeromq)"
+          HIDAPI_ROOT="$(brew --prefix hidapi)"
+
+          # ARCH=x86-64 avoids -march=native so binaries run on any Intel x86-64 CPU
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DARCH=x86-64 \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_STATIC_DEPS=OFF \
+            -DSTATIC=OFF \
+            -DTREZOR=OFF \
+            -DBoost_NO_BOOST_CMAKE=ON \
+            -DBoost_NO_SYSTEM_PATHS=ON \
+            -DBOOST_ROOT="$BOOST_ROOT" \
+            -DBoost_INCLUDE_DIR="$BOOST_ROOT/include" \
+            -DBoost_LIBRARY_DIR_RELEASE="$BOOST_ROOT/lib" \
+            -DBoost_USE_STATIC_LIBS=ON \
+            -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$ZEROMQ_ROOT;$OPENSSL_ROOT;$HIDAPI_ROOT" \
+            -DWITH_SYSTEM_ZMQ=ON \
+            -DBUILD_ZMQ=OFF \
+            -DBUILD_LIBZMQ=OFF \
+            -DZEROMQ_INCLUDE_DIR="$ZEROMQ_ROOT/include" \
+            -DZEROMQ_LIBRARY="$ZEROMQ_ROOT/lib/libzmq.dylib" \
+            -DHIDAPI_INCLUDE_DIR="$HIDAPI_ROOT/include" \
+            -DHIDAPI_LIBRARY="$HIDAPI_ROOT/lib/libhidapi.dylib"
+
+      - name: Build macOS Intel x86_64
+        shell: bash
+        run: |
+          cmake --build build-macos-x86_64 \
+            --target daemon simplewallet wallet_rpc_server mdb_copy mdb_stat \
+            --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Bundle Homebrew dylibs into binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install dylibbundler
+
+          mkdir -p build-macos-x86_64/bin/libs
+          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+            echo "Bundling dylibs for $bin..."
+            dylibbundler \
+              -b \
+              -x "build-macos-x86_64/bin/$bin" \
+              -d build-macos-x86_64/bin/libs \
+              -p "@executable_path/libs/" \
+              -of -cd
+          done
+
+          echo "--- Bundled libs/ contents ---"
+          ls -la build-macos-x86_64/bin/libs/
+
+          echo "--- Verify no Homebrew paths remain in binaries ---"
+          for bin in xeqm-d xeqm-wallet xeqm-rpc; do
+            if otool -L "build-macos-x86_64/bin/$bin" | grep -E '/usr/local/(opt|Cellar)|/opt/homebrew' ; then
+              echo "FATAL: $bin still references absolute Homebrew dylib paths"
+              exit 1
+            fi
+          done
+          echo "All binaries reference @executable_path-relative dylibs only."
+
+      - name: Verify macOS binaries
+        shell: bash
+        run: |
+          build-macos-x86_64/bin/xeqm-d --version
+          build-macos-x86_64/bin/xeqm-wallet --version
+          build-macos-x86_64/bin/xeqm-rpc --version
+          file build-macos-x86_64/bin/xeqm-d
+          file build-macos-x86_64/bin/xeqm-wallet
+          file build-macos-x86_64/bin/xeqm-rpc
+
+      - name: Package macOS Intel x86_64 binaries
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME#core-v}"
+          fi
+
+          COMMIT="$(git rev-parse HEAD)"
+          SHORT="$(git rev-parse --short HEAD)"
+          PKG="XEQM-core-${VERSION}-macos-x86_64-${SHORT}"
+
+          mkdir -p "$PKG"
+          cp build-macos-x86_64/bin/xeqm-d "$PKG/"
+          cp build-macos-x86_64/bin/xeqm-wallet "$PKG/"
+          cp build-macos-x86_64/bin/xeqm-rpc "$PKG/"
+          cp build-macos-x86_64/bin/xeqm-mdb_copy "$PKG/"
+          cp build-macos-x86_64/bin/xeqm-mdb_stat "$PKG/"
+          cp -R build-macos-x86_64/bin/libs "$PKG/"
+          chmod +x "$PKG"/xeqm-d "$PKG"/xeqm-wallet "$PKG"/xeqm-rpc "$PKG"/xeqm-mdb_copy "$PKG"/xeqm-mdb_stat
+
+          {
+            printf "XEQM Core macOS Intel x86_64 binaries\n\n"
+            printf "Source commit: %s\n\n" "$COMMIT"
+            printf "Included:\n"
+            printf "  xeqm-d\n"
+            printf "  xeqm-wallet\n"
+            printf "  xeqm-rpc\n"
+            printf "  xeqm-mdb_copy\n"
+            printf "  xeqm-mdb_stat\n"
+            printf "  libs/  (bundled runtime dylibs — keep next to the binaries)\n\n"
+            printf "Version output:\n\n"
+            ./build-macos-x86_64/bin/xeqm-d --version
+            ./build-macos-x86_64/bin/xeqm-wallet --version
+            ./build-macos-x86_64/bin/xeqm-rpc --version
+          } > "$PKG/README.txt"
+
+          tar -czf "${PKG}.tar.gz" "$PKG"
+          shasum -a 256 "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+
+      - name: Upload macOS Intel x86_64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XEQM-core-macos-x86_64
+          path: |
+            XEQM-core-*-macos-x86_64-*.tar.gz
+            XEQM-core-*-macos-x86_64-*.tar.gz.sha256
+
+
   upload-arm64:
     name: Upload ARM64 binary to existing release
     needs:
@@ -737,6 +960,7 @@ jobs:
       - linux-ubuntu-2404-arm64
       - windows-x64
       - macos-arm64
+      - macos-x86_64
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/core-v')
 
@@ -774,6 +998,7 @@ jobs:
             - Ubuntu 24.04 aarch64 tar.gz
             - Windows x86_64 zip
             - macOS ARM64 tar.gz
+            - macOS Intel x86_64 tar.gz
 
             Source commit:
             ${{ github.sha }}
