@@ -657,7 +657,15 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     {
       shutdown();
     }
-    
+    else
+    {
+      // Cancel pending async ops (e.g. async_write stuck retransmitting to a
+      // CLOSE-WAIT peer) so their handlers fire with operation_aborted and
+      // reach shutdown() via handle_write's error path.
+      boost::system::error_code ec;
+      socket().cancel(ec);
+    }
+
     return true;
     CATCH_ENTRY("connection<t_protocol_handler>::close", false);
   }
@@ -704,7 +712,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     m_send_que.pop_front();
     if(m_send_que.empty())
     {
-      if(m_want_close_connection)
+      if(m_want_close_connection || m_ready_to_close)
       {
         do_shutdown = true;
       }
