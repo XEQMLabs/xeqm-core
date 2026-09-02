@@ -899,6 +899,26 @@ class Blockchain {
             std::unordered_set<crypto::hash>* missed_txs,
             size_t* total_size) const;
 
+    // Private, non-lock-obtaining implementation of get_transactions_blobs().
+    // Caller must hold a DB read transaction (db_rtxn_guard) for LMDB consistency.
+    bool _get_transactions_blobs(
+            const std::vector<crypto::hash>& txs_ids,
+            std::vector<std::string>& txs,
+            std::unordered_set<crypto::hash>* missed_txs,
+            bool pruned = false) const;
+
+    // Private, non-lock-obtaining implementation of the hash-list get_blocks() overload.
+    // Caller must hold a DB read transaction (db_rtxn_guard) for LMDB consistency.
+    bool _get_blocks_by_hash(
+            const std::vector<crypto::hash>& block_ids,
+            std::vector<std::pair<std::string, block>>& blocks,
+            std::unordered_set<crypto::hash>* missed_bs) const;
+
+    // Private, non-lock-obtaining implementation of find_blockchain_supplement(qblock_ids, offset).
+    // Caller must hold a DB read transaction (db_rtxn_guard) for LMDB consistency.
+    bool _find_blockchain_supplement(
+            const std::list<crypto::hash>& qblock_ids, uint64_t& starter_offset) const;
+
   public:
     /**
      * @brief looks up transactions based on a list of transaction hashes and returns the block
