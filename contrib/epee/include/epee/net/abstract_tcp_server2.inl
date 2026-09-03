@@ -298,7 +298,7 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     std::size_t bytes_transferred)
   {
     TRY_ENTRY();
-    
+
     if (!e)
     {
         double current_speed_down;
@@ -309,58 +309,38 @@ PRAGMA_WARNING_DISABLE_VS(4355)
 		}
         context.m_current_speed_down = current_speed_down;
         context.m_max_speed_down = std::max(context.m_max_speed_down, current_speed_down);
-    
+
     {
 			std::lock_guard lock{epee::net_utils::network_throttle_manager::network_throttle_manager::m_lock_get_global_throttle_in};
 			epee::net_utils::network_throttle_manager::network_throttle_manager::get_global_throttle_in().handle_trafic_exact(bytes_transferred);
 		}
 
-		double delay=0; // will be calculated - how much we should sleep to obey speed limit etc
-
-
+		long int delay_ms = 0;
 		if (speed_limit_is_enabled()) {
-			do // keep sleeping if we should sleep
+			double delay;
 			{
-				{
-					std::lock_guard lock{epee::net_utils::network_throttle_manager::m_lock_get_global_throttle_in};
-					delay = epee::net_utils::network_throttle_manager::get_global_throttle_in().get_sleep_time_after_tick( bytes_transferred );
-				}
-				
-				delay *= 0.5;
-				long int ms = (long int)(delay * 100);
-				if (ms > 0) {
-					reset_timer(std::chrono::milliseconds(ms + 1), true);
-					std::this_thread::sleep_for(std::chrono::milliseconds{ms});
-				}
-			} while(delay > 0);
-		} // any form of sleeping
-		
-      logger_handle_net_read(bytes_transferred);
-      context.m_last_recv = std::chrono::steady_clock::now();
-      context.m_recv_cnt += bytes_transferred;
-      m_ready_to_close = false;
-      bool recv_res = m_protocol_handler.handle_recv(buffer_.data(), bytes_transferred);
-      if(!recv_res)
-      {  
-        //some error in protocol, protocol handler ask to close connection
-        m_want_close_connection = true;
-        bool do_shutdown = false;
-        {
-          std::lock_guard lock{m_send_que_lock};
-          if(!m_send_que.size())
-            do_shutdown = true;
-        }
-        if(do_shutdown)
-          shutdown();
-      }else
-      {
-        reset_timer(get_timeout_from_bytes_read(bytes_transferred), false);
-        socket().async_read_some(boost::asio::buffer(buffer_),
-          strand_.wrap(
-            boost::bind(&connection<t_protocol_handler>::handle_read, connection<t_protocol_handler>::shared_from_this(),
-              boost::asio::placeholders::error,
-              boost::asio::placeholders::bytes_transferred)));
-      }
+				std::lock_guard lock{epee::net_utils::network_throttle_manager::m_lock_get_global_throttle_in};
+				delay = epee::net_utils::network_throttle_manager::get_global_throttle_in().get_sleep_time_after_tick(bytes_transferred);
+			}
+			delay_ms = (long int)(delay * 0.5 * 1000);
+		}
+
+		if (delay_ms > 0) {
+			// Throttle: defer data processing until the rate-limit window passes.
+			// We post via an async timer rather than blocking this io_context worker
+			// thread with sleep_for, which would starve all other connections.
+			reset_timer(std::chrono::milliseconds{delay_ms} + get_default_timeout(), false);
+			auto throttle_timer = std::make_shared<boost::asio::steady_timer>(
+				GET_IO_SERVICE(socket()), std::chrono::milliseconds{delay_ms});
+			throttle_timer->async_wait(strand_.wrap(
+				[self = connection<t_protocol_handler>::shared_from_this(), throttle_timer, bytes_transferred](
+						const boost::system::error_code& ec) {
+					if (!ec && !self->m_want_close_connection && !self->m_was_shutdown)
+						self->handle_read_after_throttle(bytes_transferred);
+				}));
+			return;
+		}
+		handle_read_after_throttle(bytes_transferred);
     }else
     {
       if(e.value() != 2)
@@ -385,6 +365,38 @@ PRAGMA_WARNING_DISABLE_VS(4355)
     // disappear and the object will be destroyed automatically after this
     // handler returns. The connection class's destructor closes the socket.
     CATCH_ENTRY("connection<t_protocol_handler>::handle_read", void());
+  }
+  //---------------------------------------------------------------------------------
+  template<class t_protocol_handler>
+  void connection<t_protocol_handler>::handle_read_after_throttle(std::size_t bytes_transferred)
+  {
+    TRY_ENTRY();
+    logger_handle_net_read(bytes_transferred);
+    context.m_last_recv = std::chrono::steady_clock::now();
+    context.m_recv_cnt += bytes_transferred;
+    m_ready_to_close = false;
+    bool recv_res = m_protocol_handler.handle_recv(buffer_.data(), bytes_transferred);
+    if(!recv_res)
+    {
+      m_want_close_connection = true;
+      bool do_shutdown = false;
+      {
+        std::lock_guard lock{m_send_que_lock};
+        if(!m_send_que.size())
+          do_shutdown = true;
+      }
+      if(do_shutdown)
+        shutdown();
+    }else
+    {
+      reset_timer(get_timeout_from_bytes_read(bytes_transferred), false);
+      socket().async_read_some(boost::asio::buffer(buffer_),
+        strand_.wrap(
+          boost::bind(&connection<t_protocol_handler>::handle_read, connection<t_protocol_handler>::shared_from_this(),
+            boost::asio::placeholders::error,
+            boost::asio::placeholders::bytes_transferred)));
+    }
+    CATCH_ENTRY("connection<t_protocol_handler>::handle_read_after_throttle", void());
   }
   //---------------------------------------------------------------------------------
   template<class t_protocol_handler>
