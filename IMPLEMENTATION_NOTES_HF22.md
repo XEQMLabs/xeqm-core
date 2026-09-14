@@ -30,11 +30,12 @@ Both sides move together (old/new nodes must agree during the upgrade window).
   **any** key in the set. Keep the `voter_index=0xFFFF` sentinel.
 - Fallback key is loaded from a **file** (arg = path, not hex). Remove the unsynchronized static cache in
   `get_fallback_miner_pubkey`. Do **not** use the governance spend key.
-- Production: two authorized miners on independent providers — **maple (OVH)** and **OCI (Oracle)**, each
-  with its own dedicated key; both pubkeys go in the mainnet `FALLBACK_MINER_PUBKEYS`. (Ops generates the
-  keys and fills the pubkeys — not Dom.)
-- Per-miner **local start-delay** flag (primary = 0, secondary = +N rounds) to avoid simultaneous
-  production; runtime-only (validity stays "from round 2"), no fork needed.
+- Production: **three** authorized miners on independent providers — **maple (OVH)**, **OCI (Oracle)**,
+  **missoula (Contabo)** — each with its own dedicated key; all three pubkeys go in the mainnet
+  `FALLBACK_MINER_PUBKEYS`. (Ops generates the keys and fills the pubkeys — not Dom.)
+- Per-miner **local start-delay** flag, staggered so only the needed one produces: primary maple = 0,
+  secondary OCI = +N rounds, tertiary missoula = +2N. Runtime-only (validity stays "from round 2"),
+  no fork needed; tolerates two simultaneous host/provider failures.
 
 ### Q6 — refill deduped obligations/checkpoint quorums to 10/20/10
 After operator-dedup, refill from the remaining shuffled candidate list so obligations/checkpoint/blink
