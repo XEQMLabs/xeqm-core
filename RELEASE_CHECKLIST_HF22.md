@@ -13,7 +13,7 @@ branches; ⏳ is for Dom.
 1. Cut `release/hf22` from `main`.
 2. Merge `fix/hf22-combined` (carries: macOS Intel self-hosted routing + Boost_NO_SYSTEM_PATHS,
    #53 ncurses/readline fix, macOS signing pipeline, fork-PR approval).
-3. Merge `feat/hf22-sn-policy` (carries: consensus + Q1 .gitmodules + Q3 lokinet=false + Q2 sentinels +
+3. Merge `feat/hf22-sn-policy` (carries: consensus + Q1 .gitmodules + Q3 lokinet-revert (SUPERSEDED by QL: Lokinet IS in HF22) + Q2 sentinels +
    Q11-via-review + Q8 harness + Option C fallback=2 + Q12 height=220000 + aider cleanup).
 4. Merge/apply `feat/hf22-consensus-fixes` (Q5b, Q11) and implement the remaining consensus items below.
 
@@ -38,6 +38,8 @@ branches; ⏳ is for Dom.
 - Q12 fork height ✅ placeholder 220000 — ⏳ SET the final height/timestamp from the binary-publish date
   (>=3 weeks after binaries are public; ~1440 blocks/day at 60s).
 - Q13 operator fee ✅ already 10% (cryptonote_config.h MAX_OPERATOR_FEE_BASIS = 1000) — no change.
+- QL Lokinet — **IN HF22 (final decision)**: fork-gated enforcement on hf22_sn_policy + grace period;
+  installer + Docker delivery; testnet profile; doc updates. Spec in IMPLEMENTATION_NOTES_HF22.md. DEV+ops.
 
 ## Test harness — location + how to run
 Full rig: `testnet/hf22-multiop/` — the 20-operator / 40-SN Pulse dedup + fallback harness behind
@@ -79,6 +81,8 @@ MACOS_NOTARY_ISSUER_ID.
 - [ ] Submodule resolves from XEQMLabs/oxen-mq (CI `submodules: recursive` green).
 - [ ] Q5a/Q5c/Q6/Q7 implemented + reviewed.
 - [ ] 20-operator harness pass + mixed old/new-binary pass (Q8).
-- [ ] Fork height set from publish date; >=2 fallback miners keyed + running.
+- [ ] Fork height set from publish date; 3 staggered fallback miners (maple/OVH + OCI/Oracle + missoula/Contabo) keyed + running.
 - [ ] macOS secrets present → signed/notarized/stapled .pkg on both arches.
+- [ ] Lokinet (QL): working XEQM lokinet build verified; enforcement fork-gated + grace period; all SNs
+      running lokinet (installer or Docker) before the fork.
 - [ ] Full CI green on release/hf22 (all 6 targets).
