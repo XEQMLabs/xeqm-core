@@ -36,6 +36,10 @@ Both sides move together (old/new nodes must agree during the upgrade window).
 - Per-miner **local start-delay** flag, staggered so only the needed one produces: primary maple = 0,
   secondary OCI = +N rounds, tertiary missoula = +2N. Runtime-only (validity stays "from round 2"),
   no fork needed; tolerates two simultaneous host/provider failures.
+- **Reward:** a fallback block carries the normal emission (Service-Node weekly batch + Foundation). The
+  block producer earns NOTHING — there is no miner/coinbase reward since HF19
+  (`static_assert(SN_REWARD_HF19 + FOUNDATION_REWARD_HF19 == BLOCK_REWARD_HF19)`). Do NOT add a producer
+  incentive; these miners are a liveness backstop only.
 
 ### Q6 — refill deduped obligations/checkpoint quorums to 10/20/10
 After operator-dedup, refill from the remaining shuffled candidate list so obligations/checkpoint/blink
