@@ -3023,16 +3023,15 @@ bool Blockchain::handle_get_blocks(
         NOTIFY_REQUEST_GET_BLOCKS::request& arg, NOTIFY_RESPONSE_GET_BLOCKS::request& rsp) {
     ZoneScoped;
     log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock blockchain_lock{m_blockchain_lock, std::defer_lock};
-    auto blink_lock = tx_pool.blink_shared_lock(std::defer_lock);
-    std::lock(blockchain_lock, blink_lock);
 
+    // Use only a DB read transaction for consistency; m_blockchain_lock is not needed here
+    // because all reads go through LMDB MVCC.  The blink lock is acquired per-block below.
     db_rtxn_guard rtxn_guard{*m_db};
     rsp.current_blockchain_height = get_current_blockchain_height();
     std::vector<std::pair<std::string, block>> blocks;
     {
         std::unordered_set<crypto::hash> missed_ids;
-        get_blocks(arg.blocks, blocks, &missed_ids);
+        _get_blocks_by_hash(arg.blocks, blocks, &missed_ids);
         rsp.missed_ids.insert(rsp.missed_ids.end(), missed_ids.begin(), missed_ids.end());
     }
 
@@ -3041,6 +3040,9 @@ bool Blockchain::handle_get_blocks(
             (top_height < service_nodes::CHECKPOINT_STORE_PERSISTENTLY_INTERVAL)
                     ? 0
                     : top_height - service_nodes::CHECKPOINT_STORE_PERSISTENTLY_INTERVAL;
+
+    // Acquire the blink shared lock once for the entire block loop.
+    auto blink_lock = tx_pool.blink_shared_lock();
 
     for (auto& bl : blocks) {
         auto& block_blob = bl.first;
@@ -3057,6 +3059,7 @@ bool Blockchain::handle_get_blocks(
         if ((block_height % checkpoint_interval) == 0) {
             try {
                 checkpoint_t checkpoint;
+                // get_checkpoint reads m_checkpoints (in-memory); it acquires the lock briefly.
                 if (get_checkpoint(block_height, checkpoint))
                     block_entry.checkpoint = t_serializable_object_to_blob(checkpoint);
             } catch (const std::exception& e) {
@@ -3073,7 +3076,7 @@ bool Blockchain::handle_get_blocks(
         // FIXME: s/rsp.missed_ids/missed_tx_id/ ?  Seems like rsp.missed_ids
         //        is for missed blocks, not missed transactions as well.
         std::unordered_set<crypto::hash> missed_tx_ids;
-        get_transactions_blobs(block.tx_hashes, block_entry.txs, &missed_tx_ids);
+        _get_transactions_blobs(block.tx_hashes, block_entry.txs, &missed_tx_ids);
 
         for (auto& h : block.tx_hashes) {
             if (auto blink = tx_pool.get_blink(h)) {
@@ -3112,15 +3115,14 @@ bool Blockchain::handle_get_txs(
         NOTIFY_REQUEST_GET_TXS::request& arg, NOTIFY_NEW_TRANSACTIONS::request& rsp) {
     ZoneScoped;
     log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock blockchain_lock{m_blockchain_lock, std::defer_lock};
-    auto blink_lock = tx_pool.blink_shared_lock(std::defer_lock);
-    std::lock(blockchain_lock, blink_lock);
 
+    // DB reads use LMDB MVCC; blink lock guards the in-memory blink set.
     db_rtxn_guard rtxn_guard{*m_db};
+    auto blink_lock = tx_pool.blink_shared_lock();
     std::unordered_set<crypto::hash> missed;
 
     // First check the blockchain for any txs:
-    get_transactions_blobs(arg.txs, rsp.txs, &missed);
+    _get_transactions_blobs(arg.txs, rsp.txs, &missed);
 
     // Look for any missed txes in the mempool:
     tx_pool.find_transactions(missed, rsp.txs);
@@ -3300,13 +3302,8 @@ void Blockchain::get_output_blacklist(std::vector<uint64_t>& blacklist) const {
 // This function takes a list of block hashes from another node
 // on the network to find where the split point is between us and them.
 // This is used to see what to send another node that needs to sync.
-bool Blockchain::find_blockchain_supplement(
+bool Blockchain::_find_blockchain_supplement(
         const std::list<crypto::hash>& qblock_ids, uint64_t& starter_offset) const {
-    log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
-
-    // make sure the request includes at least the genesis block, otherwise
-    // how can we expect to sync from the client that the block list came from?
     if (qblock_ids.empty()) {
         log::info(
                 logcat,
@@ -3315,9 +3312,6 @@ bool Blockchain::find_blockchain_supplement(
         return false;
     }
 
-    db_rtxn_guard rtxn_guard{*m_db};
-    // make sure that the last block in the request's block list matches
-    // the genesis block
     auto gen_hash = m_db->get_block_hash_from_height(0);
     if (qblock_ids.back() != gen_hash) {
         log::info(
@@ -3329,8 +3323,6 @@ bool Blockchain::find_blockchain_supplement(
         return false;
     }
 
-    // Find the first block the foreign chain has that we also have.
-    // Assume qblock_ids is in reverse-chronological order.
     auto bl_it = qblock_ids.begin();
     uint64_t split_height = 0;
     for (; bl_it != qblock_ids.end(); bl_it++) {
@@ -3358,6 +3350,14 @@ bool Blockchain::find_blockchain_supplement(
     return true;
 }
 //------------------------------------------------------------------
+bool Blockchain::find_blockchain_supplement(
+        const std::list<crypto::hash>& qblock_ids, uint64_t& starter_offset) const {
+    log::trace(logcat, "Blockchain::{}", __func__);
+    std::unique_lock lock{*this};
+    db_rtxn_guard rtxn_guard{*m_db};
+    return _find_blockchain_supplement(qblock_ids, starter_offset);
+}
+//------------------------------------------------------------------
 uint64_t Blockchain::block_difficulty(uint64_t i) const {
     log::trace(logcat, "Blockchain::{}", __func__);
     try {
@@ -3370,13 +3370,10 @@ uint64_t Blockchain::block_difficulty(uint64_t i) const {
 //------------------------------------------------------------------
 // TODO: return type should be void, throw on exception
 //       alternatively, return true only if no blocks missed
-bool Blockchain::get_blocks(
+bool Blockchain::_get_blocks_by_hash(
         const std::vector<crypto::hash>& block_ids,
         std::vector<std::pair<std::string, block>>& blocks,
         std::unordered_set<crypto::hash>* missed_bs) const {
-    log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
-
     blocks.reserve(block_ids.size());
     for (const auto& block_hash : block_ids) {
         try {
@@ -3399,16 +3396,22 @@ bool Blockchain::get_blocks(
     return true;
 }
 //------------------------------------------------------------------
+bool Blockchain::get_blocks(
+        const std::vector<crypto::hash>& block_ids,
+        std::vector<std::pair<std::string, block>>& blocks,
+        std::unordered_set<crypto::hash>* missed_bs) const {
+    log::trace(logcat, "Blockchain::{}", __func__);
+    std::unique_lock lock{*this};
+    return _get_blocks_by_hash(block_ids, blocks, missed_bs);
+}
+//------------------------------------------------------------------
 // TODO: return type should be void, throw on exception
 //       alternatively, return true only if no transactions missed
-bool Blockchain::get_transactions_blobs(
+bool Blockchain::_get_transactions_blobs(
         const std::vector<crypto::hash>& txs_ids,
         std::vector<std::string>& txs,
         std::unordered_set<crypto::hash>* missed_txs,
         bool pruned) const {
-    log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
-
     txs.reserve(txs_ids.size());
     for (const auto& tx_hash : txs_ids) {
         try {
@@ -3424,6 +3427,16 @@ bool Blockchain::get_transactions_blobs(
         }
     }
     return true;
+}
+//------------------------------------------------------------------
+bool Blockchain::get_transactions_blobs(
+        const std::vector<crypto::hash>& txs_ids,
+        std::vector<std::string>& txs,
+        std::unordered_set<crypto::hash>* missed_txs,
+        bool pruned) const {
+    log::trace(logcat, "Blockchain::{}", __func__);
+    std::unique_lock lock{*this};
+    return _get_transactions_blobs(txs_ids, txs, missed_txs, pruned);
 }
 //------------------------------------------------------------------
 std::vector<uint64_t> Blockchain::get_transactions_heights(
@@ -3537,14 +3550,13 @@ bool Blockchain::find_blockchain_supplement(
         uint64_t& current_height,
         bool clip_pruned) const {
     log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
 
-    // if we can't find the split point, return false
-    if (!find_blockchain_supplement(qblock_ids, start_height)) {
+    db_rtxn_guard rtxn_guard{*m_db};
+    // _find_blockchain_supplement does pure DB reads; LMDB MVCC provides consistency.
+    if (!_find_blockchain_supplement(qblock_ids, start_height)) {
         return false;
     }
 
-    db_rtxn_guard rtxn_guard{*m_db};
     current_height = get_current_blockchain_height();
     uint64_t stop_height = current_height;
     if (clip_pruned) {
@@ -3569,8 +3581,7 @@ bool Blockchain::find_blockchain_supplement(
         const std::list<crypto::hash>& qblock_ids,
         NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp) const {
     log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
-
+    db_rtxn_guard rtxn_guard{*m_db};
     bool result = find_blockchain_supplement(
             qblock_ids, resp.m_block_ids, resp.start_height, resp.total_height, true);
     if (result)
@@ -3594,8 +3605,8 @@ bool Blockchain::find_blockchain_supplement(
         size_t max_count) const {
     ZoneScoped;
     log::trace(logcat, "Blockchain::{}", __func__);
-    std::unique_lock lock{*this};
 
+    db_rtxn_guard rtxn_guard{*m_db};
     // if a specific start height has been requested
     if (req_start_block > 0) {
         // if requested height is higher than our chain, return false -- we can't help
@@ -3610,12 +3621,11 @@ bool Blockchain::find_blockchain_supplement(
         }
         start_height = req_start_block;
     } else {
-        if (!find_blockchain_supplement(qblock_ids, start_height)) {
+        // _find_blockchain_supplement does pure DB reads; LMDB MVCC provides consistency.
+        if (!_find_blockchain_supplement(qblock_ids, start_height)) {
             return false;
         }
     }
-
-    db_rtxn_guard rtxn_guard{*m_db};
     total_height = get_current_blockchain_height();
     size_t count = 0, size = 0;
     blocks.reserve(
@@ -3641,7 +3651,7 @@ bool Blockchain::find_blockchain_supplement(
                     "Failed to retrieve all transactions needed");
         } else {
             std::unordered_set<crypto::hash> mis;
-            get_transactions_blobs(b.tx_hashes, txs, &mis, pruned);
+            _get_transactions_blobs(b.tx_hashes, txs, &mis, pruned);
             CHECK_AND_ASSERT_MES(
                     mis.empty(), false, "internal error, transaction from block not found");
         }

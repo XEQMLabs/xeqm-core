@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "core-v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -115,7 +116,7 @@ jobs:
 
       - name: Package Ubuntu binaries
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -239,7 +240,7 @@ jobs:
 
       - name: Package ARM64 binaries
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -390,7 +391,7 @@ jobs:
       - name: Package Windows binaries
         shell: msys2 {0}
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -610,7 +611,7 @@ jobs:
       - name: Package macOS ARM64 binaries
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -829,7 +830,7 @@ jobs:
       - name: Package macOS Intel x86_64 binaries
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
