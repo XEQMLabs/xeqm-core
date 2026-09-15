@@ -4679,8 +4679,15 @@ bool Blockchain::check_tx_inputs(
             auto quorum = service_node_list.get_quorum(
                     service_nodes::quorum_type::obligations, state_change.block_height);
             if (!quorum) {
-                log::error(
-                        logverify, "could not get obligations quorum for recent state change tx");
+                // Not an internal error: during a hard fork transition, peers still on the
+                // pre-fork chain broadcast state_change txs referencing heights that fall
+                // outside our canonical state_history window.  Reject silently at debug level.
+                log::debug(
+                        logverify,
+                        "No obligations quorum at height {} (current tip {}); tx likely from a "
+                        "peer on a stale or forked chain — rejecting",
+                        state_change.block_height,
+                        get_current_blockchain_height());
                 return false;
             }
 
