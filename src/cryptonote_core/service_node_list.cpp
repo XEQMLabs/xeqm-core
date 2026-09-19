@@ -3763,28 +3763,48 @@ static void generate_other_quorums(
         quorum->validators.reserve(num_validators);
         quorum->workers.reserve(num_workers);
 
-        size_t i = 0;
         if (hf_version >= hf::hf22_sn_policy && num_validators > 0) {
-            // HF22: deduplicate validators by operator address (1 seat per operator per quorum).
+            // HF22: one validator seat per operator. A seat lost to a duplicate operator is
+            // refilled from the rest of the shuffled active list so the quorum keeps its full
+            // size; workers are then drawn from the positions after the original validator
+            // block, skipping any entry that was promoted to validator.
             std::unordered_set<cryptonote::account_public_address> seen_ops;
-            for (size_t k = 0; k < num_validators; k++) {
-                const auto& entry = active_snode_list[pub_keys_indexes[k]];
-                if (seen_ops.insert(entry.info->operator_address).second)
-                    quorum->validators.push_back(entry.pubkey);
+            std::vector<bool> used(pub_keys_indexes.size(), false);
+            for (size_t k = 0;
+                 k < pub_keys_indexes.size() && quorum->validators.size() < num_validators;
+                 k++) {
+                size_t j = pub_keys_indexes[k];
+                if (j >= active_snode_list.size())
+                    continue;  // decommissioned nodes are never validators
+                const auto& entry = active_snode_list[j];
+                if (!seen_ops.insert(entry.info->operator_address).second)
+                    continue;
+                quorum->validators.push_back(entry.pubkey);
+                used[k] = true;
             }
-            i = num_validators;  // workers still start at original offset
+            for (size_t k = num_validators, added = 0;
+                 k < pub_keys_indexes.size() && added < num_workers;
+                 k++) {
+                if (used[k])
+                    continue;
+                size_t j = pub_keys_indexes[k];
+                if (j < active_snode_list.size())
+                    quorum->workers.push_back(active_snode_list[j].pubkey);
+                else
+                    quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
+                added++;
+            }
         } else {
-            for (; i < num_validators; i++) {
+            size_t i = 0;
+            for (; i < num_validators; i++)
                 quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+            for (; i < num_validators + num_workers; i++) {
+                size_t j = pub_keys_indexes[i];
+                if (j < active_snode_list.size())
+                    quorum->workers.push_back(active_snode_list[j].pubkey);
+                else
+                    quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
             }
-        }
-
-        for (; i < num_validators + num_workers; i++) {
-            size_t j = pub_keys_indexes[i];
-            if (j < active_snode_list.size())
-                quorum->workers.push_back(active_snode_list[j].pubkey);
-            else
-                quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
         }
     }
 }
