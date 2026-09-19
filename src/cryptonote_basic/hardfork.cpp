@@ -54,24 +54,22 @@ static constexpr std::array mainnet_hard_forks = {
 };
 
 static constexpr std::array testnet_hard_forks = {
-        // pvt testnet: ramp all HFs to block 14 so SNs can be registered (needs HF19) well
-        // before pulse forms; HF22 at block 249 is the test target.
         hard_fork{hf::hf7, 0, 0, 1653632397},
-        hard_fork{hf::hf11_infinite_staking, 0, 1, 1653632397},
-        hard_fork{hf::hf12_checkpointing, 0, 2, 1653632397},
-        hard_fork{hf::hf13_enforce_checkpoints, 0, 3, 1653632397},
-        hard_fork{hf::hf14_blink, 0, 4, 1653632397},
-        hard_fork{hf::hf15_ons, 0, 5, 1653632397},
-        hard_fork{hf::hf16_pulse, 0, 6, 1653632397},
-        hard_fork{hf::hf17, 0, 7, 1653632397},
-        hard_fork{hf::hf18, 0, 8, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 0, 9, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 1, 10, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 2, 11, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 3, 12, 1653632397},
-        hard_fork{hf::hf20_governance_payouts_fix, 0, 13, 1653632397},
-        hard_fork{hf::hf21_weekly_batching, 0, 14, 1653632397},
-        hard_fork{hf::hf22_sn_policy, 0, 250, 1653632397},  // HF22 Pulse dedup: fires after 40-SN setup, before stall/recovery test
+        hard_fork{hf::hf11_infinite_staking, 0, 2, 1653632397},
+        hard_fork{hf::hf12_checkpointing, 0, 3, 1653632397},
+        hard_fork{hf::hf13_enforce_checkpoints, 0, 4, 1653632397},
+        hard_fork{hf::hf14_blink, 0, 5, 1653632397},
+        hard_fork{hf::hf15_ons, 0, 6, 1653632397},
+        hard_fork{hf::hf16_pulse, 0, 750, 1653632397},
+        hard_fork{hf::hf17, 0, 751, 1653632397},
+        hard_fork{hf::hf18, 0, 752, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 0, 753, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
+        hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
+        hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
+        hard_fork{hf::hf20_governance_payouts_fix, 0, 760, 1781064000},
+        hard_fork{hf::hf21_weekly_batching, 0, 1000, 1781064001},
+        hard_fork{hf::hf22_sn_policy, 0, 1500, 1781064002},
 };
 
 static constexpr std::array devnet_hard_forks = {
