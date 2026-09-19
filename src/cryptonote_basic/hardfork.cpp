@@ -49,8 +49,10 @@ static constexpr std::array mainnet_hard_forks = {
         hard_fork{hf::hf20_governance_payouts_fix, 0, 37000, 1781064000},
         // HF21: SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM.
         hard_fork{hf::hf21_weekly_batching, 0, 99000, 1784045460},  // ~2026-07-14 16:11 UTC (9:11am PT)
-        // HF22: 14-day forced deregistration lock, per-operator quorum dedup, Lokinet.
-        hard_fork{hf::hf22_sn_policy, 0, 220000, 1800000000},  // TODO: finalize block + timestamp before release
+        // HF22: per-operator quorum dedup, 14-day forced deregistration lock, authorized fallback
+        // miner after 2 failed Pulse rounds. Height 219120 is ~2026-10-05 19:00 UTC (12:00 PT) at
+        // the 60s block pace measured on 2026-09-18.
+        hard_fork{hf::hf22_sn_policy, 0, 219120, 1791226800},
 };
 
 static constexpr std::array testnet_hard_forks = {
