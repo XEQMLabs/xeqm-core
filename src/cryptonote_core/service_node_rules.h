@@ -19,6 +19,11 @@ inline constexpr size_t PULSE_QUORUM_ENTROPY_LAG =
 
 inline constexpr int PULSE_QUORUM_NUM_VALIDATORS = 11;
 inline constexpr int PULSE_QUORUM_SIZE = PULSE_QUORUM_NUM_VALIDATORS + 1 /*Leader*/;
+// HF22: after operator dedup a Pulse round needs at least this many distinct-operator candidates
+// (leader already removed in round 0) or Pulse is skipped for that block. This is the single
+// threshold used by generate_pulse_quorum_with_candidates for every caller.
+inline constexpr size_t PULSE_MIN_UNIQUE_OPERATORS = PULSE_QUORUM_SIZE;
+static_assert(PULSE_MIN_UNIQUE_OPERATORS == 12);
 inline constexpr int PULSE_BLOCK_REQUIRED_SIGNATURES =
         7;  // A block must have exactly N signatures to be considered properly
 // HF22: voter_index carried by the single signature on a fallback miner block; never a real

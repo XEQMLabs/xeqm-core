@@ -2468,7 +2468,11 @@ void core_rpc_server::invoke(GET_QUORUM_STATE& get_quorum_state, rpc_context con
                     pulse::get_round_timings(blockchain, curr_height, top_header.timestamp);
             next_timings &&
             pulse::convert_time_to_round(
-                    nettype(), pulse::clock::now(), next_timings->r0_timestamp, &pulse_round)) {
+                    nettype(),
+                    hf_version,
+                    pulse::clock::now(),
+                    next_timings->r0_timestamp,
+                    &pulse_round)) {
             auto entropy =
                     service_nodes::get_pulse_entropy_for_next_block(blockchain.db(), pulse_round);
             auto& sn_list = m_core.service_node_list;

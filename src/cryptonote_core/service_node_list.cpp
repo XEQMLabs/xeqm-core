@@ -72,6 +72,7 @@
 #include "ethereum_transactions.h"
 #include "l2_tracker/events.h"
 #include "network_config/mocknet.h"
+#include "networks.h"
 #include "oxen/log.hpp"
 #include "oxen_economy.h"
 #include "pulse.h"
@@ -3513,6 +3514,10 @@ static bool pulse_candidates_sorter(const pubkey_and_sninfo& a, const pubkey_and
     return a.second->pulse_sorter < b.second->pulse_sorter;
 }
 
+// Every network must keep enough active nodes for the HF22 dedup threshold to be reachable.
+static_assert(cryptonote::config::mainnet::config.PULSE_MIN_SERVICE_NODES >= PULSE_MIN_UNIQUE_OPERATORS);
+static_assert(cryptonote::config::testnet::config.PULSE_MIN_SERVICE_NODES >= PULSE_MIN_UNIQUE_OPERATORS);
+
 // Generate the pulse quorum directly from a list of pulse candidates. The list of pulse candidates
 // for a block height is defined as the state of the SNL before the block is processed including:
 //
@@ -3544,22 +3549,16 @@ static service_nodes::quorum generate_pulse_quorum_with_candidates(
         return result;
     }
 
-    // Guard: pulse_candidates may be smaller than active_snode_list_size after HF22 operator
-    // dedup and block-leader removal (update_from_block calls us directly with the pre-computed
-    // deduplicated list). Without this check the validator-selection loop walks past the end of
-    // the vector and calls uniform_distribution_portable(rng, 0) -> SIGFPE.
-    {
-        size_t needed = static_cast<size_t>(PULSE_QUORUM_NUM_VALIDATORS);
-        if (pulse_round > 0)
-            needed += 1;  // round>0: one candidate consumed as block producer before the loop
-        if (pulse_candidates.size() < needed) {
-            log::debug(
-                    logcat,
-                    "Insufficient pulse candidates ({}) for quorum (need {}); skipping Pulse",
-                    pulse_candidates.size(),
-                    needed);
-            return result;
-        }
+    // HF22: operator dedup (plus block-leader removal in round 0) can leave fewer candidates than
+    // active nodes; below PULSE_MIN_UNIQUE_OPERATORS the validator draw would walk off the end of
+    // the list, so skip Pulse for this block instead. Pre-HF22 candidate lists are never short.
+    if (hf_version >= hf::hf22_sn_policy && pulse_candidates.size() < PULSE_MIN_UNIQUE_OPERATORS) {
+        log::debug(
+                logcat,
+                "HF22 operator dedup left {} pulse candidates (need {}); skipping Pulse",
+                pulse_candidates.size(),
+                PULSE_MIN_UNIQUE_OPERATORS);
+        return result;
     }
 
     crypto::public_key block_producer;
@@ -3641,18 +3640,7 @@ service_nodes::quorum generate_pulse_quorum(
                     return !seen_ops.insert(p.second->operator_address).second;
                 });
         pulse_candidates.erase(end, pulse_candidates.end());
-        // After dedup, fall back to empty quorum if unique-operator candidates are insufficient.
-        // Prevents iterator overflow in generate_pulse_quorum_with_candidates when a single
-        // operator controls all registered SNs (e.g. single-operator private testnets).
-        const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
-        if (pulse_candidates.size() < MIN_NODE_COUNT) {
-            log::debug(
-                    logcat,
-                    "HF22 operator dedup: {} unique-operator candidates, need {}: skipping Pulse quorum",
-                    pulse_candidates.size(),
-                    MIN_NODE_COUNT);
-            return {};
-        }
+        // The PULSE_MIN_UNIQUE_OPERATORS check lives in generate_pulse_quorum_with_candidates.
     }
 
     service_nodes::quorum result = generate_pulse_quorum_with_candidates(
