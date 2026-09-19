@@ -42,6 +42,7 @@
 #include "address_book.h"
 #include "common/fs.h"
 #include "common/util.h"
+#include "networks.h"
 #include "common_defines.h"
 #include "logging/oxen_logger.h"
 #include "mnemonics/electrum-words.h"
@@ -2369,7 +2370,15 @@ bool WalletImpl::doInit(
     auto w = wallet();
     // Trust only local daemons; wallet2::init() would otherwise default trusted_daemon to true.
     const bool trusted = Utils::isAddressLocal(daemon_address);
-    if (!w->init(daemon_address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit, trusted))
+    std::string address = daemon_address;
+    // Honour use_ssl: wallet2::set_daemon() turns a bare host[:port] into http://, so give it an
+    // https scheme here (appending the default RPC port the same way set_daemon does).
+    if (ssl && !address.starts_with("http://") && !address.starts_with("https://")) {
+        if (address.find(':') == std::string::npos)
+            address += ":" + std::to_string(cryptonote::get_config(w->nettype()).RPC_DEFAULT_PORT);
+        address.insert(0, "https://");
+    }
+    if (!w->init(address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit, trusted))
         return false;
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
