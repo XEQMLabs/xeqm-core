@@ -14,6 +14,10 @@ inline constexpr std::array seeds = {
         "217.216.108.148:9230"sv, // seed-5.xeqmlabs.com
 };
 
+// HF22 authorized fallback miners (one dedicated key per host, secret loaded via
+// --fallback-miner-key-file). TODO(release): add the three production pubkeys before tagging.
+inline constexpr std::array<std::string_view, 0> fallback_miner_pubkeys = {};
+
 inline constexpr auto TARGET_BLOCK_TIME = 1min;
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::MAINNET,
@@ -68,6 +72,7 @@ inline constexpr network_config config{
         .PULSE_ROUND_TIMEOUT = 30s,
         .PULSE_MAX_START_ADJUSTMENT = 15s,
         .PULSE_MINER_FALLBACK_ROUNDS = 2,   // 2 * 30s = 60s: survival mode - resume fast via authorized fallback miner to protect SN uptime credit (HF22)
+        .FALLBACK_MINER_PUBKEYS = fallback_miner_pubkeys,
         .PULSE_MIN_SERVICE_NODES = 12,
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = 100'000'000,        // 0.1 XEQM (COIN = 1e9)

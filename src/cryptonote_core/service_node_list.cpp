@@ -50,6 +50,7 @@
 #include "blockchain_db/sqlite/db_sqlite.h"
 #include "bls/bls_crypto.h"
 #include "common/exception.h"
+#include "common/guts.h"
 #include "common/i18n.h"
 #include "common/lock.h"
 #include "common/random.h"
@@ -2815,34 +2816,18 @@ static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t he
     return true;
 }
 
-// Option A: returns the public spend key of the governance wallet for this nettype.
-// Fallback miner blocks (pulse era, no quorum) must carry a signature from the
-// corresponding private key.  Returns null_key when the governance address is unset
-// or unparseable (disables the check — open fallback mining).
-static crypto::public_key get_fallback_miner_pubkey(cryptonote::network_type nettype) {
-    static std::unordered_map<uint8_t, crypto::public_key> cache;
-    auto key = static_cast<uint8_t>(nettype);
-    auto it = cache.find(key);
-    if (it != cache.end())
-        return it->second;
-
-    const auto& conf = get_config(nettype);
-    if (conf.GOVERNANCE_WALLET_ADDRESS.empty() ||
-            conf.GOVERNANCE_WALLET_ADDRESS[0].empty()) {
-        cache[key] = crypto::null<crypto::public_key>;
-        return cache[key];
+// HF22: the network's authorized fallback miner keys (FALLBACK_MINER_PUBKEYS). Only reached for
+// miner blocks, so parsing per call is cheap and needs no shared cache.
+static std::vector<crypto::public_key> fallback_miner_pubkeys(cryptonote::network_type nettype) {
+    std::vector<crypto::public_key> keys;
+    for (std::string_view hex : get_config(nettype).FALLBACK_MINER_PUBKEYS) {
+        crypto::public_key pk;
+        if (tools::try_load_from_hex_guts(hex, pk))
+            keys.push_back(pk);
+        else
+            log::error(logcat, "Ignoring malformed FALLBACK_MINER_PUBKEYS entry: {}", hex);
     }
-
-    cryptonote::address_parse_info info{};
-    if (!cryptonote::get_account_address_from_str(
-                info, nettype, conf.GOVERNANCE_WALLET_ADDRESS[0])) {
-        log::warning(logcat, "Failed to parse governance address for fallback miner key");
-        cache[key] = crypto::null<crypto::public_key>;
-        return cache[key];
-    }
-
-    cache[key] = info.address.m_spend_public_key;
-    return cache[key];
+    return keys;
 }
 
 bool verify_block_components(
@@ -2896,48 +2881,57 @@ bool verify_block_components(
             return false;
         }
 
-        // HF22: fallback miner blocks must carry one governance authorization signature when
-        // FALLBACK_MINER_PUBKEY is configured (non-null). Pre-HF22 miner blocks are unsigned.
-        bool pulse_era_fallback = (block.major_version >= hf::hf22_sn_policy);
-        crypto::public_key fallback_pubkey =
-                pulse_era_fallback ? get_fallback_miner_pubkey(nettype)
-                                   : crypto::null<crypto::public_key>;
-        bool enforce_fallback_sig = (fallback_pubkey != crypto::null<crypto::public_key>);
-
-        if (enforce_fallback_sig) {
-            if (block.signatures.size() != 1) {
+        // HF22: a miner block is only valid as a fallback block carrying exactly one signature
+        // (voter_index FALLBACK_MINER_VOTER_INDEX) from an authorized fallback key. Pre-HF22
+        // miner blocks are unsigned.
+        if (block.major_version >= hf::hf22_sn_policy) {
+            const auto keys = fallback_miner_pubkeys(nettype);
+            if (keys.empty()) {
                 if (log_errors)
                     log::warning(
                             globallogcat,
-                            "Fallback miner {} must carry exactly 1 governance authorization "
-                            "signature, got {} on height {}",
+                            "Fallback miner {} rejected on height {}: no fallback miner keys are "
+                            "configured for this network",
                             block_type,
+                            height);
+                return false;
+            }
+            if (block.signatures.size() != 1 ||
+                block.signatures[0].voter_index != FALLBACK_MINER_VOTER_INDEX) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} must carry exactly 1 fallback authorization "
+                            "signature (voter_index {}), got {} on height {}",
+                            block_type,
+                            FALLBACK_MINER_VOTER_INDEX,
                             block.signatures.size(),
                             height);
                 return false;
             }
-            if (!crypto::check_signature(hash, fallback_pubkey, block.signatures[0].signature)) {
+            const auto& sig = block.signatures[0].signature;
+            bool authorized = std::any_of(keys.begin(), keys.end(), [&](const auto& pk) {
+                return crypto::check_signature(hash, pk, sig);
+            });
+            if (!authorized) {
                 if (log_errors)
                     log::warning(
                             globallogcat,
-                            "Fallback miner {} governance authorization signature invalid "
-                            "on height {}",
+                            "Fallback miner {} signature on height {} is not from an authorized "
+                            "fallback miner key",
                             block_type,
                             height);
                 return false;
             }
-        } else {
-            // FALLBACK_MINER_PUBKEY not set (or pre-pulse era): no signatures allowed.
-            if (block.signatures.size()) {
-                if (log_errors)
-                    log::warning(
-                            globallogcat,
-                            "Miner {} block given but unexpectedly has {} signatures on height {}",
-                            block_type,
-                            block.signatures.size(),
-                            height);
-                return false;
-            }
+        } else if (block.signatures.size()) {
+            if (log_errors)
+                log::warning(
+                        globallogcat,
+                        "Miner {} block given but unexpectedly has {} signatures on height {}",
+                        block_type,
+                        block.signatures.size(),
+                        height);
+            return false;
         }
 
         return true;

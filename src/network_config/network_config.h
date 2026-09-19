@@ -103,6 +103,9 @@ struct network_config final {
     // With FALLBACK_MINER_PUBKEY enforcement (Option A), this can be short.
     // Without it, a longer value reduces the exploit window for unauthorized miners.
     const size_t PULSE_MINER_FALLBACK_ROUNDS;
+    // HF22: hex public keys (crypto::public_key) whose signature authorizes a fallback miner block.
+    // Empty means no fallback miner blocks are accepted once HF22 is active.
+    const std::span<const std::string_view> FALLBACK_MINER_PUBKEYS;
     const size_t PULSE_MIN_SERVICE_NODES;
 
     constexpr std::chrono::seconds PULSE_MIN_TARGET_BLOCK_TIME() const {

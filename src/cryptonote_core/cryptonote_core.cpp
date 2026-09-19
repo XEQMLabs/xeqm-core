@@ -42,6 +42,8 @@ extern "C" {
 #endif
 
 #include <boost/algorithm/string.hpp>
+#include <algorithm>
+#include <cctype>
 #include <csignal>
 #include <unordered_set>
 
@@ -156,10 +158,16 @@ static const command_line::arg_flag arg_omq_quorumnet_public{
         "commands as if passed to --lmq-curve-public. "
         "Note that even without this option the quorumnet port can be used for RPC commands by "
         "--lmq-admin and --lmq-user pubkeys."};
-static const command_line::arg_descriptor<std::string> arg_fallback_miner_key = {
-        "fallback-miner-key",
-        "Hex-encoded spend secret key authorizing this daemon to produce fallback miner blocks "
-        "(Option A: required when GOVERNANCE_WALLET_ADDRESS is set on a pulse-era network)"};
+static const command_line::arg_descriptor<std::string> arg_fallback_miner_key_file = {
+        "fallback-miner-key-file",
+        "Path to a file holding the hex secret key (64 hex chars, keep it 0600) that authorizes "
+        "this daemon to produce HF22 fallback miner blocks; its public key must be listed in the "
+        "network's FALLBACK_MINER_PUBKEYS"};
+static const command_line::arg_descriptor<uint32_t> arg_fallback_miner_delay_rounds = {
+        "fallback-miner-delay-rounds",
+        "Pulse rounds to hold back past the fallback timestamp before this daemon produces a "
+        "fallback block (0 = primary miner; give each backup miner a larger value)",
+        0};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_provider = {
         "l2-provider",
         "Specify a provider HTTP or HTTPS URL to which this service node will query the Ethereum "
@@ -372,7 +380,8 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_oxend);
     command_line::add_arg(desc, arg_storage_server_port);
     command_line::add_arg(desc, arg_quorumnet_port);
-    command_line::add_arg(desc, arg_fallback_miner_key);
+    command_line::add_arg(desc, arg_fallback_miner_key_file);
+    command_line::add_arg(desc, arg_fallback_miner_delay_rounds);
 
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);
@@ -494,14 +503,19 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
         return false;
 
     {
-        auto key_hex = command_line::get_arg(vm, arg_fallback_miner_key);
-        if (!key_hex.empty()) {
-            if (!tools::try_load_from_hex_guts(key_hex, m_fallback_miner_key)) {
-                log::error(logcat, "--fallback-miner-key: invalid hex secret key");
+        auto key_file = command_line::get_arg(vm, arg_fallback_miner_key_file);
+        if (!key_file.empty()) {
+            m_fallback_miner_delay_rounds =
+                    command_line::get_arg(vm, arg_fallback_miner_delay_rounds);
+            if (!load_fallback_miner_key(tools::utf8_path(key_file)))
                 return false;
-            }
-            log::info(logcat, "Fallback miner key loaded (Option A enforcement active)");
         }
+        if (get_net_config().FALLBACK_MINER_PUBKEYS.empty() &&
+            get_hard_fork_heights(m_nettype, hf::hf22_sn_policy).first)
+            log::warning(
+                    logcat,
+                    "FALLBACK_MINER_PUBKEYS is empty for this network: no fallback miner blocks "
+                    "will be accepted once HF22 activates");
     }
 
     return true;
@@ -2396,6 +2410,82 @@ block_complete_entry get_block_complete_entry(block& b, tx_memory_pool& pool) {
     return bce;
 }
 //-----------------------------------------------------------------------------------------------
+bool core::load_fallback_miner_key(const fs::path& path) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec)) {
+        log::error(logcat, "--fallback-miner-key-file: {} is not a readable file", path.string());
+        return false;
+    }
+#ifndef _WIN32
+    auto perms = fs::status(path, ec).permissions();
+    if (!ec && (perms & (fs::perms::group_all | fs::perms::others_all)) != fs::perms::none)
+        log::warning(
+                logcat,
+                "--fallback-miner-key-file: {} is accessible by other users; chmod 600 it",
+                path.string());
+#endif
+    std::string hex;
+    if (!tools::slurp_file(path, hex)) {
+        log::error(logcat, "--fallback-miner-key-file: failed to read {}", path.string());
+        return false;
+    }
+    while (!hex.empty() && std::isspace(static_cast<unsigned char>(hex.back())))
+        hex.pop_back();
+    crypto::public_key pub;
+    if (!tools::try_load_from_hex_guts(hex, m_fallback_miner_key) ||
+        !crypto::secret_key_to_public_key(m_fallback_miner_key, pub)) {
+        m_fallback_miner_key = crypto::null<crypto::secret_key>;
+        log::error(logcat, "--fallback-miner-key-file: expected a 64-hex-character secret key");
+        return false;
+    }
+    const auto& allowed = get_net_config().FALLBACK_MINER_PUBKEYS;
+    bool authorized = std::any_of(allowed.begin(), allowed.end(), [&](std::string_view hexpk) {
+        crypto::public_key pk;
+        return tools::try_load_from_hex_guts(hexpk, pk) && pk == pub;
+    });
+    if (!authorized) {
+        m_fallback_miner_key = crypto::null<crypto::secret_key>;
+        log::error(
+                logcat,
+                "Fallback miner key {} is not in this network's FALLBACK_MINER_PUBKEYS; refusing "
+                "to start",
+                pub);
+        return false;
+    }
+    log::info(
+            logcat,
+            "Fallback miner key {} loaded (delay {} rounds)",
+            pub,
+            m_fallback_miner_delay_rounds);
+    return true;
+}
+//-----------------------------------------------------------------------------------------------
+// Staggered fallback miners: a backup holds its block back for its configured rounds past the
+// fallback timestamp, so the primary produces unless it is down.
+bool core::fallback_miner_may_produce(const block& b) {
+    if (m_fallback_miner_delay_rounds == 0)
+        return true;
+    const uint64_t height = b.get_height();
+    if (height == 0)
+        return true;
+    const uint64_t prev_ts = blockchain.db().get_block_timestamp(height - 1);
+    auto t = pulse::get_round_timings(blockchain, height, prev_ts);
+    if (!t)
+        return true;
+    const auto earliest = t->miner_fallback_timestamp +
+                          get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+    const auto now = pulse::clock::now();
+    if (now >= earliest)
+        return true;
+    log::debug(
+            logcat,
+            "Fallback miner holding block {} for {}s more (delay {} rounds)",
+            height,
+            std::chrono::duration_cast<std::chrono::seconds>(earliest - now).count(),
+            m_fallback_miner_delay_rounds);
+    return false;
+}
+//-----------------------------------------------------------------------------------------------
 bool core::handle_block_found(block& b, block_verification_context& bvc) {
     ZoneScoped;
     bvc = {};
@@ -2410,12 +2500,14 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
         // what gets relayed to peers, and get_block_hash excludes signatures so the hash is stable.
         if (b.major_version >= hf::hf22_sn_policy && !b.has_pulse() &&
                 m_fallback_miner_key != crypto::null<crypto::secret_key>) {
+            if (!fallback_miner_may_produce(b))
+                return false;
             crypto::public_key fallback_pub;
             crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
-            crypto::hash blk_hash = get_block_hash(b);
             crypto::signature sig;
-            crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
-            b.signatures = {service_nodes::quorum_signature{0xFFFF, sig}};
+            crypto::generate_signature(get_block_hash(b), fallback_pub, m_fallback_miner_key, sig);
+            b.signatures = {service_nodes::quorum_signature{
+                    service_nodes::FALLBACK_MINER_VOTER_INDEX, sig}};
         }
 
         try {
