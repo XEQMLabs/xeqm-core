@@ -118,9 +118,14 @@ void http_client::copy_params_from(const http_client& other) {
     timeout = other.timeout;
     auth = other.auth;
     proxy = other.proxy;
-    client_cert = other.client_cert;
+    // cpr's CertFile/KeyFile/CaInfo carry const paths (no copy assignment): rebuild them instead.
+    client_cert.reset();
+    if (other.client_cert)
+        client_cert.emplace(other.client_cert->first, other.client_cert->second);
     verify_https = other.verify_https;
-    ca_info = other.ca_info;
+    ca_info.reset();
+    if (other.ca_info)
+        ca_info.emplace(*other.ca_info);
     // Re-apply everything on our next request.
     apply_timeout = apply_auth = apply_proxy = apply_ssl = true;
 }
