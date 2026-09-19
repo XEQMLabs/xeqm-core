@@ -581,6 +581,19 @@ struct Wallet {
     virtual ConnectionStatus connected() const = 0;
     virtual void setTrustedDaemon(bool arg) = 0;
     virtual bool trustedDaemon() const = 0;
+
+    /**
+     * @brief setDaemonSslCaFile - PEM CA bundle used to verify the daemon's HTTPS certificate
+     * (empty = operating system CA store). Applies on the next request; may be called before or
+     * after init().
+     */
+    virtual void setDaemonSslCaFile(const std::string& path) = 0;
+
+    /**
+     * @brief setDaemonSslAllowAnyCert - disable HTTPS certificate verification. Insecure; only for
+     * testing against self-signed nodes.
+     */
+    virtual void setDaemonSslAllowAnyCert(bool allow) = 0;
     virtual uint64_t balance(uint32_t accountIndex = 0) const = 0;
     uint64_t balanceAll() const {
         uint64_t result = 0;

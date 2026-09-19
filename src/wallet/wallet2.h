@@ -744,6 +744,10 @@ class wallet2 {
             std::string proxy = "",
             bool trusted_daemon = true);
 
+    // Daemon HTTPS options; forwarded to the RPC and long-poll clients, applied on the next request.
+    void set_daemon_ssl_ca_file(std::string path);
+    void set_daemon_ssl_allow_any_cert(bool allow);
+
     void stop() {
         m_run.store(false, std::memory_order_relaxed);
 #ifdef WALLET_ENABLE_MMS

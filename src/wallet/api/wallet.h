@@ -132,6 +132,8 @@ class WalletImpl : public Wallet {
     ConnectionStatus connected() const override;
     void setTrustedDaemon(bool arg) override;
     bool trustedDaemon() const override;
+    void setDaemonSslCaFile(const std::string& path) override;
+    void setDaemonSslAllowAnyCert(bool allow) override;
     uint64_t balance(uint32_t accountIndex = 0) const override;
     uint64_t unlockedBalance(uint32_t accountIndex = 0) const override;
     uint64_t accruedBalance(std::optional<std::string> address = std::nullopt) const override;

@@ -2202,6 +2202,16 @@ bool WalletImpl::trustedDaemon() const {
 }
 
 EXPORT
+void WalletImpl::setDaemonSslCaFile(const std::string& path) {
+    wallet()->set_daemon_ssl_ca_file(path);
+}
+
+EXPORT
+void WalletImpl::setDaemonSslAllowAnyCert(bool allow) {
+    wallet()->set_daemon_ssl_allow_any_cert(allow);
+}
+
+EXPORT
 bool WalletImpl::watchOnly() const {
     return wallet()->watch_only();
 }

@@ -138,7 +138,8 @@ class http_client {
     /// insecure.
     void set_insecure_https(bool insecure);
 
-    /// Copies parameters (base url, timeout, authentication) from another http_client.
+    /// Copies parameters (base url, timeout, authentication, proxy, HTTPS options) from another
+    /// http_client.
     void copy_params_from(const http_client& other);
 
     /// Makes a JSON-RPC request; that is, a POST request to /json_rpc with a proper JSON-RPC
