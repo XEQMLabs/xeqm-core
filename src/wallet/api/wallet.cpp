@@ -2289,7 +2289,9 @@ void WalletImpl::doRefresh() {
                 if (m_history->count() == 0) {
                     m_history->refresh();
                 }
-                w->find_and_save_rings(false);
+                // Ring fetch reveals every outgoing txid to the daemon; trusted daemons only.
+                if (trustedDaemon())
+                    w->find_and_save_rings(false);
             } else {
                 log::trace(logcat, "{}: skipping refresh - daemon is not synced", __FUNCTION__);
             }
@@ -2365,7 +2367,9 @@ EXPORT
 bool WalletImpl::doInit(
         const std::string& daemon_address, uint64_t upper_transaction_size_limit, bool ssl) {
     auto w = wallet();
-    if (!w->init(daemon_address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit))
+    // Trust only local daemons; wallet2::init() would otherwise default trusted_daemon to true.
+    const bool trusted = Utils::isAddressLocal(daemon_address);
+    if (!w->init(daemon_address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit, trusted))
         return false;
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
@@ -2387,7 +2391,7 @@ bool WalletImpl::doInit(
                 __FUNCTION__,
                 w->get_refresh_from_block_height());
 
-    if (Utils::isAddressLocal(daemon_address)) {
+    if (trusted) {
         this->setTrustedDaemon(true);
         m_refreshIntervalMillis = DEFAULT_REFRESH_INTERVAL_MILLIS;
     } else {

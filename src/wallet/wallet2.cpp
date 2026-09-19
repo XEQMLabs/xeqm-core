@@ -6580,10 +6580,13 @@ void wallet2::load(
     if (get_num_subaddress_accounts() == 0)
         add_subaddress_account(tr("Primary account"));
 
-    try {
-        find_and_save_rings(false);
-    } catch (const std::exception& e) {
-        log::error(logcat, "Failed to save rings, will try again next time");
+    // Ring fetching posts every outgoing txid to the daemon; only do it against a trusted one.
+    if (is_trusted_daemon()) {
+        try {
+            find_and_save_rings(false);
+        } catch (const std::exception& e) {
+            log::error(logcat, "Failed to save rings, will try again next time");
+        }
     }
 
 #ifdef WALLET_ENABLE_MMS
@@ -8955,6 +8958,11 @@ bool wallet2::find_and_save_rings(bool force) {
         return true;
     if (!m_ringdb)
         return false;
+    // Never reveal the outgoing tx list to an untrusted daemon (monero PR #10015).
+    if (!is_trusted_daemon()) {
+        log::debug(logcat, "Not fetching rings: daemon is not trusted");
+        return false;
+    }
 
     log::debug(logcat, "Finding and saving rings...");
 
