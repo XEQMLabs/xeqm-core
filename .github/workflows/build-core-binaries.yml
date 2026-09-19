@@ -942,7 +942,8 @@ jobs:
           name: ${{ steps.relmeta.outputs.title }}
           files: release-assets/**/*
           draft: false
-          prerelease: false
+          # Release-candidate / QA tags (core-v1.1.0-rc1, -qa1, -pre1) publish as prereleases.
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
           generate_release_notes: false
           body: |
             XEQM Core binary release.
