@@ -156,6 +156,10 @@ static const command_line::arg_flag arg_omq_quorumnet_public{
         "commands as if passed to --lmq-curve-public. "
         "Note that even without this option the quorumnet port can be used for RPC commands by "
         "--lmq-admin and --lmq-user pubkeys."};
+static const command_line::arg_descriptor<std::string> arg_fallback_miner_key = {
+        "fallback-miner-key",
+        "Hex-encoded spend secret key authorizing this daemon to produce fallback miner blocks "
+        "(Option A: required when GOVERNANCE_WALLET_ADDRESS is set on a pulse-era network)"};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_provider = {
         "l2-provider",
         "Specify a provider HTTP or HTTPS URL to which this service node will query the Ethereum "
@@ -368,6 +372,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_oxend);
     command_line::add_arg(desc, arg_storage_server_port);
     command_line::add_arg(desc, arg_quorumnet_port);
+    command_line::add_arg(desc, arg_fallback_miner_key);
 
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);
@@ -461,13 +466,13 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
         if (command_line::get_arg(vm, arg_l2_provider).empty() &&
             command_line::get_arg(vm, arg_l2_oxend).empty()) {
-            // XEQ: L2 connectivity is only required once the chain reaches the ETH_BLS era (HF21+).
-            // Before that, allow service nodes to run without any L2 provider configuration.
-            //
-            // NOTE: We use "latest known" hardfork schedule here (rather than current height)
-            // because this check runs during startup config validation.
-            auto latest_hf_known = get_latest_hard_fork(m_nettype);
-            if (latest_hf_known.version >= hf::hf21_eth) {
+            // XEQ: L2 connectivity is only required when the ETH transition HF (hf20_eth_transition)
+            // is actually present in this network's hard fork schedule. XEQM mainnet/testnet uses
+            // native XEQM staking and never activates hf20_eth_transition, so no L2 is needed.
+            // We intentionally avoid a raw enum-value comparison because hf22_sn_policy has a
+            // higher numeric value than hf21_eth even though it is unrelated to ETH staking.
+            auto [eth_hf_start, _unused] = get_hard_fork_heights(m_nettype, hf::hf20_eth_transition);
+            if (eth_hf_start.has_value()) {
                 log::error(
                         logcat,
                         "At least one ethereum L2 provider (or L2 oxend proxy) must be specified "
@@ -487,6 +492,18 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
     if (!mocknet_read_cli_for_mocknet_arg(vm, m_service_node))
         return false;
+
+    {
+        auto key_hex = command_line::get_arg(vm, arg_fallback_miner_key);
+        if (!key_hex.empty()) {
+            if (!tools::try_load_from_hex_guts(key_hex, m_fallback_miner_key)) {
+                log::error(logcat, "--fallback-miner-key: invalid hex secret key");
+                return false;
+            }
+            log::info(logcat, "Fallback miner key loaded (Option A enforcement active)");
+        }
+    }
+
     return true;
 }
 //-----------------------------------------------------------------------------------------------
@@ -2389,6 +2406,21 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             miner.resume();
         };
 
+        // Option A: sign fallback miner blocks with the governance spend key BEFORE
+        // serializing for broadcast. get_block_complete_entry serializes b into blocks[0],
+        // and blocks[0] is what gets relayed to peers via NOTIFY_NEW_FLUFFY_BLOCK. Signing
+        // after serialization leaves blocks[0] unsigned, causing peers to reject the relay.
+        // Note: get_block_hash excludes signatures so the hash is stable before/after signing.
+        if (b.major_version >= hf::hf16_pulse &&
+                m_fallback_miner_key != crypto::null<crypto::secret_key>) {
+            crypto::public_key fallback_pub;
+            crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
+            crypto::hash blk_hash = get_block_hash(b);
+            crypto::signature sig;
+            crypto::generate_signature(blk_hash, fallback_pub, m_fallback_miner_key, sig);
+            b.signatures = {service_nodes::quorum_signature{0xFFFF, sig}};
+        }
+
         try {
             blocks.push_back(get_block_complete_entry(b, mempool));
         } catch (const std::exception& e) {
@@ -2400,6 +2432,7 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             log::error(logcat, "Block found, but failed to prepare to add");
             return false;
         }
+
         // add_new_block will verify block and set bvc.m_verification_failed accordingly
         add_new_block(b, bvc, nullptr /*checkpoint*/);
         cleanup_handle_incoming_blocks(true);

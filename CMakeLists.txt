@@ -796,13 +796,13 @@ endif()
 
 set(OLD_LIB_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
 if(STATIC)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+  set(Boost_NO_BOOST_CMAKE ON)
   if(MINGW)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-    set(Boost_NO_BOOST_CMAKE ON)
   endif()
 
   set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_USE_STATIC_RUNTIME ON)
+  # set(Boost_USE_STATIC_RUNTIME ON)  # disabled: Ubuntu .a files use shared runtime
 endif()
 set(Boost_USE_MULTITHREADED TRUE) # Needed for macOS, at least, and won't hurt elsewhere
 

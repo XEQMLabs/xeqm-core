@@ -982,7 +982,7 @@ std::optional<timings> get_round_timings(
             times->prev_timestamp + conf.TARGET_BLOCK_TIME - conf.PULSE_MAX_START_ADJUSTMENT,
             times->prev_timestamp + conf.TARGET_BLOCK_TIME + conf.PULSE_MAX_START_ADJUSTMENT);
 
-    times->miner_fallback_timestamp = times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * 255);
+    times->miner_fallback_timestamp = times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * conf.PULSE_MINER_FALLBACK_ROUNDS);
     return times;
 }
 

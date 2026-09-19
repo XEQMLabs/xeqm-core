@@ -99,6 +99,10 @@ struct network_config final {
     // PULSE_QUORUM_SIZE.  The network will stall (and require manual mining to resume) if this
     // threshold is reached.  This is intentionally designed to trigger (and stall the network) if
     // active nodes numbers drop to absurdly low levels.
+    // Number of failed Pulse rounds before a miner block is accepted as fallback.
+    // With FALLBACK_MINER_PUBKEY enforcement (Option A), this can be short.
+    // Without it, a longer value reduces the exploit window for unauthorized miners.
+    const size_t PULSE_MINER_FALLBACK_ROUNDS;
     const size_t PULSE_MIN_SERVICE_NODES;
 
     constexpr std::chrono::seconds PULSE_MIN_TARGET_BLOCK_TIME() const {

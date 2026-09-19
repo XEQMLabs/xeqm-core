@@ -37,6 +37,7 @@
 #include <zstd.h>
 
 #include <algorithm>
+#include <unordered_set>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/seed_seq.hpp>
 #include <chrono>
@@ -1333,9 +1334,10 @@ bool service_node_list::state_t::process_state_change_tx(
                                                              // in key_image_blacklist_entry
                         key_image_blacklist_entry& entry = key_image_blacklist.back();
                         entry.key_image = contribution.key_image;
-                        entry.unlock_height =
-                                block_height +
-                                netconf.BLOCKS_IN(netconf.DEREGISTRATION_LOCK_DURATION);
+                        auto lock_dur = (hf_version >= hf::hf22_sn_policy)
+                                              ? std::chrono::hours(14 * 24)
+                                              : netconf.DEREGISTRATION_LOCK_DURATION;
+                        entry.unlock_height = block_height + netconf.BLOCKS_IN(lock_dur);
                         entry.amount = contribution.amount;
                     }
                 }
@@ -2813,7 +2815,37 @@ static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t he
     return true;
 }
 
-static bool verify_block_components(
+// Option A: returns the public spend key of the governance wallet for this nettype.
+// Fallback miner blocks (pulse era, no quorum) must carry a signature from the
+// corresponding private key.  Returns null_key when the governance address is unset
+// or unparseable (disables the check — open fallback mining).
+static crypto::public_key get_fallback_miner_pubkey(cryptonote::network_type nettype) {
+    static std::unordered_map<uint8_t, crypto::public_key> cache;
+    auto key = static_cast<uint8_t>(nettype);
+    auto it = cache.find(key);
+    if (it != cache.end())
+        return it->second;
+
+    const auto& conf = get_config(nettype);
+    if (conf.GOVERNANCE_WALLET_ADDRESS.empty() ||
+            conf.GOVERNANCE_WALLET_ADDRESS[0].empty()) {
+        cache[key] = crypto::null<crypto::public_key>;
+        return cache[key];
+    }
+
+    cryptonote::address_parse_info info{};
+    if (!cryptonote::get_account_address_from_str(
+                info, nettype, conf.GOVERNANCE_WALLET_ADDRESS[0])) {
+        log::warning(logcat, "Failed to parse governance address for fallback miner key");
+        cache[key] = crypto::null<crypto::public_key>;
+        return cache[key];
+    }
+
+    cache[key] = info.address.m_spend_public_key;
+    return cache[key];
+}
+
+bool verify_block_components(
         cryptonote::network_type nettype,
         cryptonote::block const& block,
         bool miner_block,
@@ -2864,15 +2896,48 @@ static bool verify_block_components(
             return false;
         }
 
-        if (block.signatures.size()) {
-            if (log_errors)
-                log::warning(
-                        globallogcat,
-                        "Miner {} block given but unexpectedly has {} signatures on height {}",
-                        block_type,
-                        block.signatures.size(),
-                        height);
-            return false;
+        // Option A: pulse-era fallback miner blocks must carry one governance authorization
+        // signature when FALLBACK_MINER_PUBKEY is configured (non-null).
+        bool pulse_era_fallback = (block.major_version >= hf::hf16_pulse);
+        crypto::public_key fallback_pubkey =
+                pulse_era_fallback ? get_fallback_miner_pubkey(nettype)
+                                   : crypto::null<crypto::public_key>;
+        bool enforce_fallback_sig = (fallback_pubkey != crypto::null<crypto::public_key>);
+
+        if (enforce_fallback_sig) {
+            if (block.signatures.size() != 1) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} must carry exactly 1 governance authorization "
+                            "signature, got {} on height {}",
+                            block_type,
+                            block.signatures.size(),
+                            height);
+                return false;
+            }
+            if (!crypto::check_signature(hash, fallback_pubkey, block.signatures[0].signature)) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} governance authorization signature invalid "
+                            "on height {}",
+                            block_type,
+                            height);
+                return false;
+            }
+        } else {
+            // FALLBACK_MINER_PUBKEY not set (or pre-pulse era): no signatures allowed.
+            if (block.signatures.size()) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Miner {} block given but unexpectedly has {} signatures on height {}",
+                            block_type,
+                            block.signatures.size(),
+                            height);
+                return false;
+            }
         }
 
         return true;
@@ -3485,6 +3550,24 @@ static service_nodes::quorum generate_pulse_quorum_with_candidates(
         return result;
     }
 
+    // Guard: pulse_candidates may be smaller than active_snode_list_size after HF22 operator
+    // dedup and block-leader removal (update_from_block calls us directly with the pre-computed
+    // deduplicated list). Without this check the validator-selection loop walks past the end of
+    // the vector and calls uniform_distribution_portable(rng, 0) -> SIGFPE.
+    {
+        size_t needed = static_cast<size_t>(PULSE_QUORUM_NUM_VALIDATORS);
+        if (pulse_round > 0)
+            needed += 1;  // round>0: one candidate consumed as block producer before the loop
+        if (pulse_candidates.size() < needed) {
+            log::debug(
+                    logcat,
+                    "Insufficient pulse candidates ({}) for quorum (need {}); skipping Pulse",
+                    pulse_candidates.size(),
+                    needed);
+            return result;
+        }
+    }
+
     crypto::public_key block_producer;
     if (pulse_round == 0) {
         block_producer = block_leader;
@@ -3554,6 +3637,29 @@ service_nodes::quorum generate_pulse_quorum(
     TracyCZoneN(sort_pulse_candidates, "Sort pulse candidates", true);
     std::sort(pulse_candidates.begin(), pulse_candidates.end(), pulse_candidates_sorter);
     TracyCZoneEnd(sort_pulse_candidates);
+
+    // HF22: deduplicate pulse candidates by operator address (1 seat per operator per quorum).
+    if (hf_version >= hf::hf22_sn_policy) {
+        std::unordered_set<cryptonote::account_public_address> seen_ops;
+        auto end = std::remove_if(
+                pulse_candidates.begin(), pulse_candidates.end(),
+                [&seen_ops](const pubkey_and_sninfo& p) {
+                    return !seen_ops.insert(p.second->operator_address).second;
+                });
+        pulse_candidates.erase(end, pulse_candidates.end());
+        // After dedup, fall back to empty quorum if unique-operator candidates are insufficient.
+        // Prevents iterator overflow in generate_pulse_quorum_with_candidates when a single
+        // operator controls all registered SNs (e.g. single-operator private testnets).
+        const size_t MIN_NODE_COUNT = get_config(nettype).PULSE_MIN_SERVICE_NODES;
+        if (pulse_candidates.size() < MIN_NODE_COUNT) {
+            log::debug(
+                    logcat,
+                    "HF22 operator dedup: {} unique-operator candidates, need {}: skipping Pulse quorum",
+                    pulse_candidates.size(),
+                    MIN_NODE_COUNT);
+            return {};
+        }
+    }
 
     service_nodes::quorum result = generate_pulse_quorum_with_candidates(
             nettype,
@@ -3676,8 +3782,19 @@ static void generate_other_quorums(
         quorum->workers.reserve(num_workers);
 
         size_t i = 0;
-        for (; i < num_validators; i++) {
-            quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+        if (hf_version >= hf::hf22_sn_policy && num_validators > 0) {
+            // HF22: deduplicate validators by operator address (1 seat per operator per quorum).
+            std::unordered_set<cryptonote::account_public_address> seen_ops;
+            for (size_t k = 0; k < num_validators; k++) {
+                const auto& entry = active_snode_list[pub_keys_indexes[k]];
+                if (seen_ops.insert(entry.info->operator_address).second)
+                    quorum->validators.push_back(entry.pubkey);
+            }
+            i = num_validators;  // workers still start at original offset
+        } else {
+            for (; i < num_validators; i++) {
+                quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+            }
         }
 
         for (; i < num_validators + num_workers; i++) {
@@ -4003,6 +4120,19 @@ block_add_result service_node_list::state_t::update_from_block(
                         break;
                     }
                 }
+            }
+
+            // HF22: deduplicate by operator address, matching generate_pulse_quorum()
+            if (hf_version >= hf::hf22_sn_policy) {
+                std::unordered_set<cryptonote::account_public_address> seen_ops;
+                auto end = std::remove_if(
+                        pre_block_precomputed.pulse_candidates.begin(),
+                        pre_block_precomputed.pulse_candidates.end(),
+                        [&seen_ops](const pubkey_and_sninfo& p) {
+                            return !seen_ops.insert(p.second->operator_address).second;
+                        });
+                pre_block_precomputed.pulse_candidates.erase(
+                        end, pre_block_precomputed.pulse_candidates.end());
             }
         }
 

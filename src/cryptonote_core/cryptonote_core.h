@@ -910,6 +910,7 @@ class core final {
     uint64_t m_target_blockchain_height;  //!< blockchain height target
 
     network_type m_nettype;  //!< which network are we on?
+    crypto::secret_key m_fallback_miner_key{};  //!< Option A: signs fallback miner blocks
 
     fs::path m_checkpoints_path;            //!< path to json checkpoints file
     time_t m_last_json_checkpoints_update;  //!< time when json checkpoints were last updated
