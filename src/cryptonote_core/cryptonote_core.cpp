@@ -2406,12 +2406,9 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             miner.resume();
         };
 
-        // Option A: sign fallback miner blocks with the governance spend key BEFORE
-        // serializing for broadcast. get_block_complete_entry serializes b into blocks[0],
-        // and blocks[0] is what gets relayed to peers via NOTIFY_NEW_FLUFFY_BLOCK. Signing
-        // after serialization leaves blocks[0] unsigned, causing peers to reject the relay.
-        // Note: get_block_hash excludes signatures so the hash is stable before/after signing.
-        if (b.major_version >= hf::hf16_pulse && !b.has_pulse() &&
+        // HF22 fallback miner blocks are signed BEFORE serializing for broadcast: blocks[0] is
+        // what gets relayed to peers, and get_block_hash excludes signatures so the hash is stable.
+        if (b.major_version >= hf::hf22_sn_policy && !b.has_pulse() &&
                 m_fallback_miner_key != crypto::null<crypto::secret_key>) {
             crypto::public_key fallback_pub;
             crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);

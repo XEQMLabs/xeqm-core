@@ -982,7 +982,13 @@ std::optional<timings> get_round_timings(
             times->prev_timestamp + conf.TARGET_BLOCK_TIME - conf.PULSE_MAX_START_ADJUSTMENT,
             times->prev_timestamp + conf.TARGET_BLOCK_TIME + conf.PULSE_MAX_START_ADJUSTMENT);
 
-    times->miner_fallback_timestamp = times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * conf.PULSE_MINER_FALLBACK_ROUNDS);
+    // HF22 shortens the miner fallback window; blocks before the fork keep the original 255 rounds.
+    const size_t fallback_rounds =
+            blockchain.get_network_version(block_height) >= cryptonote::hf::hf22_sn_policy
+                    ? conf.PULSE_MINER_FALLBACK_ROUNDS
+                    : 255;
+    times->miner_fallback_timestamp =
+            times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * fallback_rounds);
     return times;
 }
 

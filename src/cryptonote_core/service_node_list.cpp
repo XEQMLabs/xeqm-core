@@ -2896,9 +2896,9 @@ bool verify_block_components(
             return false;
         }
 
-        // Option A: pulse-era fallback miner blocks must carry one governance authorization
-        // signature when FALLBACK_MINER_PUBKEY is configured (non-null).
-        bool pulse_era_fallback = (block.major_version >= hf::hf16_pulse);
+        // HF22: fallback miner blocks must carry one governance authorization signature when
+        // FALLBACK_MINER_PUBKEY is configured (non-null). Pre-HF22 miner blocks are unsigned.
+        bool pulse_era_fallback = (block.major_version >= hf::hf22_sn_policy);
         crypto::public_key fallback_pubkey =
                 pulse_era_fallback ? get_fallback_miner_pubkey(nettype)
                                    : crypto::null<crypto::public_key>;
