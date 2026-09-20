@@ -879,8 +879,9 @@ endif()
 
 add_static_target(CURL::libcurl curl_external libcurl.a )
 set(libcurl_link_libs ${curl_ssl_backend} zlib libidn2::libidn2)
-if(CMAKE_CROSSCOMPILING AND ARCH_TRIPLET MATCHES mingw)
-  # curl >= 8.20 links the Windows SSPI/Schannel libraries directly instead of loading them at runtime.
+if(WIN32)
+  # Native MSYS2 builds are not "cross-compiling", so key this on WIN32 (true for both). curl >= 8.20
+  # links the Windows SSPI/Schannel libraries directly instead of loading them at runtime.
   list(APPEND libcurl_link_libs ws2_32;bcrypt;secur32;crypt32;advapi32)
 elseif(APPLE)
   list(APPEND libcurl_link_libs "-framework SystemConfiguration -framework Security")
