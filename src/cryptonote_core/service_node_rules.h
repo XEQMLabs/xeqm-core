@@ -62,10 +62,16 @@ constexpr uint16_t pulse_validator_bit_mask() {
 // deregistration count down.  (Note that it is possible for a server to slightly exceed its
 // decommission time: the first quorum test after the credit expires determines whether the server
 // gets recommissioned or decommissioned).
+// ==== HARNESS TESTNET ONLY (hf22-harness branch) — DO NOT MERGE TO A RELEASE BRANCH ====
+// Fast-dereg knob so uptime-proof / dereg-lock validation runs complete in minutes instead of
+// ~48h. These durations are converted to blocks per-network via conf.BLOCKS_IN(), so on the
+// private 5s-block testnet a stopped SN decommissions then deregisters within ~5 minutes.
+// RELEASE VALUES (restore before any release build): INITIAL 12h, MAX 48h, MINIMUM 2h.
 inline constexpr auto DECOMMISSION_CREDIT_PER_DAY = 24 * 60min / 30;  // 24h credit per 30 days
-inline constexpr auto DECOMMISSION_INITIAL_CREDIT = 12h;
-inline constexpr auto DECOMMISSION_MAX_CREDIT = 48h;
-inline constexpr auto DECOMMISSION_MINIMUM = 2h;
+inline constexpr auto DECOMMISSION_INITIAL_CREDIT = 5min;   // release: 12h
+inline constexpr auto DECOMMISSION_MAX_CREDIT     = 10min;  // release: 48h
+inline constexpr auto DECOMMISSION_MINIMUM        = 2min;   // release: 2h
+// ==== END HARNESS-ONLY fast-dereg knob ====
 
 static_assert(
         DECOMMISSION_INITIAL_CREDIT <= DECOMMISSION_MAX_CREDIT,
