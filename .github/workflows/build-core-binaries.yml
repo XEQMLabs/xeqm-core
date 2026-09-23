@@ -941,8 +941,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.relmeta.outputs.title }}
           files: release-assets/**/*
-          draft: false
-          # Release-candidate / QA tags (core-v1.1.0-rc1, -qa1, -pre1) publish as prereleases.
+          # Pre-release tags (-rc/-qa/-pre) publish as a DRAFT so binaries are not public before the
+          # official release; only a final tag (core-v1.1.0) publishes publicly.
+          draft: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
           generate_release_notes: false
           body: |
