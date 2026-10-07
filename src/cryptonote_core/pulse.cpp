@@ -948,7 +948,17 @@ namespace {
 
 // TODO(doyle): Update pulse::perpare_for_round with this function after the hard fork and sanity
 // check it on testnet.
-size_t max_rounds(cryptonote::network_type nettype, cryptonote::hf hf_version) {
+size_t max_rounds(
+        cryptonote::network_type nettype, cryptonote::hf hf_version, uint8_t snode_revision) {
+    // Pulse stall-recovery (hf22_sn_policy snode_revision 1): raise the miner-fallback round cap so
+    // a failed round re-rolls the quorum a few more times (each round draws a fresh quorum + leader)
+    // before handing off to the slow PoW fallback. At HF22 rev0 the cap was 2 (~60s -> miner); with
+    // ~22% round-0 failures driven by one unreliable operator's validators, that sent ~10% of blocks
+    // to the slow miner (3-9min gaps). 4 rounds rescues most of those via re-roll while keeping the
+    // fallback safety net, and reduces dependence on the fallback miner being permanently up.
+    // TODO(team): promote the 4 to a per-network netconf field if per-network tuning is desired.
+    if (cryptonote::feature::pulse_recovery(hf_version, snode_revision))
+        return 4;
     return hf_version >= cryptonote::hf::hf22_sn_policy
                  ? get_config(nettype).PULSE_MINER_FALLBACK_ROUNDS
                  : 255;
@@ -957,6 +967,7 @@ size_t max_rounds(cryptonote::network_type nettype, cryptonote::hf hf_version) {
 bool convert_time_to_round(
         cryptonote::network_type nettype,
         cryptonote::hf hf_version,
+        uint8_t snode_revision,
         time_point const& time,
         time_point const& r0_timestamp,
         uint8_t* round) {
@@ -964,7 +975,7 @@ bool convert_time_to_round(
     size_t result_usize = time_since_round_started / get_config(nettype).PULSE_ROUND_TIMEOUT;
     if (round)
         *round = static_cast<uint8_t>(std::min<size_t>(result_usize, 255));
-    return result_usize < max_rounds(nettype, hf_version);
+    return result_usize < max_rounds(nettype, hf_version, snode_revision);
 }
 
 std::optional<timings> get_round_timings(
@@ -990,11 +1001,13 @@ std::optional<timings> get_round_timings(
             times->prev_timestamp + conf.TARGET_BLOCK_TIME - conf.PULSE_MAX_START_ADJUSTMENT,
             times->prev_timestamp + conf.TARGET_BLOCK_TIME + conf.PULSE_MAX_START_ADJUSTMENT);
 
-    // HF22 shortens the miner fallback window; blocks before the fork keep the original 255 rounds.
+    // HF22 rev0 shortened the miner-fallback window (255 -> 2); the rev1 Pulse-recovery relaxes it
+    // (see max_rounds). Use the single max_rounds() source so block production and validation agree
+    // at every hard fork.
+    auto [tim_version, tim_revision] =
+            get_network_version_revision(blockchain.nettype(), block_height);
     const size_t fallback_rounds =
-            blockchain.get_network_version(block_height) >= cryptonote::hf::hf22_sn_policy
-                    ? conf.PULSE_MINER_FALLBACK_ROUNDS
-                    : 255;
+            max_rounds(blockchain.nettype(), tim_version, tim_revision);
     times->miner_fallback_timestamp =
             times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * fallback_rounds);
     return times;
@@ -1355,7 +1368,9 @@ namespace {
     round_state pulse_impl::prepare_for_round() {
         auto& blockchain = core.blockchain;
         auto& conf = core.get_net_config();
-        const size_t max_round_count = max_rounds(conf.NETWORK_TYPE, blockchain.get_network_version());
+        auto [pfr_version, pfr_revision] = get_network_version_revision(
+                conf.NETWORK_TYPE, blockchain.get_current_blockchain_height());
+        const size_t max_round_count = max_rounds(conf.NETWORK_TYPE, pfr_version, pfr_revision);
         //
         // NOTE: Clear Round Data
         //

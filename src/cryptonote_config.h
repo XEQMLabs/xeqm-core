@@ -307,6 +307,18 @@ namespace feature {
     constexpr auto ETH_BLS = hf::hf21_eth;
     constexpr auto SN_PK_IS_ED25519 = hf::hf21_eth;
 
+    // Pulse stall-recovery (raise the miner-fallback round cap 2 -> 4 so a failed round re-rolls
+    // the quorum a few more times, and switch the authorized fallback block from slow PoW to a
+    // direct signature). Shipped as a snode_revision bump of hf22_sn_policy (the on-chain major
+    // version STAYS 22, below ETH_BLS) so it does NOT trip the ETH/L2 block-template requirement
+    // and does not consume a new major fork number. Active once a network's hard-fork table lists
+    // hf22_sn_policy at snode_revision >= 1. XEQM does not run the ETH/L2 path, so there is never a
+    // major version above hf22_sn_policy; the first clause only future-proofs the predicate.
+    inline constexpr bool pulse_recovery(hf version, uint8_t snode_revision) {
+        return version > hf::hf22_sn_policy ||
+               (version == hf::hf22_sn_policy && snode_revision >= 1);
+    }
+
     // Sentinels: inserting a new hf entry before hf20_eth_transition or hf21_eth
     // silently shifts every >= comparison against these aliases (~40 sites for ETH_BLS).
     // Root cause of HF20 mainnet stall (issues #30 / #32). If intentionally renumbering,

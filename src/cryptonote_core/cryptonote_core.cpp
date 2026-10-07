@@ -1351,6 +1351,10 @@ void core::start_oxenmq() {
         m_omq->add_timer([this]() { check_service_node_time(); }, 5s, false);
         m_omq->add_timer([this]() { check_service_node_ip_address(); }, 15min, false);
     }
+    // HF23: authorized fallback nodes emit the signed (PoW-free) fallback block when Pulse stalls.
+    // Registered only when a fallback miner key is loaded; the handler is inert before HF23.
+    if (m_fallback_miner_key != crypto::null<crypto::secret_key>)
+        m_omq->add_timer([this]() { try_produce_fallback_block(); }, 1s, false);
     m_omq->start();
 
     // This forces an IP check after initialization instead of deferring it 15 minutes.
@@ -2484,6 +2488,74 @@ bool core::fallback_miner_may_produce(const block& b) {
             std::chrono::duration_cast<std::chrono::seconds>(earliest - now).count(),
             m_fallback_miner_delay_rounds);
     return false;
+}
+//-----------------------------------------------------------------------------------------------
+void core::try_produce_fallback_block() {
+    // Pulse-recovery (hf22_sn_policy snode_revision 1): pure signature-based Pulse fallback. When a
+    // Pulse round has failed, an authorized fallback node emits the next block directly - built as an
+    // ordinary (non-Pulse) block, signed with its fallback key in handle_block_found, and accepted
+    // without PoW by verify_block_pow in the Pulse-recovery era. No mining. Runs on a single-threaded
+    // 1s OMQ timer (no overlap), and handle_block_found is self-locking. Inert before Pulse-recovery
+    // activates; only registered when a fallback key is loaded.
+    const uint64_t height = blockchain.get_current_blockchain_height();  // height of the next block
+    if (height == 0)
+        return;
+    if (auto [ver, rev] = get_network_version_revision(blockchain.nettype(), height);
+        !feature::pulse_recovery(ver, rev))
+        return;
+    if (height <= m_last_fallback_height)
+        return;  // already emitted a fallback for this height
+
+    // Cheap timing gate first, so we don't build a full template every tick: only proceed once
+    // Pulse's fallback window for this height, plus this node's stagger delay, has elapsed.
+    const uint64_t prev_ts = blockchain.db().get_block_timestamp(height - 1);
+    if (auto t = pulse::get_round_timings(blockchain, height, prev_ts)) {
+        const auto earliest = t->miner_fallback_timestamp +
+                              get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+        if (pulse::clock::now() < earliest)
+            return;
+    }
+
+    // Reward recipient is immaterial: the per-block coinbase is 0 under reward batching (HF16+);
+    // rewards batch to service nodes via the block leader. The governance address is used purely as
+    // a valid placeholder for the zero-value coinbase.
+    cryptonote::address_parse_info payout{};
+    if (!cryptonote::get_account_address_from_str(
+                payout, m_nettype, get_config(m_nettype).GOVERNANCE_WALLET_ADDRESS[0]))
+        return;
+
+    cryptonote::block b{};
+    cryptonote::difficulty_type diffic = 0;
+    uint64_t tmpl_height = 0, expected_reward = 0;
+    if (!blockchain.create_next_miner_block_template(
+                b, payout.address, diffic, tmpl_height, expected_reward, std::string{}))
+        return;
+
+    // create_next_miner_block_template leaves block_header::_height unset (0). For an hf22
+    // (major-version-22) block the Oxen-10-interop serialization ALWAYS writes the
+    // oxen10_pulse_producer field (a 32-byte pubkey) on the write side, but SKIPS reading it when
+    // _height == 0. So a _height==0 block serializes 32 bytes the parser never consumes ("not all
+    // data consumed (32)") and the re-parse in handle_block_found fails, so the fallback block can
+    // never be added. The Pulse producer always populates this; the signature fallback must too.
+    // _height is not part of the hf22 block hash, so setting it does not affect the signature.
+    b._height = tmpl_height;
+
+    // On the non-cached template path, create_block_template_internal sets b.reward to the actually
+    // batched coinbase (0 when no batch payment is due this block), but the hf19+ reward-batching
+    // check (blockchain.cpp) requires b.reward == the CLAIMED per-block reward (SN reward + fees ==
+    // expected_reward). The miner usually hits the cached-template path where this is already set;
+    // the signature fallback produces fresh templates, so carry the claimed reward in explicitly.
+    // b.reward is serialized in the Oxen-10-interop block, not the header, so it is not part of the
+    // hf22 block hash and does not affect the fallback signature.
+    b.reward = expected_reward;
+
+    cryptonote::block_verification_context bvc = {};
+    // handle_block_found signs the block with the fallback key and re-checks the stagger gate.
+    if (handle_block_found(b, bvc))
+        m_last_fallback_height = height;
+    else
+        log::debug(
+                logcat, "HF23 signature fallback for height {} not accepted this tick", height);
 }
 //-----------------------------------------------------------------------------------------------
 bool core::handle_block_found(block& b, block_verification_context& bvc) {

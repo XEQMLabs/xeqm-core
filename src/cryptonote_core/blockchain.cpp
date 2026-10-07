@@ -5223,6 +5223,22 @@ Blockchain::block_pow_verified Blockchain::verify_block_pow(
     crypto::hash const blk_hash = cryptonote::get_block_hash(blk);
     uint64_t const blk_height = blk.get_height();
 
+    // Pulse-recovery (hf22_sn_policy snode_revision 1): authorized fallback blocks are
+    // signature-based, not proof-of-work. A non-Pulse block in the Pulse-recovery era is a fallback
+    // block whose authorization is its single fallback-miner signature, which
+    // verify_quorum_signatures enforces in the block_add path (it already requires exactly one
+    // signature from an authorized FALLBACK_MINER_PUBKEYS key). Such a block therefore does not need
+    // to meet PoW difficulty. The fork-choice WEIGHT is unaffected: cumulative difficulty is computed
+    // by the caller from the difficulty value (still PULSE_FIXED_DIFFICULTY), not from this hash.
+    // This removes the vestigial (authorized-key-gated, hence security-irrelevant) PoW that only
+    // added minutes of mining latency to stall recovery.
+    if (auto [blk_ver, blk_rev] = get_network_version_revision(m_nettype, blk_height);
+        !blk.has_pulse() && feature::pulse_recovery(blk_ver, blk_rev)) {
+        result.valid = true;
+        result.proof_of_work = blk_hash;  // placeholder; not a PoW solution
+        return result;
+    }
+
     // There is a difficulty bug in oxend that caused a network disagreement at height 526483 where
     // somewhere around half the network had a slightly-too-high difficulty value and accepted the
     // block while nodes with the correct difficulty value rejected it.  However this

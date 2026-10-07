@@ -342,6 +342,10 @@ class core final {
     bool load_fallback_miner_key(const fs::path& path);
     bool fallback_miner_may_produce(const block& b);
 
+    // HF23: emit the authorized, signature-based (PoW-free) Pulse fallback block the moment it is
+    // due. Runs on a 1s OMQ timer, registered only when a fallback miner key is loaded.
+    void try_produce_fallback_block();
+
     /**
      * @brief called when a transaction is relayed; return the hash of the parsed tx, or null hash
      * on parse failure.
@@ -916,6 +920,7 @@ class core final {
     network_type m_nettype;  //!< which network are we on?
     crypto::secret_key m_fallback_miner_key{};   //!< HF22: signs fallback miner blocks when set
     uint32_t m_fallback_miner_delay_rounds = 0;  //!< HF22: rounds to hold back behind the primary
+    uint64_t m_last_fallback_height = 0;         //!< HF23: last height a signature fallback was emitted
 
     fs::path m_checkpoints_path;            //!< path to json checkpoints file
     time_t m_last_json_checkpoints_update;  //!< time when json checkpoints were last updated
