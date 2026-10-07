@@ -89,6 +89,7 @@ void rx_slow_hash(
         int miners,
         int is_alt);
 void rx_reorg(const uint64_t split_height);
+void rx_release_idle_cache(uint64_t idle_seconds);
 
 #ifdef __cplusplus
 }  // extern "C"

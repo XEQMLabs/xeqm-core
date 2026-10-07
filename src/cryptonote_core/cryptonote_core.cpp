@@ -60,6 +60,7 @@ extern "C" {
 #include "common/threadpool.h"
 #include "common/tracy_shim.h"
 #include "crypto/crypto.h"
+#include "crypto/hash-ops.h"
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
@@ -1355,6 +1356,9 @@ void core::start_oxenmq() {
     // Registered only when a fallback miner key is loaded; the handler is inert before HF23.
     if (m_fallback_miner_key != crypto::null<crypto::secret_key>)
         m_omq->add_timer([this]() { try_produce_fallback_block(); }, 1s, false);
+    // Reclaim idle RandomX verification caches (~256 MB each) after sustained inactivity so
+    // verify-only service nodes do not hold them when no PoW blocks are being verified.
+    m_omq->add_timer([]() { rx_release_idle_cache(600); }, 1min, false);
     m_omq->start();
 
     // This forces an IP check after initialization instead of deferring it 15 minutes.
