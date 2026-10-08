@@ -220,6 +220,8 @@ inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_MAINNET = {
         proof_version{
                 {cryptonote::hf::hf22_sn_policy, 0}, {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
         proof_version{
+                {cryptonote::hf::hf22_sn_policy, 1}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 0}, {11, 4, 0}, {0, 9, 13}, {2, 10, 0}, {0, 0, 0}},
         proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 1}, {11, 5, 0}, {0, 9, 14}, {2, 11, 0}, {0, 0, 0}},
@@ -232,6 +234,8 @@ inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_TESTNET = {
                 {cryptonote::hf::hf21_weekly_batching, 0}, {1, 0, 7}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
         proof_version{
                 {cryptonote::hf::hf22_sn_policy, 0}, {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
+                {cryptonote::hf::hf22_sn_policy, 1}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
         proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 0}, {11, 6, 0}, {0, 0, 0}, {2, 11, 1}, {1, 0, 0}},
 };
