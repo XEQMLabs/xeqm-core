@@ -42,6 +42,12 @@ jobs:
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
             libboost-all-dev libzstd-dev libgmp-dev
 
+      - name: Pin CMake 3.29.6 (runner-image drift breaks FindBoost for static Boost; issue #53)
+        run: |
+          curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-$(uname -m).tar.gz" | sudo tar -xz --strip-components=1 -C /usr/local
+          hash -r
+          cmake --version
+
       - name: Patch SQLiteCpp headers for GCC
         shell: bash
         run: |
@@ -176,6 +182,12 @@ jobs:
             libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
             libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Pin CMake 3.29.6 (runner-image drift breaks FindBoost for static Boost; issue #53)
+        run: |
+          curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-$(uname -m).tar.gz" | sudo tar -xz --strip-components=1 -C /usr/local
+          hash -r
+          cmake --version
 
       - name: Patch SQLiteCpp headers for GCC
         shell: bash
