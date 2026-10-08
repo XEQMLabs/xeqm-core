@@ -37,6 +37,7 @@
 #include <zstd.h>
 
 #include <algorithm>
+#include <unordered_set>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/seed_seq.hpp>
 #include <chrono>
@@ -49,6 +50,7 @@
 #include "blockchain_db/sqlite/db_sqlite.h"
 #include "bls/bls_crypto.h"
 #include "common/exception.h"
+#include "common/guts.h"
 #include "common/i18n.h"
 #include "common/lock.h"
 #include "common/random.h"
@@ -70,6 +72,7 @@
 #include "ethereum_transactions.h"
 #include "l2_tracker/events.h"
 #include "network_config/mocknet.h"
+#include "networks.h"
 #include "oxen/log.hpp"
 #include "oxen_economy.h"
 #include "pulse.h"
@@ -1333,9 +1336,10 @@ bool service_node_list::state_t::process_state_change_tx(
                                                              // in key_image_blacklist_entry
                         key_image_blacklist_entry& entry = key_image_blacklist.back();
                         entry.key_image = contribution.key_image;
-                        entry.unlock_height =
-                                block_height +
-                                netconf.BLOCKS_IN(netconf.DEREGISTRATION_LOCK_DURATION);
+                        auto lock_dur = (hf_version >= hf::hf22_sn_policy)
+                                              ? netconf.DEREGISTRATION_LOCK_DURATION_V2
+                                              : netconf.DEREGISTRATION_LOCK_DURATION;
+                        entry.unlock_height = block_height + netconf.BLOCKS_IN(lock_dur);
                         entry.amount = contribution.amount;
                     }
                 }
@@ -2813,7 +2817,37 @@ static bool check_pulse_timestamps(cryptonote::network_type nettype, uint64_t he
     return true;
 }
 
-static bool verify_block_components(
+// HF22: the network's authorized fallback miner keys (FALLBACK_MINER_PUBKEYS). Only reached for
+// miner blocks, so parsing per call is cheap and needs no shared cache.
+static std::vector<crypto::public_key> fallback_miner_pubkeys(cryptonote::network_type nettype) {
+    std::vector<crypto::public_key> keys;
+    for (std::string_view hex : get_config(nettype).FALLBACK_MINER_PUBKEYS) {
+        crypto::public_key pk;
+        if (tools::try_load_from_hex_guts(hex, pk))
+            keys.push_back(pk);
+        else
+            log::error(logcat, "Ignoring malformed FALLBACK_MINER_PUBKEYS entry: {}", hex);
+    }
+    return keys;
+}
+
+// Pulse-recovery: true iff the block carries exactly one signature (voter_index
+// FALLBACK_MINER_VOTER_INDEX) over block_hash from an authorized FALLBACK_MINER_PUBKEYS key.
+bool verify_fallback_miner_signature(
+        cryptonote::network_type nettype,
+        cryptonote::block const& block,
+        crypto::hash const& block_hash) {
+    if (block.signatures.size() != 1 ||
+        block.signatures[0].voter_index != FALLBACK_MINER_VOTER_INDEX)
+        return false;
+    const auto keys = fallback_miner_pubkeys(nettype);
+    const auto& sig = block.signatures[0].signature;
+    return std::any_of(keys.begin(), keys.end(), [&](const auto& pk) {
+        return crypto::check_signature(block_hash, pk, sig);
+    });
+}
+
+bool verify_block_components(
         cryptonote::network_type nettype,
         cryptonote::block const& block,
         bool miner_block,
@@ -2864,7 +2898,49 @@ static bool verify_block_components(
             return false;
         }
 
-        if (block.signatures.size()) {
+        // HF22: a miner block is only valid as a fallback block carrying exactly one signature
+        // (voter_index FALLBACK_MINER_VOTER_INDEX) from an authorized fallback key. Pre-HF22
+        // miner blocks are unsigned.
+        if (block.major_version >= hf::hf22_sn_policy) {
+            const auto keys = fallback_miner_pubkeys(nettype);
+            if (keys.empty()) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} rejected on height {}: no fallback miner keys are "
+                            "configured for this network",
+                            block_type,
+                            height);
+                return false;
+            }
+            if (block.signatures.size() != 1 ||
+                block.signatures[0].voter_index != FALLBACK_MINER_VOTER_INDEX) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} must carry exactly 1 fallback authorization "
+                            "signature (voter_index {}), got {} on height {}",
+                            block_type,
+                            FALLBACK_MINER_VOTER_INDEX,
+                            block.signatures.size(),
+                            height);
+                return false;
+            }
+            const auto& sig = block.signatures[0].signature;
+            bool authorized = std::any_of(keys.begin(), keys.end(), [&](const auto& pk) {
+                return crypto::check_signature(hash, pk, sig);
+            });
+            if (!authorized) {
+                if (log_errors)
+                    log::warning(
+                            globallogcat,
+                            "Fallback miner {} signature on height {} is not from an authorized "
+                            "fallback miner key",
+                            block_type,
+                            height);
+                return false;
+            }
+        } else if (block.signatures.size()) {
             if (log_errors)
                 log::warning(
                         globallogcat,
@@ -3454,6 +3530,10 @@ static bool pulse_candidates_sorter(const pubkey_and_sninfo& a, const pubkey_and
     return a.second->pulse_sorter < b.second->pulse_sorter;
 }
 
+// Every network must keep enough active nodes for the HF22 dedup threshold to be reachable.
+static_assert(cryptonote::config::mainnet::config.PULSE_MIN_SERVICE_NODES >= PULSE_MIN_UNIQUE_OPERATORS);
+static_assert(cryptonote::config::testnet::config.PULSE_MIN_SERVICE_NODES >= PULSE_MIN_UNIQUE_OPERATORS);
+
 // Generate the pulse quorum directly from a list of pulse candidates. The list of pulse candidates
 // for a block height is defined as the state of the SNL before the block is processed including:
 //
@@ -3482,6 +3562,18 @@ static service_nodes::quorum generate_pulse_quorum_with_candidates(
 
     if (pulse_entropy.size() != PULSE_QUORUM_SIZE) {
         log::debug(logcat, "Blockchain has insufficient blocks to generate Pulse data");
+        return result;
+    }
+
+    // HF22: operator dedup (plus block-leader removal in round 0) can leave fewer candidates than
+    // active nodes; below PULSE_MIN_UNIQUE_OPERATORS the validator draw would walk off the end of
+    // the list, so skip Pulse for this block instead. Pre-HF22 candidate lists are never short.
+    if (hf_version >= hf::hf22_sn_policy && pulse_candidates.size() < PULSE_MIN_UNIQUE_OPERATORS) {
+        log::debug(
+                logcat,
+                "HF22 operator dedup left {} pulse candidates (need {}); skipping Pulse",
+                pulse_candidates.size(),
+                PULSE_MIN_UNIQUE_OPERATORS);
         return result;
     }
 
@@ -3554,6 +3646,18 @@ service_nodes::quorum generate_pulse_quorum(
     TracyCZoneN(sort_pulse_candidates, "Sort pulse candidates", true);
     std::sort(pulse_candidates.begin(), pulse_candidates.end(), pulse_candidates_sorter);
     TracyCZoneEnd(sort_pulse_candidates);
+
+    // HF22: deduplicate pulse candidates by operator address (1 seat per operator per quorum).
+    if (hf_version >= hf::hf22_sn_policy) {
+        std::unordered_set<cryptonote::account_public_address> seen_ops;
+        auto end = std::remove_if(
+                pulse_candidates.begin(), pulse_candidates.end(),
+                [&seen_ops](const pubkey_and_sninfo& p) {
+                    return !seen_ops.insert(p.second->operator_address).second;
+                });
+        pulse_candidates.erase(end, pulse_candidates.end());
+        // The PULSE_MIN_UNIQUE_OPERATORS check lives in generate_pulse_quorum_with_candidates.
+    }
 
     service_nodes::quorum result = generate_pulse_quorum_with_candidates(
             nettype,
@@ -3675,17 +3779,48 @@ static void generate_other_quorums(
         quorum->validators.reserve(num_validators);
         quorum->workers.reserve(num_workers);
 
-        size_t i = 0;
-        for (; i < num_validators; i++) {
-            quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
-        }
-
-        for (; i < num_validators + num_workers; i++) {
-            size_t j = pub_keys_indexes[i];
-            if (j < active_snode_list.size())
-                quorum->workers.push_back(active_snode_list[j].pubkey);
-            else
-                quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
+        if (hf_version >= hf::hf22_sn_policy && num_validators > 0) {
+            // HF22: one validator seat per operator. A seat lost to a duplicate operator is
+            // refilled from the rest of the shuffled active list so the quorum keeps its full
+            // size; workers are then drawn from the positions after the original validator
+            // block, skipping any entry that was promoted to validator.
+            std::unordered_set<cryptonote::account_public_address> seen_ops;
+            std::vector<bool> used(pub_keys_indexes.size(), false);
+            for (size_t k = 0;
+                 k < pub_keys_indexes.size() && quorum->validators.size() < num_validators;
+                 k++) {
+                size_t j = pub_keys_indexes[k];
+                if (j >= active_snode_list.size())
+                    continue;  // decommissioned nodes are never validators
+                const auto& entry = active_snode_list[j];
+                if (!seen_ops.insert(entry.info->operator_address).second)
+                    continue;
+                quorum->validators.push_back(entry.pubkey);
+                used[k] = true;
+            }
+            for (size_t k = num_validators, added = 0;
+                 k < pub_keys_indexes.size() && added < num_workers;
+                 k++) {
+                if (used[k])
+                    continue;
+                size_t j = pub_keys_indexes[k];
+                if (j < active_snode_list.size())
+                    quorum->workers.push_back(active_snode_list[j].pubkey);
+                else
+                    quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
+                added++;
+            }
+        } else {
+            size_t i = 0;
+            for (; i < num_validators; i++)
+                quorum->validators.push_back(active_snode_list[pub_keys_indexes[i]].pubkey);
+            for (; i < num_validators + num_workers; i++) {
+                size_t j = pub_keys_indexes[i];
+                if (j < active_snode_list.size())
+                    quorum->workers.push_back(active_snode_list[j].pubkey);
+                else
+                    quorum->workers.push_back(decomm_snode_list[j - active_snode_list.size()]);
+            }
         }
     }
 }
@@ -4003,6 +4138,19 @@ block_add_result service_node_list::state_t::update_from_block(
                         break;
                     }
                 }
+            }
+
+            // HF22: deduplicate by operator address, matching generate_pulse_quorum()
+            if (hf_version >= hf::hf22_sn_policy) {
+                std::unordered_set<cryptonote::account_public_address> seen_ops;
+                auto end = std::remove_if(
+                        pre_block_precomputed.pulse_candidates.begin(),
+                        pre_block_precomputed.pulse_candidates.end(),
+                        [&seen_ops](const pubkey_and_sninfo& p) {
+                            return !seen_ops.insert(p.second->operator_address).second;
+                        });
+                pre_block_precomputed.pulse_candidates.erase(
+                        end, pre_block_precomputed.pulse_candidates.end());
             }
         }
 

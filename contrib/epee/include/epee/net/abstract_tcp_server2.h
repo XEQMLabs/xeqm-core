@@ -147,6 +147,10 @@ namespace net_utils
     void handle_read(const boost::system::error_code& e,
       std::size_t bytes_transferred);
 
+    /// Process received data and re-arm the next read; called from handle_read
+    /// either directly (no throttle) or from an async timer callback (throttled).
+    void handle_read_after_throttle(std::size_t bytes_transferred);
+
     /// Handle completion of a write operation.
     void handle_write(const boost::system::error_code& e, size_t cb);
 

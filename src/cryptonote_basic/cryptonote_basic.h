@@ -29,6 +29,7 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
+#include <algorithm>
 
 #include <fmt/format.h>
 
@@ -515,7 +516,12 @@ struct block : public block_header {
 
     // True if this block has pulse components, false if pre-pulse or if pulse fields are empty.
     bool has_pulse() const {
-        return major_version >= feature::PULSE && (has_pulse_header() || signatures.size());
+        // voter_index=0xFFFF is reserved for fallback-miner governance auth; don't count
+        // these as Pulse quorum signatures or the block is treated as a Pulse block.
+        bool has_quorum_sigs = std::any_of(
+                signatures.begin(), signatures.end(),
+                [](const service_nodes::quorum_signature& s) { return s.voter_index != 0xFFFF; });
+        return major_version >= feature::PULSE && (has_pulse_header() || has_quorum_sigs);
     }
 };
 
@@ -574,7 +580,8 @@ void serialize_object(Archive& ar, block& b) {
         field(ar, "signatures", b.signatures);
     if (b.major_version == hf::hf19_reward_batching ||
         b.major_version == hf::hf20_governance_payouts_fix ||
-        b.major_version == hf::hf21_weekly_batching) {
+        b.major_version == hf::hf21_weekly_batching ||
+        b.major_version == hf::hf22_sn_policy) {
         // Oxen 10.x included three fields here, height, service_node_winner_key (which was actually
         // the pulse block producer, not necessarily the winner), and reward.  None are actually
         // needed (because we can always compute the values they must have), and only reward is used

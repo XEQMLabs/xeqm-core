@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iterator>
@@ -947,16 +948,34 @@ namespace {
 
 // TODO(doyle): Update pulse::perpare_for_round with this function after the hard fork and sanity
 // check it on testnet.
+size_t max_rounds(
+        cryptonote::network_type nettype, cryptonote::hf hf_version, uint8_t snode_revision) {
+    // Pulse stall-recovery (hf22_sn_policy snode_revision 1): raise the miner-fallback round cap so
+    // a failed round re-rolls the quorum a few more times (each round draws a fresh quorum + leader)
+    // before handing off to the slow PoW fallback. At HF22 rev0 the cap was 2 (~60s -> miner); with
+    // ~22% round-0 failures driven by one unreliable operator's validators, that sent ~10% of blocks
+    // to the slow miner (3-9min gaps). 4 rounds rescues most of those via re-roll while keeping the
+    // fallback safety net, and reduces dependence on the fallback miner being permanently up.
+    // TODO(team): promote the 4 to a per-network netconf field if per-network tuning is desired.
+    if (cryptonote::feature::pulse_recovery(hf_version, snode_revision))
+        return 4;
+    return hf_version >= cryptonote::hf::hf22_sn_policy
+                 ? get_config(nettype).PULSE_MINER_FALLBACK_ROUNDS
+                 : 255;
+}
+
 bool convert_time_to_round(
         cryptonote::network_type nettype,
+        cryptonote::hf hf_version,
+        uint8_t snode_revision,
         time_point const& time,
         time_point const& r0_timestamp,
         uint8_t* round) {
     const auto time_since_round_started = time <= r0_timestamp ? 0s : (time - r0_timestamp);
     size_t result_usize = time_since_round_started / get_config(nettype).PULSE_ROUND_TIMEOUT;
     if (round)
-        *round = static_cast<uint8_t>(result_usize);
-    return result_usize <= 255;
+        *round = static_cast<uint8_t>(std::min<size_t>(result_usize, 255));
+    return result_usize < max_rounds(nettype, hf_version, snode_revision);
 }
 
 std::optional<timings> get_round_timings(
@@ -982,7 +1001,15 @@ std::optional<timings> get_round_timings(
             times->prev_timestamp + conf.TARGET_BLOCK_TIME - conf.PULSE_MAX_START_ADJUSTMENT,
             times->prev_timestamp + conf.TARGET_BLOCK_TIME + conf.PULSE_MAX_START_ADJUSTMENT);
 
-    times->miner_fallback_timestamp = times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * 255);
+    // HF22 rev0 shortened the miner-fallback window (255 -> 2); the rev1 Pulse-recovery relaxes it
+    // (see max_rounds). Use the single max_rounds() source so block production and validation agree
+    // at every hard fork.
+    auto [tim_version, tim_revision] =
+            get_network_version_revision(blockchain.nettype(), block_height);
+    const size_t fallback_rounds =
+            max_rounds(blockchain.nettype(), tim_version, tim_revision);
+    times->miner_fallback_timestamp =
+            times->r0_timestamp + (conf.PULSE_ROUND_TIMEOUT * fallback_rounds);
     return times;
 }
 
@@ -1157,7 +1184,8 @@ namespace {
           subsequent stage fails, except in the cases where Pulse can not proceed
           because of an insufficient Service Node network.
 
-        - If the next round to prepare for is >255, we disable Pulse and re-allow
+        - If the next round to prepare for reaches max_rounds() (HF22: the network's
+          PULSE_MINER_FALLBACK_ROUNDS; 255 before), we disable Pulse and re-allow
           PoW blocks to be added to the chain, the Pulse state machine resets and
           waits for the next block to arrive and re-evaluates if Pulse is possible
           again.
@@ -1340,6 +1368,9 @@ namespace {
     round_state pulse_impl::prepare_for_round() {
         auto& blockchain = core.blockchain;
         auto& conf = core.get_net_config();
+        auto [pfr_version, pfr_revision] = get_network_version_revision(
+                conf.NETWORK_TYPE, blockchain.get_current_blockchain_height());
+        const size_t max_round_count = max_rounds(conf.NETWORK_TYPE, pfr_version, pfr_revision);
         //
         // NOTE: Clear Round Data
         //
@@ -1356,9 +1387,9 @@ namespace {
         }
 
         if (round.queue_for_next_round) {
-            if (round.number >= 255) {
-                // If the next round overflows, we consider the network stalled. Wait for
-                // the next block and allow PoW to return.
+            if (static_cast<size_t>(round.number) + 1 >= max_round_count) {
+                // The next round would be past the fallback window: the network is stalled and
+                // the miner fallback takes over. Wait for the next block.
                 return goto_wait_for_next_block_and_clear_round_data();
             }
 
@@ -1384,7 +1415,7 @@ namespace {
                     now <= curr_block.round_0_start_time ? 0s : now - curr_block.round_0_start_time;
             size_t round_usize = time_since_block / conf.PULSE_ROUND_TIMEOUT;
 
-            if (round_usize > 255) {  // Network stalled
+            if (round_usize >= max_round_count) {  // Network stalled: fallback window reached
                 log::info(
                         logcat,
                         "{}Pulse has timed out, reverting to accepting miner blocks only.",

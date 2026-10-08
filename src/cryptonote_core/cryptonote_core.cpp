@@ -42,6 +42,8 @@ extern "C" {
 #endif
 
 #include <boost/algorithm/string.hpp>
+#include <algorithm>
+#include <cctype>
 #include <csignal>
 #include <unordered_set>
 
@@ -58,6 +60,7 @@ extern "C" {
 #include "common/threadpool.h"
 #include "common/tracy_shim.h"
 #include "crypto/crypto.h"
+#include "crypto/hash-ops.h"
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
@@ -156,6 +159,16 @@ static const command_line::arg_flag arg_omq_quorumnet_public{
         "commands as if passed to --lmq-curve-public. "
         "Note that even without this option the quorumnet port can be used for RPC commands by "
         "--lmq-admin and --lmq-user pubkeys."};
+static const command_line::arg_descriptor<std::string> arg_fallback_miner_key_file = {
+        "fallback-miner-key-file",
+        "Path to a file holding the hex secret key (64 hex chars, keep it 0600) that authorizes "
+        "this daemon to produce HF22 fallback miner blocks; its public key must be listed in the "
+        "network's FALLBACK_MINER_PUBKEYS"};
+static const command_line::arg_descriptor<uint32_t> arg_fallback_miner_delay_rounds = {
+        "fallback-miner-delay-rounds",
+        "Pulse rounds to hold back past the fallback timestamp before this daemon produces a "
+        "fallback block (0 = primary miner; give each backup miner a larger value)",
+        0};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_provider = {
         "l2-provider",
         "Specify a provider HTTP or HTTPS URL to which this service node will query the Ethereum "
@@ -368,6 +381,8 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_oxend);
     command_line::add_arg(desc, arg_storage_server_port);
     command_line::add_arg(desc, arg_quorumnet_port);
+    command_line::add_arg(desc, arg_fallback_miner_key_file);
+    command_line::add_arg(desc, arg_fallback_miner_delay_rounds);
 
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);
@@ -461,13 +476,13 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
         if (command_line::get_arg(vm, arg_l2_provider).empty() &&
             command_line::get_arg(vm, arg_l2_oxend).empty()) {
-            // XEQ: L2 connectivity is only required once the chain reaches the ETH_BLS era (HF21+).
-            // Before that, allow service nodes to run without any L2 provider configuration.
-            //
-            // NOTE: We use "latest known" hardfork schedule here (rather than current height)
-            // because this check runs during startup config validation.
-            auto latest_hf_known = get_latest_hard_fork(m_nettype);
-            if (latest_hf_known.version >= hf::hf21_eth) {
+            // XEQ: L2 connectivity is only required when the ETH transition HF (hf20_eth_transition)
+            // is actually present in this network's hard fork schedule. XEQM mainnet/testnet uses
+            // native XEQM staking and never activates hf20_eth_transition, so no L2 is needed.
+            // We intentionally avoid a raw enum-value comparison because hf22_sn_policy has a
+            // higher numeric value than hf21_eth even though it is unrelated to ETH staking.
+            auto [eth_hf_start, _unused] = get_hard_fork_heights(m_nettype, hf::hf20_eth_transition);
+            if (eth_hf_start.has_value()) {
                 log::error(
                         logcat,
                         "At least one ethereum L2 provider (or L2 oxend proxy) must be specified "
@@ -487,6 +502,23 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
 
     if (!mocknet_read_cli_for_mocknet_arg(vm, m_service_node))
         return false;
+
+    {
+        auto key_file = command_line::get_arg(vm, arg_fallback_miner_key_file);
+        if (!key_file.empty()) {
+            m_fallback_miner_delay_rounds =
+                    command_line::get_arg(vm, arg_fallback_miner_delay_rounds);
+            if (!load_fallback_miner_key(tools::utf8_path(key_file)))
+                return false;
+        }
+        if (get_net_config().FALLBACK_MINER_PUBKEYS.empty() &&
+            get_hard_fork_heights(m_nettype, hf::hf22_sn_policy).first)
+            log::warning(
+                    logcat,
+                    "FALLBACK_MINER_PUBKEYS is empty for this network: no fallback miner blocks "
+                    "will be accepted once HF22 activates");
+    }
+
     return true;
 }
 //-----------------------------------------------------------------------------------------------
@@ -1320,6 +1352,13 @@ void core::start_oxenmq() {
         m_omq->add_timer([this]() { check_service_node_time(); }, 5s, false);
         m_omq->add_timer([this]() { check_service_node_ip_address(); }, 15min, false);
     }
+    // Pulse-recovery: authorized fallback nodes emit the signed (PoW-free) fallback block when Pulse
+    // stalls. Registered only when a fallback miner key is loaded; inert before rev1 activates.
+    if (m_fallback_miner_key != crypto::null<crypto::secret_key>)
+        m_omq->add_timer([this]() { try_produce_fallback_block(); }, 1s, false);
+    // Reclaim idle RandomX verification caches (~256 MB each) after sustained inactivity so
+    // verify-only service nodes do not hold them when no PoW blocks are being verified.
+    m_omq->add_timer([]() { rx_release_idle_cache(600); }, 1min, false);
     m_omq->start();
 
     // This forces an IP check after initialization instead of deferring it 15 minutes.
@@ -2379,6 +2418,150 @@ block_complete_entry get_block_complete_entry(block& b, tx_memory_pool& pool) {
     return bce;
 }
 //-----------------------------------------------------------------------------------------------
+bool core::load_fallback_miner_key(const fs::path& path) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec)) {
+        log::error(logcat, "--fallback-miner-key-file: {} is not a readable file", path.string());
+        return false;
+    }
+#ifndef _WIN32
+    auto perms = fs::status(path, ec).permissions();
+    if (!ec && (perms & (fs::perms::group_all | fs::perms::others_all)) != fs::perms::none)
+        log::warning(
+                logcat,
+                "--fallback-miner-key-file: {} is accessible by other users; chmod 600 it",
+                path.string());
+#endif
+    std::string hex;
+    if (!tools::slurp_file(path, hex)) {
+        log::error(logcat, "--fallback-miner-key-file: failed to read {}", path.string());
+        return false;
+    }
+    while (!hex.empty() && std::isspace(static_cast<unsigned char>(hex.back())))
+        hex.pop_back();
+    crypto::public_key pub;
+    if (!tools::try_load_from_hex_guts(hex, m_fallback_miner_key) ||
+        !crypto::secret_key_to_public_key(m_fallback_miner_key, pub)) {
+        m_fallback_miner_key = crypto::null<crypto::secret_key>;
+        log::error(logcat, "--fallback-miner-key-file: expected a 64-hex-character secret key");
+        return false;
+    }
+    const auto& allowed = get_net_config().FALLBACK_MINER_PUBKEYS;
+    bool authorized = std::any_of(allowed.begin(), allowed.end(), [&](std::string_view hexpk) {
+        crypto::public_key pk;
+        return tools::try_load_from_hex_guts(hexpk, pk) && pk == pub;
+    });
+    if (!authorized) {
+        m_fallback_miner_key = crypto::null<crypto::secret_key>;
+        log::error(
+                logcat,
+                "Fallback miner key {} is not in this network's FALLBACK_MINER_PUBKEYS; refusing "
+                "to start",
+                pub);
+        return false;
+    }
+    log::info(
+            logcat,
+            "Fallback miner key {} loaded (delay {} rounds)",
+            pub,
+            m_fallback_miner_delay_rounds);
+    return true;
+}
+//-----------------------------------------------------------------------------------------------
+// Staggered fallback miners: a backup holds its block back for its configured rounds past the
+// fallback timestamp, so the primary produces unless it is down.
+bool core::fallback_miner_may_produce(const block& b) {
+    if (m_fallback_miner_delay_rounds == 0)
+        return true;
+    const uint64_t height = b.get_height();
+    if (height == 0)
+        return true;
+    const uint64_t prev_ts = blockchain.db().get_block_timestamp(height - 1);
+    auto t = pulse::get_round_timings(blockchain, height, prev_ts);
+    if (!t)
+        return true;
+    const auto earliest = t->miner_fallback_timestamp +
+                          get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+    const auto now = pulse::clock::now();
+    if (now >= earliest)
+        return true;
+    log::debug(
+            logcat,
+            "Fallback miner holding block {} for {}s more (delay {} rounds)",
+            height,
+            std::chrono::duration_cast<std::chrono::seconds>(earliest - now).count(),
+            m_fallback_miner_delay_rounds);
+    return false;
+}
+//-----------------------------------------------------------------------------------------------
+void core::try_produce_fallback_block() {
+    // Pulse-recovery (hf22_sn_policy snode_revision 1): pure signature-based Pulse fallback. When a
+    // Pulse round has failed, an authorized fallback node emits the next block directly - built as an
+    // ordinary (non-Pulse) block, signed with its fallback key in handle_block_found, and accepted
+    // without PoW by verify_block_pow in the Pulse-recovery era. No mining. Runs on a single-threaded
+    // 1s OMQ timer (no overlap), and handle_block_found is self-locking. Inert before Pulse-recovery
+    // activates; only registered when a fallback key is loaded.
+    const uint64_t height = blockchain.get_current_blockchain_height();  // height of the next block
+    if (height == 0)
+        return;
+    if (auto [ver, rev] = get_network_version_revision(blockchain.nettype(), height);
+        !feature::pulse_recovery(ver, rev))
+        return;
+    if (height <= m_last_fallback_height)
+        return;  // already emitted a fallback for this height
+
+    // Cheap timing gate first, so we don't build a full template every tick: only proceed once
+    // Pulse's fallback window for this height, plus this node's stagger delay, has elapsed.
+    const uint64_t prev_ts = blockchain.db().get_block_timestamp(height - 1);
+    if (auto t = pulse::get_round_timings(blockchain, height, prev_ts)) {
+        const auto earliest = t->miner_fallback_timestamp +
+                              get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+        if (pulse::clock::now() < earliest)
+            return;
+    }
+
+    // Reward recipient is immaterial: the per-block coinbase is 0 under reward batching (HF16+);
+    // rewards batch to service nodes via the block leader. The governance address is used purely as
+    // a valid placeholder for the zero-value coinbase.
+    cryptonote::address_parse_info payout{};
+    if (!cryptonote::get_account_address_from_str(
+                payout, m_nettype, get_config(m_nettype).GOVERNANCE_WALLET_ADDRESS[0]))
+        return;
+
+    cryptonote::block b{};
+    cryptonote::difficulty_type diffic = 0;
+    uint64_t tmpl_height = 0, expected_reward = 0;
+    if (!blockchain.create_next_miner_block_template(
+                b, payout.address, diffic, tmpl_height, expected_reward, std::string{}))
+        return;
+
+    // create_next_miner_block_template leaves block_header::_height unset (0). For an hf22
+    // (major-version-22) block the Oxen-10-interop serialization ALWAYS writes the
+    // oxen10_pulse_producer field (a 32-byte pubkey) on the write side, but SKIPS reading it when
+    // _height == 0. So a _height==0 block serializes 32 bytes the parser never consumes ("not all
+    // data consumed (32)") and the re-parse in handle_block_found fails, so the fallback block can
+    // never be added. The Pulse producer always populates this; the signature fallback must too.
+    // _height is not part of the hf22 block hash, so setting it does not affect the signature.
+    b._height = tmpl_height;
+
+    // On the non-cached template path, create_block_template_internal sets b.reward to the actually
+    // batched coinbase (0 when no batch payment is due this block), but the hf19+ reward-batching
+    // check (blockchain.cpp) requires b.reward == the CLAIMED per-block reward (SN reward + fees ==
+    // expected_reward). The miner usually hits the cached-template path where this is already set;
+    // the signature fallback produces fresh templates, so carry the claimed reward in explicitly.
+    // b.reward is serialized in the Oxen-10-interop block, not the header, so it is not part of the
+    // hf22 block hash and does not affect the fallback signature.
+    b.reward = expected_reward;
+
+    cryptonote::block_verification_context bvc = {};
+    // handle_block_found signs the block with the fallback key and re-checks the stagger gate.
+    if (handle_block_found(b, bvc))
+        m_last_fallback_height = height;
+    else
+        log::debug(
+                logcat, "Pulse-recovery signature fallback for height {} not accepted this tick", height);
+}
+//-----------------------------------------------------------------------------------------------
 bool core::handle_block_found(block& b, block_verification_context& bvc) {
     ZoneScoped;
     bvc = {};
@@ -2388,6 +2571,20 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
         OXEN_DEFER {
             miner.resume();
         };
+
+        // HF22 fallback miner blocks are signed BEFORE serializing for broadcast: blocks[0] is
+        // what gets relayed to peers, and get_block_hash excludes signatures so the hash is stable.
+        if (b.major_version >= hf::hf22_sn_policy && !b.has_pulse() &&
+                m_fallback_miner_key != crypto::null<crypto::secret_key>) {
+            if (!fallback_miner_may_produce(b))
+                return false;
+            crypto::public_key fallback_pub;
+            crypto::secret_key_to_public_key(m_fallback_miner_key, fallback_pub);
+            crypto::signature sig;
+            crypto::generate_signature(get_block_hash(b), fallback_pub, m_fallback_miner_key, sig);
+            b.signatures = {service_nodes::quorum_signature{
+                    service_nodes::FALLBACK_MINER_VOTER_INDEX, sig}};
+        }
 
         try {
             blocks.push_back(get_block_complete_entry(b, mempool));
@@ -2400,6 +2597,7 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             log::error(logcat, "Block found, but failed to prepare to add");
             return false;
         }
+
         // add_new_block will verify block and set bvc.m_verification_failed accordingly
         add_new_block(b, bvc, nullptr /*checkpoint*/);
         cleanup_handle_incoming_blocks(true);

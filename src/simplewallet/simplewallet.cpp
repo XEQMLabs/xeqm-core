@@ -1906,6 +1906,10 @@ bool simple_wallet::blackballed(const std::vector<std::string>& args) {
 bool simple_wallet::save_known_rings(const std::vector<std::string>& args) {
     try {
         LOCK_IDLE_SCOPE();
+        if (!m_wallet->is_trusted_daemon()) {
+            fail_msg_writer() << tr("Rings are only fetched from a trusted daemon (see --trusted-daemon)");
+            return true;
+        }
         m_wallet->find_and_save_rings();
     } catch (const std::exception& e) {
         fail_msg_writer() << tr("Failed to save known rings: ") << e.what();

@@ -8,6 +8,11 @@ inline constexpr std::array seeds = {
         "84.247.143.210:18080"sv,
 };
 
+// HF22 testnet fallback miner; the matching secret is testnet/fallback-miner-testnet.key.
+inline constexpr std::array fallback_miner_pubkeys = {
+        "fc3f4e927eb61bc9e2edcff069936a96bdb893f74f7c9ec80f8fc52983e349f5"sv,
+};
+
 inline constexpr network_config config{
         .NETWORK_TYPE = network_type::TESTNET,
         .DEFAULT_CONFIG_SUBDIR = "testnet"sv,
@@ -59,6 +64,8 @@ inline constexpr network_config config{
         .PULSE_STAGE_TIMEOUT = mainnet::config.PULSE_STAGE_TIMEOUT,
         .PULSE_ROUND_TIMEOUT = mainnet::config.PULSE_ROUND_TIMEOUT,
         .PULSE_MAX_START_ADJUSTMENT = mainnet::config.PULSE_MAX_START_ADJUSTMENT,
+        .PULSE_MINER_FALLBACK_ROUNDS = mainnet::config.PULSE_MINER_FALLBACK_ROUNDS,
+        .FALLBACK_MINER_PUBKEYS = fallback_miner_pubkeys,
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
@@ -67,6 +74,7 @@ inline constexpr network_config config{
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,
         .DEREGISTRATION_LOCK_DURATION = 48h,
+        .DEREGISTRATION_LOCK_DURATION_V2 = 24h,  // HF22: forced dereg lock matches UNLOCK_DURATION
         .UNLOCK_DURATION = 24h,
         .HARDFORK_DEREGISTRATION_GRACE_PERIOD =
                 mainnet::config.HARDFORK_DEREGISTRATION_GRACE_PERIOD,

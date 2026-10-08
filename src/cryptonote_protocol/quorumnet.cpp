@@ -106,9 +106,9 @@ namespace {
         // { height => { txhash => {blink_tx,conn,reply}, ... }, ... }
         std::map<uint64_t, std::unordered_map<crypto::hash, blink_metadata>> blinks;
 
-        // FIXME:
-        // std::chrono::steady_clock::time_point last_blink_cleanup =
-        // std::chrono::steady_clock::now();
+        // Periodic pruning of `blinks` (above): entries are keyed by height and were never
+        // erased, so the cache grew unbounded with blink volume. Pruned in handle_blink.
+        std::chrono::steady_clock::time_point last_blink_cleanup = std::chrono::steady_clock::now();
 
         std::mutex pulse_message_queue_mutex;
         std::condition_variable pulse_message_queue_cv;
@@ -1051,6 +1051,33 @@ namespace {
         auto tag = get_or<uint64_t>(data, "!", 0);
 
         auto local_height = qnet.core.blockchain.get_current_blockchain_height();
+
+        // Prune stale entries from the blink cache: `blinks` is keyed by height, and once a
+        // height is several blocks below the tip its blink metadata is finalized and never needed
+        // again. Without this the map grew unbounded with blink volume (the cleanup was previously
+        // disabled). Time-gated so it runs at most once per interval, under the same qnet.mutex
+        // that guards `blinks`. get_current_blockchain_height() is a lock-free LMDB read.
+        {
+            using namespace std::chrono_literals;
+            constexpr auto BLINK_CLEANUP_INTERVAL = 30s;
+            constexpr uint64_t BLINK_KEEP_RECENT_HEIGHTS = 10;
+            auto now = std::chrono::steady_clock::now();
+            if (now - qnet.last_blink_cleanup >= BLINK_CLEANUP_INTERVAL &&
+                local_height > BLINK_KEEP_RECENT_HEIGHTS) {
+                qnet.last_blink_cleanup = now;
+                uint64_t prune_below = local_height - BLINK_KEEP_RECENT_HEIGHTS;
+                std::unique_lock lock{qnet.mutex};
+                size_t before = qnet.blinks.size();
+                qnet.blinks.erase(qnet.blinks.begin(), qnet.blinks.lower_bound(prune_below));
+                if (before != qnet.blinks.size())
+                    log::debug(
+                            logcat,
+                            "Pruned blink cache below height {}: {} -> {} height buckets",
+                            prune_below,
+                            before,
+                            qnet.blinks.size());
+            }
+        }
 
         auto hf_version = get_network_version(qnet.core.get_nettype(), local_height);
         if (hf_version < cryptonote::feature::BLINK) {

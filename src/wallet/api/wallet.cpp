@@ -42,6 +42,7 @@
 #include "address_book.h"
 #include "common/fs.h"
 #include "common/util.h"
+#include "networks.h"
 #include "common_defines.h"
 #include "logging/oxen_logger.h"
 #include "mnemonics/electrum-words.h"
@@ -2201,6 +2202,16 @@ bool WalletImpl::trustedDaemon() const {
 }
 
 EXPORT
+void WalletImpl::setDaemonSslCaFile(const std::string& path) {
+    wallet()->set_daemon_ssl_ca_file(path);
+}
+
+EXPORT
+void WalletImpl::setDaemonSslAllowAnyCert(bool allow) {
+    wallet()->set_daemon_ssl_allow_any_cert(allow);
+}
+
+EXPORT
 bool WalletImpl::watchOnly() const {
     return wallet()->watch_only();
 }
@@ -2289,7 +2300,9 @@ void WalletImpl::doRefresh() {
                 if (m_history->count() == 0) {
                     m_history->refresh();
                 }
-                w->find_and_save_rings(false);
+                // Ring fetch reveals every outgoing txid to the daemon; trusted daemons only.
+                if (trustedDaemon())
+                    w->find_and_save_rings(false);
             } else {
                 log::trace(logcat, "{}: skipping refresh - daemon is not synced", __FUNCTION__);
             }
@@ -2365,7 +2378,17 @@ EXPORT
 bool WalletImpl::doInit(
         const std::string& daemon_address, uint64_t upper_transaction_size_limit, bool ssl) {
     auto w = wallet();
-    if (!w->init(daemon_address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit))
+    // Trust only local daemons; wallet2::init() would otherwise default trusted_daemon to true.
+    const bool trusted = Utils::isAddressLocal(daemon_address);
+    std::string address = daemon_address;
+    // Honour use_ssl: wallet2::set_daemon() turns a bare host[:port] into http://, so give it an
+    // https scheme here (appending the default RPC port the same way set_daemon does).
+    if (ssl && !address.starts_with("http://") && !address.starts_with("https://")) {
+        if (address.find(':') == std::string::npos)
+            address += ":" + std::to_string(cryptonote::get_config(w->nettype()).RPC_DEFAULT_PORT);
+        address.insert(0, "https://");
+    }
+    if (!w->init(address, m_daemon_login, /*proxy=*/"", upper_transaction_size_limit, trusted))
         return false;
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
@@ -2387,7 +2410,7 @@ bool WalletImpl::doInit(
                 __FUNCTION__,
                 w->get_refresh_from_block_height());
 
-    if (Utils::isAddressLocal(daemon_address)) {
+    if (trusted) {
         this->setTrustedDaemon(true);
         m_refreshIntervalMillis = DEFAULT_REFRESH_INTERVAL_MILLIS;
     } else {

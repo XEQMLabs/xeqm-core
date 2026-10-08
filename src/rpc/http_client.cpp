@@ -105,6 +105,7 @@ void http_client::set_https_cainfo(std::string cainfo_bundle_path) {
         }
     } else {
         ca_info.emplace(std::move(cainfo_bundle_path));
+        apply_ssl = true;
     }
 }
 
@@ -116,6 +117,17 @@ void http_client::copy_params_from(const http_client& other) {
     base_url = other.base_url;
     timeout = other.timeout;
     auth = other.auth;
+    proxy = other.proxy;
+    // cpr's CertFile/KeyFile/CaInfo carry const paths (no copy assignment): rebuild them instead.
+    client_cert.reset();
+    if (other.client_cert)
+        client_cert.emplace(other.client_cert->first, other.client_cert->second);
+    verify_https = other.verify_https;
+    ca_info.reset();
+    if (other.ca_info)
+        ca_info.emplace(*other.ca_info);
+    // Re-apply everything on our next request.
+    apply_timeout = apply_auth = apply_proxy = apply_ssl = true;
 }
 
 nlohmann::json http_client::json_rpc(std::string_view method, nlohmann::json params) {
@@ -199,6 +211,7 @@ cpr::Response http_client::post(const std::string& uri, cpr::Body body, cpr::Hea
             if (ca_info) {
                 new_ssl_opts->SetOption(*ca_info);
             }
+            apply_ssl = false;
         }
 
         plock.unlock();

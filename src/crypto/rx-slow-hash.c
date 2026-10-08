@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "c_threads.h"
 #include "hash-ops.h"
@@ -62,6 +63,9 @@ static randomx_dataset* rx_dataset;
 static int rx_dataset_nomem;
 static uint64_t rx_dataset_height;
 static THREADV randomx_vm* rx_vm = NULL;
+
+/* wall-clock (seconds) of the last rx_slow_hash call; guards idle cache release */
+static uint64_t rx_last_use = 0;
 
 static void local_abort(const char* msg) {
     fprintf(stderr, "%s\n", msg);
@@ -203,6 +207,7 @@ void rx_slow_hash(
     randomx_cache* cache;
 
     CTHR_MUTEX_LOCK(rx_mutex);
+    rx_last_use = (uint64_t)time(NULL);
 
     /* if alt block but with same seed as mainchain, no need for alt cache */
     if (is_alt) {
@@ -320,4 +325,39 @@ void rx_stop_mining(void) {
     }
     rx_dataset_nomem = 0;
     CTHR_MUTEX_UNLOCK(rx_dataset_mutex);
+}
+
+/* Release the RandomX verification caches (rx_s[].rs_cache, ~256 MB each) once PoW
+ * verification has been idle for at least idle_seconds. A hash computation takes
+ * milliseconds, so a multi-minute idle window guarantees none is in flight, making it
+ * safe to free: the next rx_slow_hash re-allocates the cache and randomx_vm_set_cache
+ * re-points the (thread-local) VM before it is used. Never reclaims while mining
+ * (dataset active). No-op if already freed or recently used. */
+void rx_release_idle_cache(uint64_t idle_seconds) {
+    int i, mining;
+    uint64_t now;
+    CTHR_MUTEX_LOCK(rx_mutex);
+    now = (uint64_t)time(NULL);
+    if (rx_last_use != 0 && now >= rx_last_use && now - rx_last_use < idle_seconds) {
+        CTHR_MUTEX_UNLOCK(rx_mutex);
+        return;
+    }
+    CTHR_MUTEX_LOCK(rx_dataset_mutex);
+    mining = (rx_dataset != NULL);
+    CTHR_MUTEX_UNLOCK(rx_dataset_mutex);
+    if (mining) {
+        CTHR_MUTEX_UNLOCK(rx_mutex);
+        return;
+    }
+    for (i = 0; i < 2; i++) {
+        CTHR_MUTEX_LOCK(rx_s[i].rs_mutex);
+        if (rx_s[i].rs_cache != NULL) {
+            randomx_release_cache(rx_s[i].rs_cache);
+            rx_s[i].rs_cache = NULL;
+            rx_s[i].rs_height = 1; /* invalid seed height: forces re-init on next use */
+            memset(rx_s[i].rs_hash, 0, HASH_SIZE);
+        }
+        CTHR_MUTEX_UNLOCK(rx_s[i].rs_mutex);
+    }
+    CTHR_MUTEX_UNLOCK(rx_mutex);
 }

@@ -19,8 +19,16 @@ inline constexpr size_t PULSE_QUORUM_ENTROPY_LAG =
 
 inline constexpr int PULSE_QUORUM_NUM_VALIDATORS = 11;
 inline constexpr int PULSE_QUORUM_SIZE = PULSE_QUORUM_NUM_VALIDATORS + 1 /*Leader*/;
+// HF22: after operator dedup a Pulse round needs at least this many distinct-operator candidates
+// (leader already removed in round 0) or Pulse is skipped for that block. This is the single
+// threshold used by generate_pulse_quorum_with_candidates for every caller.
+inline constexpr size_t PULSE_MIN_UNIQUE_OPERATORS = PULSE_QUORUM_SIZE;
+static_assert(PULSE_MIN_UNIQUE_OPERATORS == 12);
 inline constexpr int PULSE_BLOCK_REQUIRED_SIGNATURES =
         7;  // A block must have exactly N signatures to be considered properly
+// HF22: voter_index carried by the single signature on a fallback miner block; never a real
+// validator position, so block::has_pulse() ignores it.
+inline constexpr uint16_t FALLBACK_MINER_VOTER_INDEX = 0xFFFF;
 
 static_assert(PULSE_QUORUM_NUM_VALIDATORS >= PULSE_BLOCK_REQUIRED_SIGNATURES);
 static_assert(
@@ -210,6 +218,10 @@ inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_MAINNET = {
         proof_version{
                 {cryptonote::hf::hf21_weekly_batching, 0}, {1, 0, 7}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
         proof_version{
+                {cryptonote::hf::hf22_sn_policy, 0}, {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
+                {cryptonote::hf::hf22_sn_policy, 1}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 0}, {11, 4, 0}, {0, 9, 13}, {2, 10, 0}, {0, 0, 0}},
         proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 1}, {11, 5, 0}, {0, 9, 14}, {2, 11, 0}, {0, 0, 0}},
@@ -220,6 +232,10 @@ inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_STAGENET = {
 inline constexpr std::array MIN_UPTIME_PROOF_VERSIONS_TESTNET = {
         proof_version{
                 {cryptonote::hf::hf21_weekly_batching, 0}, {1, 0, 7}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
+                {cryptonote::hf::hf22_sn_policy, 0}, {1, 1, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+        proof_version{
+                {cryptonote::hf::hf22_sn_policy, 1}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
         proof_version{
                 {cryptonote::hf::hf22_eth_fixup, 0}, {11, 6, 0}, {0, 0, 0}, {2, 11, 1}, {1, 0, 0}},
 };

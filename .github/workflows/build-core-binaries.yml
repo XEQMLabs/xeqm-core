@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "core-v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -40,6 +41,12 @@ jobs:
             libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
             libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Pin CMake 3.29.6 (runner-image drift breaks FindBoost for static Boost; issue #53)
+        run: |
+          curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-$(uname -m).tar.gz" | sudo tar -xz --strip-components=1 -C /usr/local
+          hash -r
+          cmake --version
 
       - name: Patch SQLiteCpp headers for GCC
         shell: bash
@@ -115,7 +122,7 @@ jobs:
 
       - name: Package Ubuntu binaries
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -175,6 +182,12 @@ jobs:
             libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
             libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
             libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Pin CMake 3.29.6 (runner-image drift breaks FindBoost for static Boost; issue #53)
+        run: |
+          curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-$(uname -m).tar.gz" | sudo tar -xz --strip-components=1 -C /usr/local
+          hash -r
+          cmake --version
 
       - name: Patch SQLiteCpp headers for GCC
         shell: bash
@@ -239,7 +252,7 @@ jobs:
 
       - name: Package ARM64 binaries
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -390,7 +403,7 @@ jobs:
       - name: Package Windows binaries
         shell: msys2 {0}
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -552,6 +565,7 @@ jobs:
             -DBoost_INCLUDE_DIR="$BOOST_ROOT/include" \
             -DBoost_LIBRARY_DIR_RELEASE="$BOOST_ROOT/lib" \
             -DBoost_USE_STATIC_LIBS=ON \
+            -DBoost_NO_SYSTEM_PATHS=ON \
             -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$ZEROMQ_ROOT;$OPENSSL_ROOT;$HIDAPI_ROOT" \
             -DWITH_SYSTEM_ZMQ=ON \
             -DBUILD_ZMQ=OFF \
@@ -610,7 +624,7 @@ jobs:
       - name: Package macOS ARM64 binaries
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -644,6 +658,19 @@ jobs:
           tar -czf "${PKG}.tar.gz" "$PKG"
           shasum -a 256 "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
 
+      - name: Sign, package (.pkg) & notarize (macOS arm64)
+        env:
+          MACOS_CERT_APP_P12_BASE64: ${{ secrets.MACOS_CERT_APP_P12_BASE64 }}
+          MACOS_CERT_INSTALLER_P12_BASE64: ${{ secrets.MACOS_CERT_INSTALLER_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_APP_IDENTITY: ${{ secrets.MACOS_SIGN_APP_IDENTITY }}
+          MACOS_SIGN_INSTALLER_IDENTITY: ${{ secrets.MACOS_SIGN_INSTALLER_IDENTITY }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: bash .github/scripts/macos-sign-and-pkg.sh arm64
+
       - name: Upload macOS ARM64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -651,11 +678,15 @@ jobs:
           path: |
             XEQM-core-*-macos-arm64-*.tar.gz
             XEQM-core-*-macos-arm64-*.tar.gz.sha256
+            XEQM-core-*-macos-arm64-*.pkg
+            XEQM-core-*-macos-arm64-*.pkg.sha256
 
 
   macos-x86_64:
     name: Build macOS Intel x86_64 binaries
-    runs-on: macos-13
+    runs-on: [self-hosted, macOS, X64]
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 120
 
     steps:
       - name: Checkout core repo
@@ -771,6 +802,7 @@ jobs:
             -DBoost_INCLUDE_DIR="$BOOST_ROOT/include" \
             -DBoost_LIBRARY_DIR_RELEASE="$BOOST_ROOT/lib" \
             -DBoost_USE_STATIC_LIBS=ON \
+            -DBoost_NO_SYSTEM_PATHS=ON \
             -DCMAKE_PREFIX_PATH="$BOOST_ROOT;$ZEROMQ_ROOT;$OPENSSL_ROOT;$HIDAPI_ROOT" \
             -DWITH_SYSTEM_ZMQ=ON \
             -DBUILD_ZMQ=OFF \
@@ -829,7 +861,7 @@ jobs:
       - name: Package macOS Intel x86_64 binaries
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#core-v}"
+          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -863,6 +895,19 @@ jobs:
           tar -czf "${PKG}.tar.gz" "$PKG"
           shasum -a 256 "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
 
+      - name: Sign, package (.pkg) & notarize (macOS x86_64)
+        env:
+          MACOS_CERT_APP_P12_BASE64: ${{ secrets.MACOS_CERT_APP_P12_BASE64 }}
+          MACOS_CERT_INSTALLER_P12_BASE64: ${{ secrets.MACOS_CERT_INSTALLER_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_APP_IDENTITY: ${{ secrets.MACOS_SIGN_APP_IDENTITY }}
+          MACOS_SIGN_INSTALLER_IDENTITY: ${{ secrets.MACOS_SIGN_INSTALLER_IDENTITY }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: bash .github/scripts/macos-sign-and-pkg.sh x86_64
+
       - name: Upload macOS Intel x86_64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -870,6 +915,8 @@ jobs:
           path: |
             XEQM-core-*-macos-x86_64-*.tar.gz
             XEQM-core-*-macos-x86_64-*.tar.gz.sha256
+            XEQM-core-*-macos-x86_64-*.pkg
+            XEQM-core-*-macos-x86_64-*.pkg.sha256
 
 
   publish:
@@ -879,7 +926,6 @@ jobs:
       - linux-ubuntu-2404-arm64
       - windows-x64
       - macos-arm64
-      - macos-x86_64
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/core-v')
 
@@ -906,8 +952,10 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.relmeta.outputs.title }}
           files: release-assets/**/*
-          draft: false
-          prerelease: false
+          # Pre-release tags (-rc/-qa/-pre) publish as a DRAFT so binaries are not public before the
+          # official release; only a final tag (core-v1.1.0) publishes publicly.
+          draft: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
           generate_release_notes: false
           body: |
             XEQM Core binary release.
@@ -917,7 +965,9 @@ jobs:
             - Ubuntu 24.04 aarch64 tar.gz
             - Windows x86_64 zip
             - macOS ARM64 tar.gz
+            - macOS ARM64 .pkg (signed + notarized + stapled)
             - macOS Intel x86_64 tar.gz
+            - macOS Intel x86_64 .pkg (signed + notarized + stapled)
 
             Source commit:
             ${{ github.sha }}

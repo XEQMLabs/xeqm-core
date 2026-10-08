@@ -49,6 +49,13 @@ static constexpr std::array mainnet_hard_forks = {
         hard_fork{hf::hf20_governance_payouts_fix, 0, 37000, 1781064000},
         // HF21: SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM.
         hard_fork{hf::hf21_weekly_batching, 0, 99000, 1784045460},  // ~2026-07-14 16:11 UTC (9:11am PT)
+        // HF22: per-operator quorum dedup, 14-day forced deregistration lock, authorized fallback
+        // miner after 2 failed Pulse rounds. Height 219120 is ~2026-10-05 19:00 UTC (12:00 PT) at
+        // the 60s block pace measured on 2026-09-18.
+        hard_fork{hf::hf22_sn_policy, 0, 219120, 1791226800},
+        // Pulse-recovery (hf22_sn_policy snode_revision 1): PoW-free signed fallback, 4 Pulse rounds.
+        // Height 236920 is ~2026-10-18 19:00 UTC (12:00 PT) at the 71s block pace measured on 2026-10-08.
+        hard_fork{hf::hf22_sn_policy, 1, 236920, 1792350000},
 };
 
 static constexpr std::array testnet_hard_forks = {
@@ -67,6 +74,8 @@ static constexpr std::array testnet_hard_forks = {
         hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
         hard_fork{hf::hf20_governance_payouts_fix, 0, 760, 1781064000},
         hard_fork{hf::hf21_weekly_batching, 0, 1000, 1781064001},
+        hard_fork{hf::hf22_sn_policy, 0, 1500, 1781064002},
+        hard_fork{hf::hf22_sn_policy, 1, 1600, 1781064003},  // Pulse-recovery (hf22 snode_revision 1): PoW-free signed fallback; public-testnet activation
 };
 
 static constexpr std::array devnet_hard_forks = {

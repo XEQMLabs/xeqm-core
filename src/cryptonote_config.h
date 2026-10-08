@@ -262,9 +262,10 @@ enum class hf : uint8_t {
     hf19_reward_batching,
     hf20_governance_payouts_fix,  // Governance reward paid via batching at HF19+
     // SN reward batching 20 -> 10080 blocks (7d), min payout 0.1 -> 1 XEQM. On-chain major_version 21.
-    // NOTE: distinct from hf21_eth below (the unused-on-mainnet ETH fork, numeric 23). Anything named
+    // NOTE: distinct from hf21_eth below (the unused-on-mainnet ETH fork, numeric 24). Anything named
     // hf21_eth / ETH_BLS / pre_hf21_final_payout refers to the ETH fork, NOT this batching change.
     hf21_weekly_batching,
+    hf22_sn_policy,       // 14-day forced deregistration lock, quorum dedup per operator, Lokinet
     hf20_eth_transition,  // Temp period: registrations disabled, BLS pubkeys in proofs
     hf21_eth,             // Full transition: registrations from ETH
     hf22_eth_fixup,       // Re-enforce BLS in proofs, fixup reward payments
@@ -283,7 +284,7 @@ constexpr auto hf_prev(hf x) {
 
 // This is here to make sure the numeric value of the top hf enum value is correct (i.e.
 // hf21_sent == 21 numerically); bump this when adding a new hf.
-static_assert(static_cast<uint8_t>(hf_max) == 24);
+static_assert(static_cast<uint8_t>(hf_max) == 25);
 
 // Constants for which hardfork activates various features:
 namespace feature {
@@ -305,6 +306,30 @@ namespace feature {
     constexpr auto ETH_TRANSITION = hf::hf20_eth_transition;
     constexpr auto ETH_BLS = hf::hf21_eth;
     constexpr auto SN_PK_IS_ED25519 = hf::hf21_eth;
+
+    // Pulse stall-recovery (raise the miner-fallback round cap 2 -> 4 so a failed round re-rolls
+    // the quorum a few more times, and switch the authorized fallback block from slow PoW to a
+    // direct signature). Shipped as a snode_revision bump of hf22_sn_policy (the on-chain major
+    // version STAYS 22, below ETH_BLS) so it does NOT trip the ETH/L2 block-template requirement
+    // and does not consume a new major fork number. Active once a network's hard-fork table lists
+    // hf22_sn_policy at snode_revision >= 1. XEQM does not run the ETH/L2 path, so there is never a
+    // major version above hf22_sn_policy; the first clause only future-proofs the predicate.
+    inline constexpr bool pulse_recovery(hf version, uint8_t snode_revision) {
+        return version > hf::hf22_sn_policy ||
+               (version == hf::hf22_sn_policy && snode_revision >= 1);
+    }
+
+    // Sentinels: inserting a new hf entry before hf20_eth_transition or hf21_eth
+    // silently shifts every >= comparison against these aliases (~40 sites for ETH_BLS).
+    // Root cause of HF20 mainnet stall (issues #30 / #32). If intentionally renumbering,
+    // audit every ETH_TRANSITION/ETH_BLS callsite first, then update these values.
+    // HF22 inserted hf22_sn_policy (22) before the ETH forks, shifting them up by one (audited).
+    static_assert(static_cast<uint8_t>(hf::hf20_eth_transition) == 23,
+            "hf20_eth_transition shifted -- audit feature::ETH_TRANSITION callsites (issue #32)");
+    static_assert(static_cast<uint8_t>(hf::hf21_eth) == 24,
+            "hf21_eth shifted -- audit feature::ETH_BLS / SN_PK_IS_ED25519 callsites (issue #32)");
+    static_assert(static_cast<uint8_t>(hf::hf22_eth_fixup) == 25,
+            "hf22_eth_fixup shifted -- audit its callsites (issue #32)");
 }  // namespace feature
 
 enum class network_type : uint8_t {

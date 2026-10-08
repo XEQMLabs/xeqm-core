@@ -112,14 +112,22 @@ class pulse {
     void operator()(const message* msg = nullptr) const;
 };
 
+// Number of Pulse rounds attempted before the miner fallback engages: HF22 rev0 uses the network's
+// PULSE_MINER_FALLBACK_ROUNDS (the fallback timestamp is the start of that round); the rev1
+// Pulse-recovery raises it to 4 (see feature::pulse_recovery); before HF22 the state machine allowed
+// 255 rounds. snode_revision is the hf22_sn_policy revision at the relevant block height.
+size_t max_rounds(
+        cryptonote::network_type nettype, cryptonote::hf hf_version, uint8_t snode_revision);
+
 // Calculate the current Pulse round active depending on the 'time' elapsed since round 0 started
 // for a block. r0_timestamp: The timestamp that round 0 starts at for the desired block (this
 // timestamp can be calculated via 'pulse::get_round_timings'). round: (Optional) Set to the round
 // that is currently active when the function returns true. return: False when enough 'time' has
-// elapsed such that Pulse round has overflowed 255 and Pulse blocks are no longer possible to
-// generate.
+// elapsed that the round reached max_rounds() and Pulse blocks are no longer possible to generate.
 bool convert_time_to_round(
         cryptonote::network_type nettype,
+        cryptonote::hf hf_version,
+        uint8_t snode_revision,
         const time_point& time,
         const time_point& r0_timestamp,
         uint8_t* round);

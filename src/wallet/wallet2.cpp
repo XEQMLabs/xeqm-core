@@ -508,9 +508,9 @@ namespace {
         wallet->m_http_client.set_https_client_cert(
                 command_line::get_arg(vm, opts.daemon_ssl_certificate),
                 command_line::get_arg(vm, opts.daemon_ssl_private_key));
-        wallet->m_http_client.set_insecure_https(
+        wallet->set_daemon_ssl_allow_any_cert(
                 command_line::get_arg(vm, opts.daemon_ssl_allow_any_cert));
-        wallet->m_http_client.set_https_cainfo(
+        wallet->set_daemon_ssl_ca_file(
                 command_line::get_arg(vm, opts.daemon_ssl_ca_certificates));
 
         if (command_line::get_arg(vm, opts.offline))
@@ -1500,6 +1500,16 @@ bool wallet2::set_daemon(
         default_daemon_address = std::move(url);
     }
     return true;
+}
+//----------------------------------------------------------------------------------------------------
+void wallet2::set_daemon_ssl_ca_file(std::string path) {
+    m_http_client.set_https_cainfo(path);
+    m_long_poll_client.set_https_cainfo(std::move(path));
+}
+//----------------------------------------------------------------------------------------------------
+void wallet2::set_daemon_ssl_allow_any_cert(bool allow) {
+    m_http_client.set_insecure_https(allow);
+    m_long_poll_client.set_insecure_https(allow);
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::init(
@@ -6580,10 +6590,13 @@ void wallet2::load(
     if (get_num_subaddress_accounts() == 0)
         add_subaddress_account(tr("Primary account"));
 
-    try {
-        find_and_save_rings(false);
-    } catch (const std::exception& e) {
-        log::error(logcat, "Failed to save rings, will try again next time");
+    // Ring fetching posts every outgoing txid to the daemon; only do it against a trusted one.
+    if (is_trusted_daemon()) {
+        try {
+            find_and_save_rings(false);
+        } catch (const std::exception& e) {
+            log::error(logcat, "Failed to save rings, will try again next time");
+        }
     }
 
 #ifdef WALLET_ENABLE_MMS
@@ -8955,6 +8968,11 @@ bool wallet2::find_and_save_rings(bool force) {
         return true;
     if (!m_ringdb)
         return false;
+    // Never reveal the outgoing tx list to an untrusted daemon (monero PR #10015).
+    if (!is_trusted_daemon()) {
+        log::debug(logcat, "Not fetching rings: daemon is not trusted");
+        return false;
+    }
 
     log::debug(logcat, "Finding and saving rings...");
 
