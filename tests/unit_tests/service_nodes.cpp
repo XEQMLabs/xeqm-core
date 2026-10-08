@@ -36,6 +36,10 @@
 #include "cryptonote_basic/verification_context.h"
 #include "cryptonote_config.h"
 #include "oxen_economy.h"
+#include "crypto/crypto.h"
+#include "cryptonote_core/service_node_rules.h"
+#include "common/guts.h"
+#include <string_view>
 
 TEST(service_nodes, staking_requirement)
 {
@@ -520,8 +524,61 @@ TEST(service_nodes, service_node_rewards_proportional_to_portions)
 
 TEST(service_nodes, mainnet_unlock_dereg_periods)
 {
-  ASSERT_EQ(service_nodes::staking_num_lock_blocks(cryptonote::network_type::MAINNET), 30 * 720);
+  // Mainnet runs 1-minute blocks (1440/day). Staking lock and unlock are 14 days; the
+  // deregistration lock is 7 days. (Updated from the old 2-minute, 15/30-day values.)
   constexpr auto& conf = get_config(cryptonote::network_type::MAINNET);
-  static_assert(conf.BLOCKS_IN(conf.UNLOCK_DURATION) == 15 * 720);
-  static_assert(conf.BLOCKS_IN(conf.DEREGISTRATION_LOCK_DURATION) == 30 * 720);
+  ASSERT_EQ(service_nodes::staking_num_lock_blocks(cryptonote::network_type::MAINNET),
+            static_cast<uint64_t>(14 * conf.BLOCKS_PER_DAY()));
+  static_assert(conf.BLOCKS_IN(conf.UNLOCK_DURATION) == 14 * conf.BLOCKS_PER_DAY());
+  static_assert(conf.BLOCKS_IN(conf.DEREGISTRATION_LOCK_DURATION) == 7 * conf.BLOCKS_PER_DAY());
+}
+
+
+// Regression test for the pulse-recovery fallback-signature check
+// (service_nodes::verify_fallback_miner_signature, added in verify_block_pow). It must
+// accept exactly ONE signature over the block hash, at voter_index
+// FALLBACK_MINER_VOTER_INDEX, from a key in the network FALLBACK_MINER_PUBKEYS whitelist,
+// and reject anything else, so the accept path cannot drop legitimate fallback blocks nor
+// admit unauthorized ones.
+TEST(service_nodes, fallback_miner_signature)
+{
+  using namespace cryptonote;
+  // Authorized testnet fallback secret key; its public key (fc3f4e927eb61bc9...) is the
+  // sole entry in the testnet FALLBACK_MINER_PUBKEYS whitelist.
+  crypto::secret_key auth_sec{};
+  ASSERT_TRUE(tools::try_load_from_hex_guts(
+      std::string_view{"9000285f1fb492b2c74183339f9daf63a2b1e1ab250edaa26af311a1e52c8600"}, auth_sec));
+  crypto::public_key auth_pub{};
+  ASSERT_TRUE(crypto::secret_key_to_public_key(auth_sec, auth_pub));
+
+  block blk{};
+  crypto::hash h{};
+  ASSERT_TRUE(tools::try_load_from_hex_guts(
+      std::string_view{"abababababababababababababababababababababababababababababababab"}, h));
+  const auto NT = network_type::TESTNET;
+  const uint16_t FB = service_nodes::FALLBACK_MINER_VOTER_INDEX;
+
+  // (1) authorized key + correct voter_index => ACCEPT
+  blk.signatures = { service_nodes::quorum_signature(FB, crypto::generate_signature(h, auth_pub, auth_sec)) };
+  EXPECT_TRUE(service_nodes::verify_fallback_miner_signature(NT, blk, h));
+
+  // (2) unauthorized (random) key => REJECT
+  crypto::public_key rnd_pub{}; crypto::secret_key rnd_sec{};
+  crypto::generate_keys(rnd_pub, rnd_sec);
+  blk.signatures = { service_nodes::quorum_signature(FB, crypto::generate_signature(h, rnd_pub, rnd_sec)) };
+  EXPECT_FALSE(service_nodes::verify_fallback_miner_signature(NT, blk, h));
+
+  // (3) no signatures => REJECT
+  blk.signatures.clear();
+  EXPECT_FALSE(service_nodes::verify_fallback_miner_signature(NT, blk, h));
+
+  // (4) authorized key but wrong voter_index => REJECT
+  blk.signatures = { service_nodes::quorum_signature(uint16_t{0}, crypto::generate_signature(h, auth_pub, auth_sec)) };
+  EXPECT_FALSE(service_nodes::verify_fallback_miner_signature(NT, blk, h));
+
+  // (5) two signatures (size != 1) => REJECT
+  blk.signatures = {
+      service_nodes::quorum_signature(FB, crypto::generate_signature(h, auth_pub, auth_sec)),
+      service_nodes::quorum_signature(FB, crypto::generate_signature(h, auth_pub, auth_sec)) };
+  EXPECT_FALSE(service_nodes::verify_fallback_miner_signature(NT, blk, h));
 }
