@@ -5234,6 +5234,17 @@ Blockchain::block_pow_verified Blockchain::verify_block_pow(
     // added minutes of mining latency to stall recovery.
     if (auto [blk_ver, blk_rev] = get_network_version_revision(m_nettype, blk_height);
         !blk.has_pulse() && feature::pulse_recovery(blk_ver, blk_rev)) {
+        // PoW used to make an unauthorized block cost CPU to forge; the signature check is the
+        // only thing standing in its place, so apply it here, before any alt-block storage.
+        if (!service_nodes::verify_fallback_miner_signature(m_nettype, blk, blk_hash)) {
+            log::warning(
+                    logcat,
+                    "Rejecting non-Pulse block {} at height {}: no valid authorized fallback miner signature",
+                    blk_hash,
+                    blk_height);
+            result.valid = false;
+            return result;
+        }
         result.valid = true;
         result.proof_of_work = blk_hash;  // placeholder; not a PoW solution
         return result;

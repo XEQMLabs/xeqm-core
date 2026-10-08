@@ -1445,6 +1445,11 @@ bool tx_get_staking_components(
         cryptonote::transaction_prefix const& tx_prefix,
         staking_components* contribution,
         crypto::hash const& txid);
+// Pulse-recovery: does this non-Pulse block carry a valid authorized fallback-miner signature?
+bool verify_fallback_miner_signature(
+        cryptonote::network_type nettype,
+        cryptonote::block const& block,
+        crypto::hash const& block_hash);
 bool tx_get_staking_components(cryptonote::transaction const& tx, staking_components* contribution);
 bool tx_get_staking_components_and_amounts(
         cryptonote::network_type nettype,

@@ -2831,6 +2831,22 @@ static std::vector<crypto::public_key> fallback_miner_pubkeys(cryptonote::networ
     return keys;
 }
 
+// Pulse-recovery: true iff the block carries exactly one signature (voter_index
+// FALLBACK_MINER_VOTER_INDEX) over block_hash from an authorized FALLBACK_MINER_PUBKEYS key.
+bool verify_fallback_miner_signature(
+        cryptonote::network_type nettype,
+        cryptonote::block const& block,
+        crypto::hash const& block_hash) {
+    if (block.signatures.size() != 1 ||
+        block.signatures[0].voter_index != FALLBACK_MINER_VOTER_INDEX)
+        return false;
+    const auto keys = fallback_miner_pubkeys(nettype);
+    const auto& sig = block.signatures[0].signature;
+    return std::any_of(keys.begin(), keys.end(), [&](const auto& pk) {
+        return crypto::check_signature(block_hash, pk, sig);
+    });
+}
+
 bool verify_block_components(
         cryptonote::network_type nettype,
         cryptonote::block const& block,
