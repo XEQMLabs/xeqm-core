@@ -1,6 +1,6 @@
 # Pulse-Recovery and Memory Fix (HF22 service-node revision 1)
 
-This release ships two changes as a revision bump of HF22, not a new hard fork: Pulse-recovery, which keeps the chain live and recovers it quickly when a Pulse quorum cannot form, and a RandomX memory fix that resolves the per-node RAM growth seen since HF22. All nodes must upgrade before the activation height, which Dom will share.
+This release ships two changes as a revision bump of HF22, not a new hard fork: Pulse-recovery, which keeps the chain live and recovers it quickly when a Pulse quorum cannot form, and a RandomX memory fix that resolves the per-node RAM growth seen since HF22. All nodes must upgrade before the activation height: **mainnet block 236920, about October 18, 2026 at 19:00 UTC**.
 
 > **Action required:** Every node must upgrade to the new binary before the activation height, then restart. A node still on the old binary at the activation block will reject the new fallback blocks and fork off the network.
 
@@ -14,7 +14,7 @@ Previously, when a Pulse round could not form a quorum, the chain fell back to s
 
 Tested over repeated stall and recovery cycles on a multi-host testnet: **3 of 3 clean recoveries, zero downtime, correct block reward.**
 
-Looking ahead, in HF23 this single authorized fallback signer will be replaced by the EXIOM Oracle, decentralizing fallback-block production.
+A future release is planned to replace the single authorized fallback signer with a decentralized mechanism on the Exiom network.
 
 ## What has actually been causing the stalls
 
@@ -24,7 +24,7 @@ HF22 already took a step against this: its service-node policy prevents a single
 
 ## Change 2: RandomX memory fix
 
-To be precise up front: this is not a runaway memory leak, as some suggested. RAM does not grow without bound; it steps up once and holds.
+To be precise up front: this is not a runaway memory leak. RAM does not grow without bound; it steps up once and holds.
 
 Since HF22, many nodes' RAM climbs to roughly three times its baseline after a while and stays there, pushing busy servers into swap. The cause connects directly to the point above. A node loads a 256 MB RandomX cache the first time it verifies a PoW fallback block, and the software never releases it.
 
@@ -34,7 +34,7 @@ This release frees the cache once it goes idle, and because Pulse-recovery makes
 
 ## For node operators
 
-- **Upgrade before the activation height.** This changes which blocks are valid (accepting the PoW-free fallback), so a node that is not on the new binary by the activation block will reject fallback blocks and fork off the network. The height ships with the binaries.
+- **Upgrade before block 236920.** This changes which blocks are valid (accepting the PoW-free fallback), so a node that is not on v1.1.1 by the activation block will reject fallback blocks and fork off the network. From the activation block, uptime proofs from nodes below v1.1.1 are also rejected, so a node left behind is decommissioned rather than silently kept in quorums.
 - **Restart after upgrading.** A restart clears any already-held cache so you see the lower footprint immediately.
 - **Expect lower, stable RAM per node.**
 - **Spread your nodes out.** If you run many nodes, distribute them across independent, adequately-provisioned hosts and providers. Concentrated fleets are the main source of the stalls this release resolves.

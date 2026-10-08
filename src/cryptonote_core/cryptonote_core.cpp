@@ -1352,8 +1352,8 @@ void core::start_oxenmq() {
         m_omq->add_timer([this]() { check_service_node_time(); }, 5s, false);
         m_omq->add_timer([this]() { check_service_node_ip_address(); }, 15min, false);
     }
-    // HF23: authorized fallback nodes emit the signed (PoW-free) fallback block when Pulse stalls.
-    // Registered only when a fallback miner key is loaded; the handler is inert before HF23.
+    // Pulse-recovery: authorized fallback nodes emit the signed (PoW-free) fallback block when Pulse
+    // stalls. Registered only when a fallback miner key is loaded; inert before rev1 activates.
     if (m_fallback_miner_key != crypto::null<crypto::secret_key>)
         m_omq->add_timer([this]() { try_produce_fallback_block(); }, 1s, false);
     // Reclaim idle RandomX verification caches (~256 MB each) after sustained inactivity so
@@ -2559,7 +2559,7 @@ void core::try_produce_fallback_block() {
         m_last_fallback_height = height;
     else
         log::debug(
-                logcat, "HF23 signature fallback for height {} not accepted this tick", height);
+                logcat, "Pulse-recovery signature fallback for height {} not accepted this tick", height);
 }
 //-----------------------------------------------------------------------------------------------
 bool core::handle_block_found(block& b, block_verification_context& bvc) {
