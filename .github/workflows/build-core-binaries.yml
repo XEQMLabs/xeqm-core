@@ -971,3 +971,28 @@ jobs:
 
             Source commit:
             ${{ github.sha }}
+
+
+  # The Intel build runs on a self-hosted Mac that may be offline, so publish does not wait for it.
+  # This job attaches the Intel assets to the release whenever that build finishes; it keeps the
+  # release's body, name, draft and prerelease state as they are (use "Re-run failed jobs" later).
+  publish-intel:
+    name: Attach macOS Intel assets
+    needs:
+      - publish
+      - macos-x86_64
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/core-v')
+
+    steps:
+      - name: Download macOS Intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: XEQM-core-macos-x86_64
+          path: release-assets
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
