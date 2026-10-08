@@ -40,10 +40,10 @@ The three binaries shipped in every release are:
 
 ## Quick start (recommended)
 
-The fastest way to run a full node is the published Docker image. It is built from this repository on every release tag and pushed to GitHub Container Registry.
+The fastest way to run a full node is the published Docker image, pushed to GitHub Container Registry on every release. Pin the release tag you intend to run; `latest` also tracks the current release.
 
 ```bash
-docker pull ghcr.io/xeqmlabs/equilibria-node:v1.0.2
+docker pull ghcr.io/xeqmlabs/xeqm-node:v1.1.1
 ```
 
 A minimal `docker-compose.yml` for a non-service-node full node:
@@ -51,7 +51,7 @@ A minimal `docker-compose.yml` for a non-service-node full node:
 ```yaml
 services:
   xeqm:
-    image: ghcr.io/xeqmlabs/equilibria-node:v1.0.2
+    image: ghcr.io/xeqmlabs/xeqm-node:v1.1.1
     container_name: xeqm
     restart: unless-stopped
     ports:
@@ -115,7 +115,7 @@ sudo apt update && sudo apt install -y \
   libreadline-dev libhidapi-dev libusb-1.0-0-dev \
   libpgm-dev libsystemd-dev
 
-git clone --recursive https://github.com/XEQMLabs/xeqm-core.git
+git clone --recursive --branch core-v1.1.1 https://github.com/XEQMLabs/xeqm-core.git
 cd xeqm-core
 
 mkdir build && cd build
@@ -134,7 +134,7 @@ sudo apt update && sudo apt install -y \
   libboost-all-dev libgmp-dev libzstd-dev libreadline-dev libhidapi-dev \
   libusb-1.0-0-dev libpgm-dev libsystemd-dev libunbound-dev
 
-git clone --recursive https://github.com/XEQMLabs/xeqm-core.git
+git clone --recursive --branch core-v1.1.1 https://github.com/XEQMLabs/xeqm-core.git
 cd xeqm-core
 
 mkdir build && cd build
