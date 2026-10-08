@@ -53,9 +53,9 @@ static constexpr std::array mainnet_hard_forks = {
         // miner after 2 failed Pulse rounds. Height 219120 is ~2026-10-05 19:00 UTC (12:00 PT) at
         // the 60s block pace measured on 2026-09-18.
         hard_fork{hf::hf22_sn_policy, 0, 219120, 1791226800},
-        // HOLD: Pulse-recovery (hf22_sn_policy snode_revision 1) mainnet activation pending team decision.
-        // Set height + timestamp, then uncomment:
-        // hard_fork{hf::hf22_sn_policy, 1, /*HEIGHT*/, /*TIMESTAMP*/},
+        // Pulse-recovery (hf22_sn_policy snode_revision 1): PoW-free signed fallback, 4 Pulse rounds.
+        // Height 236920 is ~2026-10-18 19:00 UTC (12:00 PT) at the 71s block pace measured on 2026-10-08.
+        hard_fork{hf::hf22_sn_policy, 1, 236920, 1792350000},
 };
 
 static constexpr std::array testnet_hard_forks = {
