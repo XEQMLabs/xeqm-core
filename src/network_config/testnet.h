@@ -44,9 +44,9 @@ inline constexpr network_config config{
         }},
         .P2P_SEED_NODES = seeds,
         .GENESIS_TX =
-                "021e01ff00018080c9db97f4fb270278fe7eed60deb57ea863d65690c40abc5ff09505704f36ba94285a02b9e15f6942014c8f90cc270b3e4e154003ecf48f21b5762e57c52cc70df9c65502e4921cd97872000000000000000000000000000000000000000000000000000000000000000000"sv,
+                "021e01ff0001e0929292c9fcd5eb030228bb0086ab236c81374927620493fa855a1a72a19320eb22797d9ef74ef910134201b1ef7f4313da3f734eac7471ae42b0d5c6e58839b67fe20469d219f024e5409072000000000000000000000000000000000000000000000000000000000000000000"sv,
         .GENESIS_NONCE = 12345,
-        .GOVERNANCE_REWARD_INTERVAL = 2000min,
+        .GOVERNANCE_REWARD_INTERVAL = 10min,  // signer-bootstrap rig: fund gov wallet fast (was 2000min)
         .GOVERNANCE_WALLET_ADDRESS =
                 {
                         "XEQT8QP2BWFevNjsrvAqipQdCF7C6WdXs5BPWfa2vZRH4h1ZfuRr9wtds5gAwCGqoAd5psteQiTwdH17Fe3Vb7G25BkRFEo2MC",  // HF10
@@ -69,7 +69,7 @@ inline constexpr network_config config{
         .PULSE_MIN_SERVICE_NODES = 12,  // == pulse quorum size
         .BATCHING_INTERVAL = 20,
         .MIN_BATCH_PAYMENT_AMOUNT = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT,
-        .BATCHING_INTERVAL_V2 = mainnet::config.BATCHING_INTERVAL_V2,
+        .BATCHING_INTERVAL_V2 = 5,  // signer-bootstrap rig: fast batch payout (was mainnet 10080 = 7d)
         .MIN_BATCH_PAYMENT_AMOUNT_V2 = mainnet::config.MIN_BATCH_PAYMENT_AMOUNT_V2,
         .LIMIT_BATCH_OUTPUTS = mainnet::config.LIMIT_BATCH_OUTPUTS,
         .SERVICE_NODE_PAYABLE_AFTER_BLOCKS = 4,

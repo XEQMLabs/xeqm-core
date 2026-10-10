@@ -6,6 +6,7 @@
 
 #include "../common/command_line.h"
 #include "../common/string_util.h"
+#include "../common/guts.h"
 #include "../cryptonote_basic/cryptonote_basic.h"
 #include "../cryptonote_basic/cryptonote_format_utils.h"
 #include "../cryptonote_basic/miner.h"
@@ -22,8 +23,33 @@ std::string create_genesis_tx(network_type nettype, account_base& genesis_accoun
     tx.version = txversion::v1;
     tx.unlock_time = 0;  // No unlock time
 
-    // Create a new wallet address
-    genesis_account.generate();
+    // Create the genesis account.
+    if (nettype == network_type::TESTNET) {
+        // Premine-treasury (testnet signer-bootstrap): instead of a throwaway random account whose
+        // printed keys are then discarded (which leaves the genesis premine unspendable), premine to
+        // the harness's FIXED treasury wallet so full-setup.py -- which already restores this wallet
+        // at height 0 -- can fund service-node operators directly from genesis with no mining. These
+        // keys are testnet-only (xeqm-testnet full-setup.py GOV_* constants) and the coins are
+        // worthless outside the private testnet.
+        constexpr std::string_view TREASURY_ADDRESS =
+                "XEQTCMd5W5jX582CXuuQwzc6KY5mEHvXRNnLxoNQ6nA7Wq1ioBudM64Z835ygvWcrxTHyuuN5suvPiapbjbVAFeZ3NXFhKG2fx";
+        constexpr std::string_view TREASURY_SPEND_KEY =
+                "0c999a88be252215b48735272e5cf3dd86d54f850bb0bc8bfe9aea0de7549405";
+        constexpr std::string_view TREASURY_VIEW_KEY =
+                "8e34dd7f6eb9b9f28be81619e20765c53b79070aab49c353ffc877b67389cd09";
+        cryptonote::address_parse_info info{};
+        if (!cryptonote::get_account_address_from_str(info, nettype, std::string(TREASURY_ADDRESS)))
+            throw std::runtime_error("Failed to parse testnet treasury address");
+        auto spend = tools::make_from_hex_guts<crypto::secret_key>(TREASURY_SPEND_KEY);
+        auto view = tools::make_from_hex_guts<crypto::secret_key>(TREASURY_VIEW_KEY);
+        genesis_account.create_from_keys(info.address, spend, view);
+        // Fail loudly if the keys do not derive the expected treasury address -- that would silently
+        // recreate the unspendable-premine bug this change exists to fix.
+        if (genesis_account.get_keys().m_account_address != info.address)
+            throw std::runtime_error("Treasury keys do not derive the expected treasury address");
+    } else {
+        genesis_account.generate();
+    }
 
     // Create miner tx context for the correct network
     oxen_miner_tx_context miner_tx_context = oxen_miner_tx_context::miner_block(
