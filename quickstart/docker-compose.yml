@@ -1,6 +1,6 @@
 services:
   xeqm-seed:
-    image: ghcr.io/equilibriahorizon/equilibria-node:v23.0.3
+    image: ghcr.io/xeqmlabs/xeqm-node:v1.1.1
     container_name: xeqm-seed
     restart: unless-stopped
     volumes:

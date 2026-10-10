@@ -81,10 +81,10 @@ RUN if [ ! -d "bin" ]; then \
         echo ""; \
         echo "Please copy the binaries before building:"; \
         echo "  cp -r ../build/bin ./bin"; \
-        echo "  docker build -t equilibria-node ."; \
+        echo "  docker build -t xeqm-node ."; \
         echo ""; \
         echo "Or run from project root:"; \
-        echo "  docker build -t equilibria-node -f testnet/Dockerfile ."; \
+        echo "  docker build -t xeqm-node -f testnet/Dockerfile ."; \
         echo "  (and update COPY to use build/bin/*)"; \
         echo ""; \
         exit 1; \

@@ -840,7 +840,7 @@ class EquilibriaNetwork:
         self.logger.info(f"Bootstrap will be accessible at {self.config.public_ip}:18080")
         cmd = [
             "docker", "run", "-dit", "--name", "bootstrap", "--network", "host",
-            "-v", f"{os.getcwd()}/data/bootstrap:/data", "equilibria-node",
+            "-v", f"{os.getcwd()}/data/bootstrap:/data", "xeqm-node",
             "--testnet",
             "--dev-allow-local-ips",
             f"--fixed-difficulty={self.config.difficulty}",
@@ -860,7 +860,7 @@ class EquilibriaNetwork:
         cmd = [
             "docker", "run", "-d", "--name", "wallet-rpc", "--network", "host",
             "--entrypoint", "/usr/local/bin/xeq-wallet-rpc",
-            "-v", f"{os.getcwd()}/wallets:/data", "equilibria-node",
+            "-v", f"{os.getcwd()}/wallets:/data", "xeqm-node",
             "--testnet", "--rpc-bind-port=18084",
             "--daemon-address=127.0.0.1:18081", "--disable-rpc-login",
             "--password=dummy", "--wallet-dir=/data", "--log-level=1"
@@ -879,7 +879,7 @@ class EquilibriaNetwork:
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"sn{i:02d}", "--network", "host",
-                "-v", f"{os.getcwd()}/data/sn{i:02d}:/data", "equilibria-node",
+                "-v", f"{os.getcwd()}/data/sn{i:02d}:/data", "xeqm-node",
                 "--testnet", "--dev-allow-local-ips", "--service-node",
                 f"--fixed-difficulty={self.config.difficulty}",
                 "--data-dir=/data",
@@ -909,7 +909,7 @@ class EquilibriaNetwork:
 
             cmd = [
                 "docker", "run", "-dit", "--name", f"regular{i:02d}", "--network", "host",
-                "-v", f"{os.getcwd()}/data/regular{i:02d}:/data", "equilibria-node",
+                "-v", f"{os.getcwd()}/data/regular{i:02d}:/data", "xeqm-node",
                 "--testnet", "--dev-allow-local-ips",
                 f"--fixed-difficulty={self.config.difficulty}", "--data-dir=/data",
                 "--p2p-bind-ip=0.0.0.0",
