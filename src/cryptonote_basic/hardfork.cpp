@@ -59,23 +59,14 @@ static constexpr std::array mainnet_hard_forks = {
 };
 
 static constexpr std::array testnet_hard_forks = {
+        // Signer-from-genesis (private testnet, reset-per-run): genesis is hf7, then the chain jumps
+        // straight to hf22 snode_revision 1 (Pulse-recovery, PoW-free signed fallback) at height 1, so
+        // the authorized testnet fallback signer produces EVERY block from height 1. No RandomX mining
+        // and no miner/signer handoff race. A fresh chain has no pre-hf22 state to migrate, so bringing
+        // all cumulative features on at once is safe here. (22,1) > (7,0) satisfies the monotonic HF
+        // check. Timestamps kept in the past so activation is height-driven.
         hard_fork{hf::hf7, 0, 0, 1653632397},
-        hard_fork{hf::hf11_infinite_staking, 0, 2, 1653632397},
-        hard_fork{hf::hf12_checkpointing, 0, 3, 1653632397},
-        hard_fork{hf::hf13_enforce_checkpoints, 0, 4, 1653632397},
-        hard_fork{hf::hf14_blink, 0, 5, 1653632397},
-        hard_fork{hf::hf15_ons, 0, 6, 1653632397},
-        hard_fork{hf::hf16_pulse, 0, 750, 1653632397},
-        hard_fork{hf::hf17, 0, 751, 1653632397},
-        hard_fork{hf::hf18, 0, 752, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 0, 753, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 1, 754, 1653632397},
-        hard_fork{hf::hf19_reward_batching, 2, 755, 1661205699},
-        hard_fork{hf::hf19_reward_batching, 3, 756, 1673385120},
-        hard_fork{hf::hf20_governance_payouts_fix, 0, 760, 1781064000},
-        hard_fork{hf::hf21_weekly_batching, 0, 1000, 1781064001},
-        hard_fork{hf::hf22_sn_policy, 0, 1500, 1781064002},
-        hard_fork{hf::hf22_sn_policy, 1, 1600, 1781064003},  // Pulse-recovery (hf22 snode_revision 1): PoW-free signed fallback; public-testnet activation
+        hard_fork{hf::hf22_sn_policy, 1, 1, 1781064003},
 };
 
 static constexpr std::array devnet_hard_forks = {

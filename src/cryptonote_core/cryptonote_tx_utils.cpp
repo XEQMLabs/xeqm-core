@@ -578,6 +578,15 @@ std::pair<bool, uint64_t> construct_miner_tx(
                 return x + y.amount.to_coin();
             });
 
+    // Signer-from-genesis bootstrap (TESTNET only): with zero registered service nodes there is no
+    // batch to credit, so the accumulate above is 0, but validate_block_rewards still requires
+    // b.reward == the protocol per-block reward (miner_fee + service_node_total). Claim the protocol
+    // reward so the block validates; there is simply no SN to credit it to yet. This can only trigger
+    // with zero active SNs (never a live mainnet at this fork) and is gated to testnet regardless.
+    if (miner_tx_context.nettype == network_type::TESTNET && block_rewards == 0 &&
+        hard_fork_version >= hf::hf19_reward_batching)
+        block_rewards = reward_parts.miner_fee + reward_parts.service_node_total;
+
     // lock
     tx.unlock_time = height + MINED_MONEY_UNLOCK_WINDOW;
     tx.vin.push_back(txin_gen{height});

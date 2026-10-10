@@ -2581,8 +2581,15 @@ void core::try_produce_fallback_block() {
     // Pulse's fallback window for this height, plus this node's stagger delay, has elapsed.
     const uint64_t prev_ts = blockchain.db().get_block_timestamp(height - 1);
     if (auto t = pulse::get_round_timings(blockchain, height, prev_ts)) {
-        const auto earliest = t->miner_fallback_timestamp +
-                              get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+        auto earliest = t->miner_fallback_timestamp +
+                        get_net_config().PULSE_ROUND_TIMEOUT * m_fallback_miner_delay_rounds;
+        // TESTNET signer-bootstrap: before a Pulse quorum exists for this height, do not wait the
+        // full Pulse-round-failure window - produce briskly so a fresh chain climbs fast. Once SNs
+        // register and a Pulse quorum forms, normal fallback timing resumes so Pulse takes over.
+        // Gated to testnet; mainnet's fallback-only-after-Pulse-fails safety window is unchanged.
+        if (blockchain.nettype() == network_type::TESTNET &&
+            !service_node_list.get_quorum(service_nodes::quorum_type::pulse, height))
+            earliest = pulse::time_point(std::chrono::seconds(prev_ts + 2));
         if (pulse::clock::now() < earliest)
             return;
     }
