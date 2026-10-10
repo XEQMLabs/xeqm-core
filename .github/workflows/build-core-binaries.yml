@@ -694,6 +694,13 @@ jobs:
         with:
           submodules: recursive
 
+      # Self-hosted runner services start with a minimal PATH; make Homebrew visible to every later step.
+      - name: Put Homebrew on PATH
+        shell: bash
+        run: |
+          for p in /usr/local/bin /opt/homebrew/bin; do [ -x "$p/brew" ] && echo "$p" >> "$GITHUB_PATH"; done
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
       - name: Install dependencies
         run: |
           brew update
