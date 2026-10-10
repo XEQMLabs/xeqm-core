@@ -6,11 +6,11 @@ on:
       - "core-v*"
   workflow_dispatch:
     inputs:
-      release_suffix:
-        description: Version suffix for this build; pass an empty value for release-style naming
-        type: string
+      release_naming:
+        description: Name the binaries like a tagged release (no -dev suffix)
+        type: boolean
         required: false
-        default: "-dev"
+        default: false
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ permissions:
 # up OXEN_RELEASE_SUFFIX from the environment when set, so we just point it
 # at empty for tagged builds and leave it as the default ("-dev") otherwise.
 env:
-  OXEN_RELEASE_SUFFIX: ${{ github.ref_type != 'tag' && inputs.release_suffix || '' }}
+  OXEN_RELEASE_SUFFIX: ${{ (github.ref_type != 'tag' && !inputs.release_naming) && '-dev' || '' }}
 
 jobs:
   linux-ubuntu-x64:
