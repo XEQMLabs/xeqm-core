@@ -17,9 +17,13 @@ env:
   OXEN_RELEASE_SUFFIX: ${{ github.ref_type != 'tag' && '-dev' || '' }}
 
 jobs:
-  linux-ubuntu-2404:
-    name: Build Ubuntu 24.04 x64 binaries
-    runs-on: ubuntu-24.04
+  linux-ubuntu-x64:
+    name: Build Ubuntu ${{ matrix.ubuntu }} x64 binaries
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["24.04", "22.04"]
 
     steps:
       - name: Checkout core repo
@@ -126,7 +130,7 @@ jobs:
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
-          PKG="XEQM-core-${VERSION}-ubuntu-24.04-x86_64-${SHORT}"
+          PKG="XEQM-core-${VERSION}-ubuntu-${{ matrix.ubuntu }}-x86_64-${SHORT}"
 
           mkdir -p "$PKG"
           cp build/bin/xeqm-d "$PKG/"
@@ -137,7 +141,7 @@ jobs:
           chmod +x "$PKG"/*
 
           {
-            printf "XEQM Core Ubuntu 24.04 x86_64 binaries\\n\\n"
+            printf "XEQM Core Ubuntu ${{ matrix.ubuntu }} x86_64 binaries\\n\\n"
             printf "Source commit: %s\\n\\n" "$COMMIT"
             printf "Included:\\n"
             printf "  xeqm-d\\n"
@@ -157,10 +161,10 @@ jobs:
       - name: Upload Ubuntu artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XEQM-core-ubuntu-24.04-x86_64
+          name: XEQM-core-ubuntu-${{ matrix.ubuntu }}-x86_64
           path: |
-            XEQM-core-*-ubuntu-24.04-x86_64-*.tar.gz
-            XEQM-core-*-ubuntu-24.04-x86_64-*.tar.gz.sha256
+            XEQM-core-*-ubuntu-${{ matrix.ubuntu }}-x86_64-*.tar.gz
+            XEQM-core-*-ubuntu-${{ matrix.ubuntu }}-x86_64-*.tar.gz.sha256
 
   linux-ubuntu-2404-arm64:
     name: Build Ubuntu 24.04 ARM64 binaries
@@ -929,7 +933,7 @@ jobs:
   publish:
     name: Publish core release
     needs:
-      - linux-ubuntu-2404
+      - linux-ubuntu-x64
       - linux-ubuntu-2404-arm64
       - windows-x64
       - macos-arm64
@@ -969,6 +973,7 @@ jobs:
 
             Includes:
             - Ubuntu 24.04 x86_64 tar.gz
+            - Ubuntu 22.04 x86_64 tar.gz
             - Ubuntu 24.04 aarch64 tar.gz
             - Windows x86_64 zip
             - macOS ARM64 tar.gz
