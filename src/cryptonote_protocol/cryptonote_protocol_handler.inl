@@ -489,6 +489,15 @@ namespace cryptonote
       context.m_state = cryptonote_connection_context::state_normal;
       if(is_initial  && hshd.current_height >= target && target == m_core.blockchain.get_current_blockchain_height())
         on_connection_synchronized();
+      else if(is_initial && m_core.get_nettype() == cryptonote::network_type::TESTNET &&
+              m_core.blockchain.get_current_blockchain_height() >= hshd.current_height)
+        // TESTNET signer-bootstrap: the signer seed produces every block from genesis and is always
+        // ahead of its peers, so the normal "peer caught up to us" condition never fires and the seed
+        // never flips is_synchronized(). That would leave it unable to accept relayed mempool txs
+        // (so it builds empty blocks and funding/registration txs never confirm) and unable to serve
+        // wallet RPC. We already hold this peer's top block and are at/ahead of it, so we are
+        // synchronized relative to it. Testnet only; mainnet is unaffected.
+        on_connection_synchronized();
     }
     else
     {
