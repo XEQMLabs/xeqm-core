@@ -2544,14 +2544,16 @@ void core::try_produce_fallback_block() {
     // _height is not part of the hf22 block hash, so setting it does not affect the signature.
     b._height = tmpl_height;
 
-    // On the non-cached template path, create_block_template_internal sets b.reward to the actually
-    // batched coinbase (0 when no batch payment is due this block), but the hf19+ reward-batching
-    // check (blockchain.cpp) requires b.reward == the CLAIMED per-block reward (SN reward + fees ==
-    // expected_reward). The miner usually hits the cached-template path where this is already set;
-    // the signature fallback produces fresh templates, so carry the claimed reward in explicitly.
-    // b.reward is serialized in the Oxen-10-interop block, not the header, so it is not part of the
-    // hf22 block hash and does not affect the fallback signature.
-    b.reward = expected_reward;
+    // Do NOT overwrite b.reward here. create_block_template_internal already sets
+    // b.reward = block_rewards = construct_miner_tx's accrued per-block reward
+    // (service_node_total + tx fees), which is exactly what the hf19+ reward-batching check in
+    // validate_block_rewards requires. The template's `expected_reward` out-param is the FEE total
+    // only (fill_block_template's best_reward), so assigning b.reward = expected_reward would drop
+    // service_node_total and make every signed-fallback block fail with
+    // "block reward for batching is incorrect: 0 != <SN reward>", stalling the chain when Pulse
+    // fails over to the signer (empirically reproduced). b.reward is serialized in the
+    // Oxen-10-interop block body, not the header, so it is not part of the hf22 block hash and does
+    // not affect the fallback signature either way.
 
     cryptonote::block_verification_context bvc = {};
     // handle_block_found signs the block with the fallback key and re-checks the stagger gate.
