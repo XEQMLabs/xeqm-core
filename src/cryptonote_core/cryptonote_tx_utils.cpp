@@ -442,6 +442,20 @@ std::pair<bool, uint64_t> construct_miner_tx(
                 batched_rewards.emplace_back(
                         miner_tx_context.miner_block_producer,
                         reward_money::from_coin(miner_amount));
+            } else if (nettype == network_type::TESTNET && already_generated_coins == 0) {
+                // Genesis premine (testnet signer-bootstrap): split into many equal outputs so the
+                // treasury has an immediate ring-decoy pool and can stake many service nodes from
+                // genesis. A single premine output cannot form ring signatures on a fresh,
+                // mining-free chain ("Not enough outputs to use"). The sum is unchanged so the
+                // reward check still passes. Testnet + premine block only; mainnet is untouched.
+                constexpr uint64_t PREMINE_OUTPUTS = 64;
+                const uint64_t each = miner_amount / PREMINE_OUTPUTS;
+                for (uint64_t k = 0; k < PREMINE_OUTPUTS; k++)
+                    rewards.emplace_back(
+                            reward_type::miner,
+                            miner_tx_context.miner_block_producer,
+                            k + 1 == PREMINE_OUTPUTS ? miner_amount - each * (PREMINE_OUTPUTS - 1)
+                                                     : each);
             } else {
                 rewards.emplace_back(
                         reward_type::miner, miner_tx_context.miner_block_producer, miner_amount);
@@ -502,7 +516,12 @@ std::pair<bool, uint64_t> construct_miner_tx(
 
     if (hard_fork_version < hf::hf19_reward_batching) {
         CHECK_AND_ASSERT_MES(
-                rewards.size() <= 9,
+                // The testnet genesis premine is split into many outputs (see above) to give the
+                // treasury a ring-decoy pool on a mining-free chain; it is exempt from the pre-hf19
+                // 9-output cap. On this chain only genesis is pre-hf19 (height 1+ is hf22), and the
+                // daemon parses the genesis blob rather than re-validating it against this cap.
+                rewards.size() <= 9 ||
+                        (nettype == network_type::TESTNET && already_generated_coins == 0),
                 std::make_pair(false, block_rewards),
                 "More rewards specified than supported, number of rewards: {}, capacity: {}",
                 rewards.size(),
