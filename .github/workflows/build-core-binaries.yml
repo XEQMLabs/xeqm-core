@@ -5,6 +5,12 @@ on:
     tags:
       - "core-v*"
   workflow_dispatch:
+    inputs:
+      release_suffix:
+        description: Version suffix for this build; pass an empty value for release-style naming
+        type: string
+        required: false
+        default: "-dev"
 
 permissions:
   contents: write
@@ -14,7 +20,7 @@ permissions:
 # up OXEN_RELEASE_SUFFIX from the environment when set, so we just point it
 # at empty for tagged builds and leave it as the default ("-dev") otherwise.
 env:
-  OXEN_RELEASE_SUFFIX: ${{ github.ref_type != 'tag' && '-dev' || '' }}
+  OXEN_RELEASE_SUFFIX: ${{ github.ref_type != 'tag' && inputs.release_suffix || '' }}
 
 jobs:
   linux-ubuntu-x64:
@@ -126,7 +132,10 @@ jobs:
 
       - name: Package Ubuntu binaries
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
+          # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.
+          VERSION="${GITHUB_REF_NAME#core-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="$(sed -n 's/^[[:space:]]*VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)"
+          VERSION="$(echo "$VERSION" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -256,7 +265,10 @@ jobs:
 
       - name: Package ARM64 binaries
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
+          # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.
+          VERSION="${GITHUB_REF_NAME#core-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="$(sed -n 's/^[[:space:]]*VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)"
+          VERSION="$(echo "$VERSION" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -407,7 +419,10 @@ jobs:
       - name: Package Windows binaries
         shell: msys2 {0}
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
+          # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.
+          VERSION="${GITHUB_REF_NAME#core-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="$(sed -n 's/^[[:space:]]*VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)"
+          VERSION="$(echo "$VERSION" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -628,7 +643,10 @@ jobs:
       - name: Package macOS ARM64 binaries
         shell: bash
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
+          # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.
+          VERSION="${GITHUB_REF_NAME#core-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="$(sed -n 's/^[[:space:]]*VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)"
+          VERSION="$(echo "$VERSION" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
@@ -872,7 +890,10 @@ jobs:
       - name: Package macOS Intel x86_64 binaries
         shell: bash
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME#core-v}" | tr '/' '-')"
+          # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.
+          VERSION="${GITHUB_REF_NAME#core-v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="$(sed -n 's/^[[:space:]]*VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)"
+          VERSION="$(echo "$VERSION" | tr '/' '-')"
 
           COMMIT="$(git rev-parse HEAD)"
           SHORT="$(git rev-parse --short HEAD)"
