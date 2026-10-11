@@ -12,7 +12,7 @@ Spin up XEQM testnet nodes, service nodes, or wallet services for local developm
 ### Pull the image
 
 ```bash
-docker pull ghcr.io/xeqmlabs/xeqm-node:v1.1.1
+docker pull ghcr.io/xeqmlabs/xeqm-node:v1.1.2
 ```
 
 ### Launch
