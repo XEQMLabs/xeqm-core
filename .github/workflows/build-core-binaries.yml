@@ -130,6 +130,9 @@ jobs:
           fi
           echo "All binaries are portably linked."
 
+      - name: Integration test - signed-fallback reward (rev1 stall regression)
+        run: bash tests/integration/signer_fallback_reward.sh
+
       - name: Package Ubuntu binaries
         run: |
           # Tags carry the version in their name; any other ref takes it from CMakeLists.txt.

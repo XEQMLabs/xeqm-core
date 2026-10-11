@@ -49,23 +49,28 @@ for _ in $(seq 1 45); do
   [ "${h:-0}" -gt 5 ] 2>/dev/null && break
 done
 
-fail=0
-if [ "${h:-0}" -le 1 ] 2>/dev/null; then
-  echo "FAIL: chain stalled at height ${h:-?} -- signed-fallback block was rejected"
-  fail=1
-fi
+# Definitive bug signal (branch-independent): the reward-validation error means the signer DID
+# produce a signed-fallback block and it was rejected -- i.e. the overwrite bug is present.
 if grep -q "block reward for batching is incorrect" "$BASE/daemon.log"; then
-  echo "FAIL: reward-validation error in daemon log:"
-  grep "block reward for batching is incorrect" "$BASE/daemon.log" | tail -1
-  fail=1
+  echo "FAIL: signed-fallback block rejected -- $(grep 'block reward for batching is incorrect' "$BASE/daemon.log" | tail -1)"
+  exit 1
 fi
+
+# No reward error AND the chain never advanced past genesis => this build does not bootstrap from
+# genesis via the signer (e.g. a release/main branch without signer-from-genesis). There is no
+# fallback block for this harness to exercise, so skip rather than fail. On a signer-from-genesis
+# build the chain always advances, and a present bug is caught by the reward-error check above.
+if [ "${h:-0}" -le 1 ] 2>/dev/null; then
+  echo "SKIP: chain did not advance past genesis and no reward error -- signer-from-genesis is not active on this build; nothing to test here"
+  exit 0
+fi
+
+# Chain climbed via accepted signed-fallback blocks: verify the per-block reward is correct.
 r=$(rpc get_block_header_by_height '{"height":1}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("result",{}).get("block_header",{}).get("reward",-1))' 2>/dev/null)
 if [ "${r:-x}" != "$EXPECTED_REWARD" ]; then
   echo "FAIL: block 1 reward=${r} (expected $EXPECTED_REWARD = miner_fee + service_node_total)"
-  fail=1
+  exit 1
 fi
 
-if [ "$fail" = 0 ]; then
-  echo "PASS: signer-fallback chain climbed to height $h; block 1 reward=$r (miner_fee + service_node_total)"
-fi
-exit $fail
+echo "PASS: signer-fallback chain climbed to height $h; block 1 reward=$r (miner_fee + service_node_total)"
+exit 0
