@@ -32,6 +32,7 @@ oxen_add_library(blockchain_db
   lmdb/db_lmdb.cpp
   sqlite/db_sqlite.cpp
   sqlite/snapshots.cpp
+  sqlite/blockchain_sqlite.cpp
   )
 
 target_link_libraries(blockchain_db
