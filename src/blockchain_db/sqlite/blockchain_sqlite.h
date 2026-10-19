@@ -29,28 +29,47 @@
 #pragma once
 
 // =====================================================================================
-// M1 SCAFFOLD -- combined SQLite BlockchainDB backend (ported from oxen-core PR #1895).
+// Combined SQLite BlockchainDB backend (ported from oxen-core PR #1895).
 //
-// This is the milestone-1 scaffold of a single-file SQLite blockchain backend.  It is a
-// concrete BlockchainDB subclass so that it can be selected at runtime, but almost every
-// method is an explicit `TODO(M2)` stub that throws: the actual SQLite schema and the
-// reconciliation with xeqm-core's diverged state (batching-v2 rewards, fallback miner,
-// rev1 signed fallback, pruning, service-node archive vs blob storage) is deliberately
-// deferred to milestone M2.  LMDB remains the default backend; this one is only reachable
-// when XEQM_DB_BACKEND=sqlite is set explicitly (see new_db() in blockchain_db.cpp).
+// Milestone state (see docs/sqlite-port-M2-notes.md):
+//   * M2a (this file): the data-access FOUNDATION + the CORE chain-storage path are real.
+//     Lifecycle (open/close/sync/reset), transaction management, the write path
+//     (add_block / add_transaction_data / add_output / add_spent_key / pop_block and the
+//     remove_* seams), the read path (blocks, transactions, outputs, key images), txpool
+//     and alt blocks are implemented against xeqm's `db::Database` (SQLiteCpp) wrapper.
+//   * M2b (still TODO -- throws): anything tied to where xeqm diverged from oxen on
+//     consensus/rewards -- rewards / batching-v2 / accrued-history, service-node data +
+//     proofs + archive, fallback-miner / rev1 signed fallback, quorum-signed checkpoints,
+//     plus pruning and histogram / output-distribution.  These deliberately throw
+//     ("BlockchainSQLite: not implemented (M2b): <method>") rather than guess at the
+//     diverged schema.
 //
 // NAMING: the upstream class is `cryptonote::BlockchainSQLite`, but that fully-qualified
 // name is already taken in xeqm-core by the rewards/batching database in
-// sqlite/db_sqlite.h (which is kept intact for M1).  To avoid the collision this class is
+// sqlite/db_sqlite.h (which is kept intact for now).  To avoid the collision this class is
 // named `BlockchainSQLiteDB`.  Reclaiming the plain name (by renaming the rewards DB to
-// rewards_db) is an M2 task.
+// rewards_db) is a later task.
+//
+// ACCESS LAYER: upstream #1895 uses a `session::sqlite` connection pool that xeqm-core does
+// not have.  This port is rebuilt on xeqm's existing `db::Database` wrapper (src/sqlitedb,
+// built on SQLiteCpp).  `db::Database` is a SINGLE shared connection (OPEN_FULLMUTEX, WAL,
+// foreign_keys=ON) with a per-thread prepared-statement cache, so this backend uses one
+// connection for both reads and writes rather than a pool.  See the M2 notes for the
+// concurrency implications (and the connection-pool work left for a later milestone).
 // =====================================================================================
 
+#include <SQLiteCpp/SQLiteCpp.h>
+
 #include <atomic>
+#include <concepts>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <sqlitedb/database.hpp>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "blockchain_db/blockchain_db.h"
 #include "common/fs.h"
@@ -61,14 +80,12 @@ namespace cryptonote {
 inline constexpr std::string_view SQLITE_DB_BACKEND_FILENAME = "xeqm.db";
 
 /// BlockchainDB backend storing the chain in a single SQLite database file.
-///
-/// M1: concrete-but-stubbed.  See the file header for what is and is not implemented.
 class BlockchainSQLiteDB : public BlockchainDB {
   public:
     explicit BlockchainSQLiteDB(bool batch_transactions = true);
     ~BlockchainSQLiteDB() override;
 
-    // --- BlockchainDB interface (all overrides; see .cpp for which are real vs M2 stubs) ---
+    // --- BlockchainDB interface (see .cpp for which are real vs M2b stubs) ---
     void add_block( const block& blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, uint64_t num_rct_outs, const crypto::hash& blk_hash) override;
     void remove_block() override;
     uint64_t add_transaction_data( const crypto::hash& blk_hash, const std::pair<transaction, std::string>& tx, const crypto::hash& tx_hash, const crypto::hash& tx_prunable_hash) override;
@@ -77,6 +94,7 @@ class BlockchainSQLiteDB : public BlockchainDB {
     void add_tx_amount_output_indices( const uint64_t tx_id, const std::vector<uint64_t>& amount_output_indices) override;
     void add_spent_key(const crypto::key_image& k_image) override;
     void remove_spent_key(const crypto::key_image& k_image) override;
+    void pop_block(block& blk, std::vector<transaction>& txs) override;
     void open( const fs::path& filename, cryptonote::network_type nettype, const int db_flags = 0) override;
     void close() override;
     void sync() override;
@@ -187,11 +205,58 @@ class BlockchainSQLiteDB : public BlockchainDB {
     bool remove_service_node_proof(const crypto::public_key& pubkey) override;
 
   private:
-    // Throws std::runtime_error("BlockchainSQLite: not implemented (M2): <method>").
+    // Throws std::runtime_error("BlockchainSQLite: not implemented (M2b): <method>").  Used for the
+    // diverged rewards / service-node / consensus seams that this milestone does not implement.
     [[noreturn]] static void m2_stub(const char* method);
 
-    mutable std::mutex m_lock;
+    void check_open() const;
+
+    // The shared connection for a write.  Throws unless the calling thread holds the write
+    // transaction (so that each block's rows -- transactions, outputs, key images and the block --
+    // commit together and satisfy the deferred foreign keys to `blocks`).
+    db::Database& write_conn();
+
+    // Runs `f(db)` for a write made both inside and outside a write transaction (txpool, alt
+    // blocks, max block size): inside the calling thread's write transaction if it holds one,
+    // otherwise inside a transaction of its own, committed when `f` returns.
+    template <std::invocable<db::Database&> F>
+    void in_write_txn(F&& f) {
+        check_open();
+        if (m_writer.load() == std::this_thread::get_id()) {
+            f(*m_db);
+            return;
+        }
+        SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
+        f(*m_db);
+        tx.commit();
+    }
+
+    void begin_write(bool batch);
+    void end_write(bool commit);
+    void require_writer(std::string_view action) const;
+    void require_batch_writer() const;
+
+    template <typename T>
+    T get_block_column(uint64_t height, std::string_view column, std::string_view what) const;
+    template <typename T>
+    T get_stored_block(uint64_t height, size_t* size = nullptr) const;
+    std::vector<uint64_t> get_block_weight_column(
+            std::string_view column, uint64_t start_height, size_t count) const;
+
+    std::unique_ptr<db::Database> m_db;
+    fs::path m_filename;
+    cryptonote::network_type m_nettype = cryptonote::network_type::UNDEFINED;
+    int m_db_flags = 0;
     bool m_read_only = false;
+    bool m_open = false;
+
+    mutable std::mutex m_lock;
+
+    // The single write transaction, held only by the thread in m_writer.  Other threads only read
+    // m_writer / m_batch_active.
+    std::optional<SQLite::Transaction> m_write;
+    std::atomic<std::thread::id> m_writer{};
+    std::atomic<bool> m_batch_active{false};
     bool m_batch_transactions = true;
 };
 
