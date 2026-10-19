@@ -86,6 +86,7 @@ namespace {
             "prompt-for-password", "Prompts for password when not provided"};
 
     constexpr const char default_rpc_username[] = "oxen";
+    constexpr size_t MAX_REQUEST_BODY_SIZE = 32 * 1024 * 1024;  // larger request bodies are refused
 
     std::optional<tools::password_container> password_prompter(const char* prompt, bool verify) {
         auto pwd_container = tools::password_container::prompt(verify, prompt);
@@ -210,6 +211,11 @@ void wallet_rpc_server::handle_json_rpc_request(HttpResponse& res, HttpRequest& 
     res.onAborted([] {});
     res.onData([this, &res, extra_headers = std::move(extra_headers), buffer = ""s](
                        std::string_view d, bool done) mutable {
+        if (buffer.size() + d.size() > MAX_REQUEST_BODY_SIZE) {
+            error_response(res, HTTP_PAYLOAD_TOO_LARGE);
+            res.close();
+            return;
+        }
         if (!done) {
             buffer += d;
             return;

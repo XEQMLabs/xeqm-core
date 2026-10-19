@@ -882,7 +882,11 @@ static tx_memory_pool::key_images_container get_pool_kis(cryptonote::core& core)
 }
 
 //------------------------------------------------------------------------------------------------------------------------------
-void core_rpc_server::invoke(GET_TRANSACTIONS& get, rpc_context) {
+void core_rpc_server::invoke(GET_TRANSACTIONS& get, rpc_context context) {
+    if (!context.admin && get.request.tx_hashes.size() > GET_TRANSACTIONS::MAX_COUNT) {
+        get.response["status"] = "Too many transactions requested";
+        return;
+    }
     // NB: this also handles the deprecated GET_TRANSACTION_POOL
     std::unordered_set<crypto::hash> missed_txs;
     using split_tx = std::tuple<crypto::hash, std::string, crypto::hash, std::string>;
@@ -1137,8 +1141,12 @@ void core_rpc_server::invoke(GET_TRANSACTIONS& get, rpc_context) {
     get.response["status"] = STATUS_OK;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-void core_rpc_server::invoke(IS_KEY_IMAGE_SPENT& spent, rpc_context) {
+void core_rpc_server::invoke(IS_KEY_IMAGE_SPENT& spent, rpc_context context) {
     spent.response["status"] = STATUS_FAILED;
+    if (!context.admin && spent.request.key_images.size() > IS_KEY_IMAGE_SPENT::MAX_COUNT) {
+        spent.response["status"] = "Too many key images requested";
+        return;
+    }
 
     std::vector<bool> blockchain_spent;
     if (!m_core.are_key_images_spent(spent.request.key_images, blockchain_spent))

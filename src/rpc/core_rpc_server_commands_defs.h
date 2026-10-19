@@ -282,6 +282,9 @@ struct GET_HEIGHT : PUBLIC, LEGACY, NO_ARGS {
 struct GET_TRANSACTIONS : PUBLIC, LEGACY {
     static constexpr auto names() { return NAMES("get_transactions", "gettransactions"); }
 
+    /// Maximum transactions that may be requested in a single request (unless admin)
+    static constexpr size_t MAX_COUNT = 500;
+
     struct request_parameters {
         std::vector<crypto::hash> tx_hashes;
         bool memory_pool = false;
@@ -329,6 +332,9 @@ struct GET_TRANSACTION_POOL : GET_TRANSACTIONS {
 ///   - `2` -- the key image is spent in a transaction currently in the mempool
 struct IS_KEY_IMAGE_SPENT : PUBLIC, LEGACY {
     static constexpr auto names() { return NAMES("is_key_image_spent"); }
+
+    /// Maximum key images that may be checked in a single request (unless admin)
+    static constexpr size_t MAX_COUNT = 5000;
 
     enum class SPENT : uint8_t {
         UNSPENT = 0,
