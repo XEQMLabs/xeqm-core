@@ -357,13 +357,20 @@ bool tx_memory_pool::add_tx(
         return false;
     }
 
-    if (hf_version < hf::hf19_reward_batching) {
-        if (!opts.kept_by_block && tx.is_transfer() &&
-            !m_blockchain.check_fee(tx_weight, tx.vout.size(), fee, burned, opts)) {
-            tvc.m_verifivation_failed = true;
-            tvc.m_fee_too_low = true;
-            return false;
-        }
+    // A declared burn must be covered by the fee the tx actually pays.
+    if (!opts.kept_by_block && tx.version >= txversion::v2_ringct &&
+        burned > tx.rct_signatures.txnFee) {
+        tvc.m_verifivation_failed = true;
+        tvc.m_fee_too_low = true;
+        return false;
+    }
+
+    // The minimum relay fee applies at every hard fork, including reward batching.
+    if (!opts.kept_by_block && tx.is_transfer() &&
+        !m_blockchain.check_fee(tx_weight, tx.vout.size(), fee, burned, opts)) {
+        tvc.m_verifivation_failed = true;
+        tvc.m_fee_too_low = true;
+        return false;
     }
 
     size_t tx_weight_limit = get_transaction_weight_limit(hf_version);
