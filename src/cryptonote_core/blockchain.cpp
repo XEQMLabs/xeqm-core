@@ -1686,8 +1686,8 @@ bool Blockchain::prevalidate_block_rewards(const block& b, uint64_t height, hf h
             return false;
         }
 
-        txversion min_version = transaction::get_max_version_for_hf(hf_version);
-        txversion max_version = transaction::get_min_version_for_hf(hf_version);
+        txversion min_version = transaction::get_min_version_for_hf(hf_version);
+        txversion max_version = transaction::get_max_version_for_hf(hf_version);
         if (miner_tx.version < min_version || miner_tx.version > max_version) {
             log::error(
                     logverify,
