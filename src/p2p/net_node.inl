@@ -1052,7 +1052,8 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(
                     zone.m_peerlist.set_peer_just_seen(
                             rsp.node_data.peer_id,
                             context.m_remote_address,
-                            context.m_pruning_seed);
+                            context.m_pruning_seed,
+                            context.m_remote_history);
 
                     // move
                     if (rsp.node_data.peer_id == zone.m_config.m_peer_id) {
@@ -1132,7 +1133,8 @@ bool node_server<t_payload_net_handler>::do_peer_timed_sync(
                             .m_peerlist.set_peer_just_seen(
                                     context.peer_id,
                                     context.m_remote_address,
-                                    context.m_pruning_seed);
+                                    context.m_pruning_seed,
+                                    rsp.payload_data.history);
                 if (!m_payload_handler.process_payload_sync_data(
                             std::move(rsp.payload_data), context, false)) {
                     m_network_zones.at(context.m_remote_address.get_zone())
@@ -1311,6 +1313,7 @@ bool node_server<t_payload_net_handler>::try_to_connect_and_handshake_with_new_p
     time(&last_seen);
     pe_local.last_seen = static_cast<int64_t>(last_seen);
     pe_local.pruning_seed = con->m_pruning_seed;
+    pe_local.history = con->m_remote_history;
     zone.m_peerlist.append_with_peer_white(pe_local);
     // update last seen and push it to peerlist manager
 
@@ -1439,55 +1442,69 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_anchor_peerlis
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
+std::vector<size_t> node_server<t_payload_net_handler>::connectable_peers(
+        network_zone& zone, bool use_white_list, const std::optional<cryptonote::sync_need>& need) {
+    constexpr auto ipv4_type_id = epee::net_utils::ipv4_network_address::get_type_id();
+
+    // build a set of all the /16s, IPs, peer_ids that we're connected to so that we can prefer
+    // and/or filter them out from our potential peer selection below.
+    struct {
+        std::unordered_set<uint32_t> net;
+        std::set<epee::net_utils::network_address> addr;
+        std::unordered_set<peerid_type> peer;
+    } seen;
+    if (&zone == &m_network_zones.at(epee::net_utils::zone::public_))
+        zone.m_net_server.get_config_object().foreach_connection(
+                [&](const p2p_connection_context& cntxt) {
+                    if (cntxt.m_remote_address.get_type_id() == ipv4_type_id) {
+                        seen.net.insert(
+                                cntxt.m_remote_address
+                                        .template as<const epee::net_utils::ipv4_network_address>()
+                                        .ip() &
+                                0x0000ffff);
+                    }
+                    seen.addr.insert(cntxt.m_remote_address);
+                    seen.peer.insert(cntxt.peer_id);
+                    return true;
+                });
+
+    std::vector<size_t> filtered;
+    size_t idx = 0;
+    zone.m_peerlist.foreach (use_white_list, [this, &seen, &filtered, &idx, &need](
+                                                     const peerlist_entry& pe) {
+        ++idx;
+        // Skip peers we're already connected to:
+        if (seen.peer.count(pe.id) || seen.addr.count(pe.adr))
+            return true;
+        // Don't include this in selection if it recently failed
+        if (is_addr_recently_failed(pe.adr))
+            return true;
+        // While syncing, pass over peers whose advertised history can't serve what we still need
+        // (history_covers() is always true for the history of 0 that every full peer advertises, so
+        // this changes nothing on an all-full network), and peers that already turned out unable to
+        // serve the sync.  An entry's chain height is long out of date, but its history isn't, so it
+        // is judged against the height we are syncing to.
+        if (need && (!cryptonote::history_covers(need->height, need->target, pe.history) ||
+                     m_unhelpful_peers.contains(pe.adr)))
+            return true;
+
+        filtered.emplace_back(idx - 1);
+        return true;
+    });
+    return filtered;
+}
+//-----------------------------------------------------------------------------------
+template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(
-        network_zone& zone, bool use_white_list) {
+        network_zone& zone, bool use_white_list, const std::optional<cryptonote::sync_need>& need) {
 
     std::set<size_t> tried_peers;
-
-    constexpr auto ipv4_type_id = epee::net_utils::ipv4_network_address::get_type_id();
 
     for (size_t rand_count = 0; rand_count < 3 && !zone.m_net_server.is_stop_signal_sent();
          rand_count++) {
         size_t random_index;
 
-        // build a set of all the /16s, IPs, peer_ids that we're connected to so that we can prefer
-        // and/or filter them out from our potential peer selection below.
-        struct {
-            std::unordered_set<uint32_t> net;
-            std::set<epee::net_utils::network_address> addr;
-            std::unordered_set<peerid_type> peer;
-        } seen;
-        if (&zone == &m_network_zones.at(epee::net_utils::zone::public_))
-            zone.m_net_server.get_config_object().foreach_connection(
-                    [&](const p2p_connection_context& cntxt) {
-                        if (cntxt.m_remote_address.get_type_id() == ipv4_type_id) {
-                            seen.net.insert(
-                                    cntxt.m_remote_address
-                                            .template as<
-                                                    const epee::net_utils::ipv4_network_address>()
-                                            .ip() &
-                                    0x0000ffff);
-                        }
-                        seen.addr.insert(cntxt.m_remote_address);
-                        seen.peer.insert(cntxt.peer_id);
-                        return true;
-                    });
-
-        std::vector<size_t> filtered;
-        size_t idx = 0;
-        zone.m_peerlist.foreach (
-                use_white_list, [this, &seen, &filtered, &idx](const peerlist_entry& pe) {
-                    ++idx;
-                    // Skip peers we're already connected to:
-                    if (seen.peer.count(pe.id) || seen.addr.count(pe.adr))
-                        return true;
-                    // Don't include this in selection if it recently failed
-                    if (is_addr_recently_failed(pe.adr))
-                        return true;
-
-                    filtered.emplace_back(idx - 1);
-                    return true;
-                });
+        std::vector<size_t> filtered = connectable_peers(zone, use_white_list, need);
 
         if (filtered.empty()) {
             log::debug(logcat, "No available peer in {} list", (use_white_list ? "white" : "gray"));
@@ -1566,6 +1583,44 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(
         return true;
     }
     return false;
+}
+//-----------------------------------------------------------------------------------
+template <class t_payload_net_handler>
+auto node_server<t_payload_net_handler>::check_sync_peers(
+        network_zone& zone, const cryptonote::sync_need& need)
+        -> std::pair<bool, std::optional<droppable_peer>> {
+    // As the sync gets on, its needs move up into what peers recorded as not-yet-servable now keep.
+    m_unhelpful_peers.forget_servable(need.height);
+
+    bool all_useful = true;
+    std::optional<droppable_peer> droppable;
+    zone.m_net_server.get_config_object().foreach_connection([&](const p2p_connection_context&
+                                                                         cntxt) {
+        if (cntxt.m_state == cryptonote::cryptonote_connection_context::state_before_handshake)
+            return true;
+        // Incoming peers (often syncing nodes behind us) are neither ours to replace nor any reason
+        // to replace others.  peer_can_serve() is true for the history of 0 that every full peer
+        // advertises, so on an all-full network no peer is ever recorded unhelpful or dropped.
+        if (cntxt.m_is_income || cryptonote::peer_can_serve(
+                                         need.height,
+                                         cntxt.m_remote_blockchain_height,
+                                         cntxt.m_remote_history))
+            return true;
+        all_useful = false;
+        m_unhelpful_peers.add(
+                cntxt.m_remote_address, cntxt.m_remote_blockchain_height, cntxt.m_remote_history);
+        // Never an anchor (which guards against being surrounded by bad peers), nor a peer we insist
+        // on, nor one still sending us blocks we asked for.
+        if (!droppable && !cntxt.m_anchor && cntxt.m_requested_objects.empty() &&
+            !is_priority_node(cntxt.m_remote_address))
+            droppable = droppable_peer{
+                    cntxt.m_connection_id,
+                    cntxt.m_remote_address,
+                    cntxt.m_remote_blockchain_height,
+                    cntxt.m_remote_history};
+        return true;
+    });
+    return {all_useful, droppable};
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
@@ -1666,7 +1721,25 @@ bool node_server<t_payload_net_handler>::connections_maker() {
     if (!connect_to_peerlist(m_priority_peers))
         return false;
 
+    // While syncing, new outgoing connections in the public zone (the only one that syncs the
+    // chain) go only to peers whose peerlist entry says they can serve what the sync needs, and that
+    // haven't already turned out not to; check_sync_peers also records connected peers that can't
+    // serve it.  history_covers()/peer_can_serve() are true for the history of 0 that every full
+    // peer advertises, so on today's all-full network this records nothing and filters nothing out,
+    // leaving connection selection unchanged.
+    auto& public_zone = m_network_zones.at(zone_type::public_);
+    const auto need = m_payload_handler.get_sync_need();
+    bool all_useful = true;
+    std::optional<droppable_peer> droppable;
+    if (need)
+        std::tie(all_useful, droppable) = check_sync_peers(public_zone, *need);
+    else
+        m_unhelpful_peers.clear();
+
     for (auto& zone : m_network_zones) {
+        // Only the public zone syncs the chain, so only it filters connections by served history.
+        const std::optional<cryptonote::sync_need> zone_need =
+                (need && zone.first == zone_type::public_) ? need : std::nullopt;
         size_t base_expected_white_connections =
                 (zone.second.m_config.m_net_config.max_out_connection_count *
                  cryptonote::p2p::DEFAULT_WHITELIST_CONNECTIONS_PERCENT) /
@@ -1695,7 +1768,7 @@ bool node_server<t_payload_net_handler>::connections_maker() {
                 // then do white list
                 while (get_outgoing_connections_count(zone.second) < expected_white_connections &&
                        make_expected_connections_count(
-                               zone.second, PeerType::white, expected_white_connections))
+                               zone.second, PeerType::white, expected_white_connections, zone_need))
                     ;
                 // then do grey list
                 while (get_outgoing_connections_count(zone.second) <
@@ -1703,7 +1776,8 @@ bool node_server<t_payload_net_handler>::connections_maker() {
                        make_expected_connections_count(
                                zone.second,
                                PeerType::gray,
-                               zone.second.m_config.m_net_config.max_out_connection_count))
+                               zone.second.m_config.m_net_config.max_out_connection_count,
+                               zone_need))
                     ;
             } else {
                 // start from grey list
@@ -1712,7 +1786,8 @@ bool node_server<t_payload_net_handler>::connections_maker() {
                        make_expected_connections_count(
                                zone.second,
                                PeerType::gray,
-                               zone.second.m_config.m_net_config.max_out_connection_count))
+                               zone.second.m_config.m_net_config.max_out_connection_count,
+                               zone_need))
                     ;
                 // and then do white list
                 while (get_outgoing_connections_count(zone.second) <
@@ -1720,7 +1795,8 @@ bool node_server<t_payload_net_handler>::connections_maker() {
                        make_expected_connections_count(
                                zone.second,
                                PeerType::white,
-                               zone.second.m_config.m_net_config.max_out_connection_count))
+                               zone.second.m_config.m_net_config.max_out_connection_count,
+                               zone_need))
                     ;
             }
             if (zone.second.m_net_server.is_stop_signal_sent())
@@ -1737,6 +1813,38 @@ bool node_server<t_payload_net_handler>::connections_maker() {
         }
     }
 
+    // When a connected public-zone peer can't serve the sync, drop one (if there is one safe to
+    // drop) at the outgoing connection limit to make room, but only while there is a peer left to
+    // connect to that can serve it.  On an all-full network droppable is never set, so this is inert.
+    if (need && droppable) {
+        const size_t max_out = public_zone.m_config.m_net_config.max_out_connection_count;
+        const bool servable_left = !connectable_peers(public_zone, true, need).empty() ||
+                                   !connectable_peers(public_zone, false, need).empty();
+        if (servable_left && get_outgoing_connections_count(public_zone) >= max_out) {
+            log::info(
+                    logcat,
+                    "Dropping peer {} (height {}, history {}), which can't serve the sync from "
+                    "height {}, to make room for one that can",
+                    droppable->address.str(),
+                    droppable->height,
+                    droppable->history,
+                    need->height);
+            public_zone.m_net_server.get_config_object().close(droppable->connection_id);
+        }
+    }
+    // Log the transitions into and out of "not every peer can serve the sync" only.
+    if (all_useful == m_sync_peers_lacking) {
+        if (!all_useful)
+            log::info(
+                    globallogcat,
+                    "Not every peer can serve the sync from height {}: replacing them with peers "
+                    "that can",
+                    need->height);
+        else
+            log::info(globallogcat, "Every peer can serve the sync again");
+        m_sync_peers_lacking = !all_useful;
+    }
+
     if (start_conn_count == get_public_outgoing_connections_count() &&
         start_conn_count < m_network_zones.at(zone_type::public_)
                                    .m_config.m_net_config.max_out_connection_count) {
@@ -1750,7 +1858,10 @@ bool node_server<t_payload_net_handler>::connections_maker() {
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::make_expected_connections_count(
-        network_zone& zone, PeerType peer_type, size_t expected_connections) {
+        network_zone& zone,
+        PeerType peer_type,
+        size_t expected_connections,
+        const std::optional<cryptonote::sync_need>& need) {
     if (m_offline)
         return false;
 
@@ -1777,11 +1888,13 @@ bool node_server<t_payload_net_handler>::make_expected_connections_count(
             return false;
         }
 
-        if (peer_type == PeerType::white && !make_new_connection_from_peerlist(zone, true)) {
+        if (peer_type == PeerType::white &&
+            !make_new_connection_from_peerlist(zone, true, need)) {
             return false;
         }
 
-        if (peer_type == PeerType::gray && !make_new_connection_from_peerlist(zone, false)) {
+        if (peer_type == PeerType::gray &&
+            !make_new_connection_from_peerlist(zone, false, need)) {
             return false;
         }
     }
@@ -2452,6 +2565,7 @@ int node_server<t_payload_net_handler>::handle_handshake(
             pe.last_seen = static_cast<int64_t>(last_seen);
             pe.id = peer_id_l;
             pe.pruning_seed = context.m_pruning_seed;
+            pe.history = context.m_remote_history;
             this->m_network_zones.at(context.m_remote_address.get_zone())
                     .m_peerlist.append_with_peer_white(pe);
             log::debug(
@@ -2782,7 +2896,7 @@ bool node_server<t_payload_net_handler>::gray_peerlist_housekeeping() {
                     pe.adr.host_str(),
                     peerid_to_string(pe.id));
         } else {
-            zone.second.m_peerlist.set_peer_just_seen(pe.id, pe.adr, pe.pruning_seed);
+            zone.second.m_peerlist.set_peer_just_seen(pe.id, pe.adr, pe.pruning_seed, pe.history);
             log::debug(
                     logcat,
                     "PEER PROMOTED TO WHITE PEER LIST IP address: {} Peer ID: {}",

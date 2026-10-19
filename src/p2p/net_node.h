@@ -50,6 +50,7 @@
 #include "cryptonote_basic/connection_context.h"
 #include "cryptonote_config.h"
 #include "cryptonote_protocol/levin_notify.h"
+#include "cryptonote_protocol/peer_history.h"
 #include "epee/net/abstract_tcp_server2.h"
 #include "epee/net/enums.h"
 #include "epee/net/levin_protocol_handler.h"
@@ -398,7 +399,28 @@ class node_server
 
     bool make_new_connection_from_anchor_peerlist(
             const std::vector<anchor_peerlist_entry>& anchor_peerlist);
-    bool make_new_connection_from_peerlist(network_zone& zone, bool use_white_list);
+    // The indices, in the white or gray list, of the peers we could connect to: not connected
+    // already, nor recently failed, and, given what a sync needs, only those whose peerlist entry
+    // says they can serve it and that haven't already turned out not to.
+    std::vector<size_t> connectable_peers(
+            network_zone& zone,
+            bool use_white_list,
+            const std::optional<cryptonote::sync_need>& need = std::nullopt);
+    bool make_new_connection_from_peerlist(
+            network_zone& zone,
+            bool use_white_list,
+            const std::optional<cryptonote::sync_need>& need = std::nullopt);
+    struct droppable_peer {
+        epee::connection_id_t connection_id;
+        epee::net_utils::network_address address;
+        uint64_t height;
+        uint64_t history;
+    };
+    // While syncing, records the outgoing peers that can't serve what the sync needs as unhelpful,
+    // and returns whether every outgoing peer can, along with one that can't and could be dropped
+    // to make room for one that can (see connections_maker), if any.
+    std::pair<bool, std::optional<droppable_peer>> check_sync_peers(
+            network_zone& zone, const cryptonote::sync_need& need);
     bool try_to_connect_and_handshake_with_new_peer(
             const epee::net_utils::network_address& na,
             bool just_take_peerlist = false,
@@ -423,7 +445,10 @@ class node_server
     bool try_ping(
             basic_node_data& node_data, p2p_connection_context& context, const t_callback& cb);
     bool make_expected_connections_count(
-            network_zone& zone, PeerType peer_type, size_t expected_connections);
+            network_zone& zone,
+            PeerType peer_type,
+            size_t expected_connections,
+            const std::optional<cryptonote::sync_need>& need = std::nullopt);
     void record_addr_failed(const epee::net_utils::network_address& addr);
     bool is_addr_recently_failed(const epee::net_utils::network_address& addr);
     bool is_priority_node(const epee::net_utils::network_address& na);
@@ -534,6 +559,12 @@ class node_server
     std::mutex m_used_stripe_peers_mutex;
     std::array<std::list<epee::net_utils::network_address>, 1 << cryptonote::PRUNING_LOG_STRIPES>
             m_used_stripe_peers;
+
+    // Only used by connections_maker (so needs no lock).
+    cryptonote::unhelpful_peers m_unhelpful_peers;
+    // Whether connections_maker last found a connected peer that can't serve the sync, for logging
+    // when that starts and stops.
+    bool m_sync_peers_lacking = false;
 
     epee::connection_id_t m_network_id{};
     cryptonote::network_type m_nettype;

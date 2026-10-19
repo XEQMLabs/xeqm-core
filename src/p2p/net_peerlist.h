@@ -119,7 +119,10 @@ class peerlist_manager {
     bool append_with_peer_gray(const peerlist_entry& pr);
     bool append_with_peer_anchor(const anchor_peerlist_entry& ple);
     bool set_peer_just_seen(
-            peerid_type peer, const epee::net_utils::network_address& addr, uint32_t pruning_seed);
+            peerid_type peer,
+            const epee::net_utils::network_address& addr,
+            uint32_t pruning_seed,
+            uint64_t history = 0);
     bool is_host_allowed(const epee::net_utils::network_address& address);
     bool get_random_gray_peer(peerlist_entry& pe);
     bool remove_from_peer_gray(const peerlist_entry& pe);
