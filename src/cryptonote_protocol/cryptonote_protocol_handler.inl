@@ -303,6 +303,7 @@ namespace cryptonote
 
       cnx.height = cntxt.m_remote_blockchain_height;
       cnx.pruning_seed = cntxt.m_pruning_seed;
+      cnx.remote_history = cntxt.m_remote_history;
       cnx.address_type = (uint8_t)cntxt.m_remote_address.get_type_id();
 
       connections.push_back(cnx);
@@ -348,6 +349,7 @@ namespace cryptonote
 
     context.m_remote_blockchain_height = hshd.current_height;
     context.m_pruning_seed = hshd.pruning_seed;
+    context.m_remote_history = hshd.history;
     if constexpr (PRUNING_DEBUG_SPOOF_SEED) {
       context.m_pruning_seed = tools::make_pruning_seed(1 + (context.m_remote_address.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << PRUNING_LOG_STRIPES), PRUNING_LOG_STRIPES);
       log::info(logcat, "{}New connection posing as pruning seed {:08x}", context, context.m_pruning_seed);
@@ -508,6 +510,7 @@ namespace cryptonote
     hshd.cumulative_difficulty = m_core.blockchain.db().get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
     hshd.pruning_seed = m_core.blockchain.get_blockchain_pruning_seed();
+    hshd.history = m_core.blockchain.db().served_history();
     auto our_blink_hashes = m_core.mempool.get_blink_checksums();
     hshd.blink_blocks.reserve(our_blink_hashes.size());
     hshd.blink_hash.reserve(our_blink_hashes.size());
