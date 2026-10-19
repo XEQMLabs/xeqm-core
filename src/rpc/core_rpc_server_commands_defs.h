@@ -432,67 +432,9 @@ struct SUBMIT_TRANSACTION : PUBLIC, LEGACY {
     } request;
 };
 
-/// RPC: daemon/start_mining
-///
-/// Start mining on the daemon
-///
-/// Inputs:
-///
-/// - `miner_address` -- Account address to mine to, or `"none"` to mine to the 0 address
-///   (discarding any possible rewards).
-/// - `threads_count` -- Number of mining threads to run.  Defaults to 1 thread if omitted or 0.
-/// - `num_blocks` -- Mine until the blockchain has this many new blocks, then stop (no limit if 0,
-///   the default).
-/// - `slow_mining` -- Do slow mining (i.e. don't allocate RandomX cache); primarily intended for
-///   testing.
-///
-/// Outputs:
-///
-/// `status` -- General RPC status string. `"OK"` means everything looks good.
-struct START_MINING : LEGACY {
-    static constexpr auto names() { return NAMES("start_mining"); }
-
-    struct request_parameters {
-        std::string miner_address;
-        int threads_count = 1;
-        int num_blocks = 0;
-        bool slow_mining = false;
-    } request;
-};
-
-/// RPC: daemon/stop_mining
-///
-/// Stop mining on the daemon.
-///
-/// Inputs: none
-///
-/// Outputs:
-///
-/// `status` -- General RPC status string. `"OK"` means everything looks good.
-struct STOP_MINING : LEGACY, NO_ARGS {
-    static constexpr auto names() { return NAMES("stop_mining"); }
-};
-
-/// RPC: daemon/mining_status
-///
-/// Get the mining status of the daemon.
-///
-/// Inputs: none
-///
-/// Outputs:
-///
-/// - `status` -- General RPC status string. `"OK"` means everything looks good.
-/// - `active` -- States if mining is enabled (`true`) or disabled (`false`).
-/// - `speed` -- Mining power in hashes per seconds.
-/// - `threads_count` -- Number of running mining threads.
-/// - `address` -- Account address daemon is mining to. Empty if not mining.
-/// - `pow_algorithm` -- Current hashing algorithm name
-/// - `block_target` -- The expected time to solve per block, i.e. TARGET_BLOCK_TIME
-/// - `block_reward` -- Block reward for the current block being mined.
-/// - `difficulty` -- The difficulty for the current block being mined.
-struct MINING_STATUS : LEGACY, NO_ARGS {
-    static constexpr auto names() { return NAMES("mining_status"); }
-};
+// START_MINING / STOP_MINING / MINING_STATUS removed: PoW block production has been retired
+// (the signed fallback replaced the RandomX fallback at mainnet height 236920, so no freshly
+// PoW-mined block is acceptable). PoW verification of historical blocks is unaffected.
 
 /// RPC: network/get_info
 ///
@@ -3077,7 +3019,6 @@ using core_rpc_types = tools::type_list<
         IN_PEERS,
         IS_KEY_IMAGE_SPENT,
         LOKINET_PING,
-        MINING_STATUS,
         ONS_OWNERS_TO_NAMES,
         ONS_RESOLVE,
         ONS_INFO,
@@ -3090,9 +3031,7 @@ using core_rpc_types = tools::type_list<
         SET_BANS,
         SET_LIMIT,
         SET_LOG_LEVEL,
-        START_MINING,
         STOP_DAEMON,
-        STOP_MINING,
         STORAGE_SERVER_PING,
         SUBMIT_TRANSACTION,
         SYNC_INFO,

@@ -58,7 +58,6 @@ void parse_request(SESSION_ROUTER_PING& ping, rpc_input in);
 void parse_request(SET_BANS& set_bans, rpc_input in);
 void parse_request(SET_LIMIT& limit, rpc_input in);
 void parse_request(SET_LOG_LEVEL& set_log_level, rpc_input in);
-void parse_request(START_MINING& start_mining, rpc_input in);
 void parse_request(STORAGE_SERVER_PING& storage_server_ping, rpc_input in);
 void parse_request(SUBMIT_TRANSACTION& tx, rpc_input in);
 }  // namespace cryptonote::rpc

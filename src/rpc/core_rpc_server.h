@@ -143,12 +143,9 @@ class core_rpc_server {
     void invoke(GET_NET_STATS& get_net_stats, rpc_context context);
     void invoke(GET_OUTPUTS& get_outputs, rpc_context context);
     void invoke(HARD_FORK_INFO& hfinfo, rpc_context context);
-    void invoke(START_MINING& start_mining, rpc_context context);
-    void invoke(STOP_MINING& stop_mining, rpc_context context);
     void invoke(SAVE_BC& save_bc, rpc_context context);
     void invoke(STOP_DAEMON& stop_daemon, rpc_context context);
     void invoke(GET_BLOCK_COUNT& getblockcount, rpc_context context);
-    void invoke(MINING_STATUS& mining_status, rpc_context context);
     void invoke(GET_TRANSACTION_POOL_HASHES& get_transaction_pool_hashes, rpc_context context);
     void invoke(GET_TRANSACTION_POOL_STATS& get_transaction_pool_stats, rpc_context context);
     void invoke(GET_TRANSACTIONS& req, rpc_context context);

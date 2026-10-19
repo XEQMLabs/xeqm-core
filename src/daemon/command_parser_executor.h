@@ -94,12 +94,6 @@ class command_parser_executor final {
 
     bool print_transaction_pool_stats(const std::vector<std::string>& args);
 
-    bool start_mining(const std::vector<std::string>& args);
-
-    bool stop_mining(const std::vector<std::string>& args);
-
-    bool mining_status(const std::vector<std::string>& args);
-
     bool stop_daemon(const std::vector<std::string>& args);
 
     bool set_limit(const std::vector<std::string>& args);

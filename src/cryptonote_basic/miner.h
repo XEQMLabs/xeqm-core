@@ -65,7 +65,17 @@ struct i_miner_handler {
 };
 
 /************************************************************************/
+/* PoW block production has been retired.                               */
 /*                                                                      */
+/* XEQM is a Pulse chain; the signed fallback (feature::pulse_recovery) */
+/* replaced the RandomX PoW fallback at mainnet height 236920, so no    */
+/* freshly PoW-mined block is acceptable any more. The mining worker    */
+/* machinery that used to run here has been removed. What remains is:    */
+/*   - find_nonce_for_given_block, used only for genesis generation, and */
+/*   - inert lifecycle hooks still called from cryptonote_core.          */
+/* This class no longer spins up any mining threads or touches RandomX.  */
+/* PoW VERIFICATION of historical blocks is unaffected (it lives in      */
+/* blockchain.cpp / cryptonote_tx_utils.cpp / rx-slow-hash.c).           */
 /************************************************************************/
 class miner {
   public:
@@ -86,22 +96,12 @@ class miner {
     ~miner();
     bool init(const boost::program_options::variables_map& vm, network_type nettype);
     static void init_options(boost::program_options::options_description& desc);
-    bool set_block_template(
-            const block& bl, const difficulty_type& diffic, uint64_t height, uint64_t block_reward);
+    // Inert lifecycle hooks (no-ops): kept so cryptonote_core's call sites are undisturbed.
     bool on_block_chain_update();
-    bool start(
-            const account_public_address& adr,
-            int threads_count,
-            int stop_after = 0,
-            bool slow_mining = false);
-    double get_speed() const;
-    uint32_t get_threads_count() const;
     bool stop();
-    bool is_mining() const;
-    const account_public_address& get_mining_address() const;
     bool on_idle();
     void on_synchronized();
-    // synchronous analog (for fast calls)
+    // synchronous analog (for fast calls) -- used for genesis nonce generation only.
     static bool find_nonce_for_given_block(
             const get_block_hash_cb& gbh,
             block& bl,
@@ -109,48 +109,12 @@ class miner {
             uint64_t height);
     void pause();
     void resume();
-    uint64_t get_block_reward() const { return m_block_reward; }
 
   private:
-    bool worker_thread(uint32_t index, bool slow_mining = false);
-    bool request_block_template();
-    void update_hashrate();
-
-    struct miner_config {
-        uint64_t current_extra_message_index;
-
-        BEGIN_KV_SERIALIZE_MAP()
-        KV_SERIALIZE(current_extra_message_index)
-        END_KV_SERIALIZE_MAP()
-    };
-
-    std::atomic<bool> m_stop;
-    uint64_t m_stop_height = std::numeric_limits<uint64_t>::max();
-    std::mutex m_template_lock;
-    block m_template;
-    std::atomic<uint32_t> m_template_no = 0;
-    std::atomic<uint32_t> m_starter_nonce;
-    difficulty_type m_diffic = 0;
-    uint64_t m_height = 0;
-    std::atomic<int> m_threads_total = 0;
-    std::atomic<int> m_pausers_count = 0;
-    std::mutex m_miners_count_mutex;
-
-    std::list<std::thread> m_threads;
-    std::mutex m_threads_lock;
+    // Retained from the construction contract in cryptonote_core; unused now that PoW
+    // production is gone, but kept so the core wiring does not need to change.
     get_block_hash_cb m_get_block_hash;
     handle_block_found_cb m_handle_block_found;
     create_next_miner_block_template_cb m_create_next_miner_block_template;
-    account_public_address m_mine_address;
-    tools::periodic_task m_update_block_template_interval{"mining block template updater", 5s};
-    tools::periodic_task m_update_hashrate_interval{"mining hash rate updater", 2s};
-
-    mutable std::mutex m_hashrate_mutex;
-    std::optional<std::chrono::steady_clock::time_point> m_last_hr_update;
-    std::atomic<uint64_t> m_hashes = 0;
-    double m_current_hash_rate = 0.0;
-
-    bool m_do_mining = false;
-    std::atomic<uint64_t> m_block_reward = 0;
 };
 }  // namespace cryptonote

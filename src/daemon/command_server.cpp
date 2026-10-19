@@ -132,21 +132,8 @@ void command_server::init_commands(cryptonote::rpc::core_rpc_server* rpc_server)
             "is_key_image_spent <key_image> [<key_image> ...]",
             "Queries whether one or more key images have been spent on the blockchain or in the "
             "memory pool.");
-    m_command_lookup.set_handler(
-            "start_mining",
-            [this](const auto& x) { return m_parser.start_mining(x); },
-            "start_mining <addr> [threads=N] [num_blocks=B]",
-            "Start mining for specified address, primarily for debug and testing purposes as XEQMLabs "
-            "is proof-of-stake. Defaults to 1 thread. When num_blocks is set, continue mining "
-            "until the blockchain reaches height (current + B).");
-    m_command_lookup.set_handler(
-            "stop_mining",
-            [this](const auto& x) { return m_parser.stop_mining(x); },
-            "Stop mining.");
-    m_command_lookup.set_handler(
-            "mining_status",
-            [this](const auto& x) { return m_parser.mining_status(x); },
-            "Show current mining status.");
+    // start_mining / stop_mining / mining_status commands removed: PoW block production has been
+    // retired (XEQM is proof-of-stake with a signed fallback; no PoW-mined block is acceptable).
     m_command_lookup.set_handler(
             "print_pool",
             [this](const auto& x) { return m_parser.print_transaction_pool_long(x); },
