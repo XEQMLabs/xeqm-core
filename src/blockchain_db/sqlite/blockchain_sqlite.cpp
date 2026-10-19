@@ -35,18 +35,24 @@
 #include "blockchain_sqlite.h"
 
 #include <fmt/std.h>
+#include <oxenc/endian.h>
 #include <sqlite3.h>
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 
+#include "checkpoints/checkpoints.h"
 #include "common/format.h"
 #include "common/guts.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "cryptonote_config.h"
+#include "cryptonote_core/service_node_list.h"
+#include "cryptonote_core/uptime_proof.h"
 #include "logging/oxen_logger.h"
 #include "ringct/rctOps.h"
 #include "serialization/binary_utils.h"
@@ -61,8 +67,9 @@ namespace {
 
     auto logcat = oxen::log::Cat("blockchain.db.sqlite");
 
-    // PRAGMA user_version of the current (M2a) core schema.
-    constexpr int SCHEMA_VERSION = 1;
+    // PRAGMA user_version of the current schema.  v1 = M2a core chain tables; v2 = M2b-1 adds the
+    // quorum-signed checkpoint tables and the service-node blob/proof stores (see SCHEMA_V2).
+    constexpr int SCHEMA_VERSION = 2;
 
     // Upper bound on the values bound into one `IN (...)` list.
     constexpr size_t MAX_IN_LIST = 500;
@@ -185,9 +192,60 @@ CREATE TABLE alt_blocks (
 CREATE INDEX alt_blocks_height ON alt_blocks(height);
 )";
 
+    // Schema v2 (M2b-1): quorum-signed checkpoints and the service-node data/proof stores.  Applied
+    // in full on a fresh database, and as a migration on a v1 (M2a) database (see open()).
+    //
+    // Checkpoints mirror BlockchainLMDB's block_checkpoints: `type` is stored (hardcoded vs
+    // service_node); service-node checkpoints additionally carry quorum signatures, deleted via the
+    // ON DELETE CASCADE when a checkpoint is replaced or removed.  There is deliberately no foreign
+    // key to `blocks`: hardcoded checkpoints are written at startup, long before the chain reaches
+    // their heights.
+    //
+    // Service-node data/proofs are stored exactly as BlockchainLMDB stores them: `service_node_data`
+    // holds the two opaque (short-/long-term) SNL state blobs by a fixed key, and `service_node_proofs`
+    // holds each proof as the fixed-size POD-serialised blob keyed by the SN pubkey.  Their internal
+    // schema is not parsed here (it is owned by the service-node layer), only stored.
+    constexpr auto SCHEMA_V2 = R"(
+CREATE TABLE checkpoints (
+    height INTEGER PRIMARY KEY,
+    hash   BLOB    NOT NULL CHECK(length(hash) = 32),
+    type   INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE checkpoint_signatures (
+    height      INTEGER NOT NULL REFERENCES checkpoints(height) ON DELETE CASCADE,
+    voter_index INTEGER NOT NULL,
+    signature   BLOB    NOT NULL CHECK(length(signature) = 64),
+    PRIMARY KEY(height, voter_index)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE service_node_data (
+    id   INTEGER PRIMARY KEY,   -- SERVICE_NODE_BLOB_SHORT_TERM_KEY / SERVICE_NODE_BLOB_LONG_TERM_KEY
+    data BLOB    NOT NULL
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE service_node_proofs (
+    pubkey BLOB PRIMARY KEY CHECK(length(pubkey) = 32),
+    proof  BLOB NOT NULL
+) STRICT, WITHOUT ROWID;
+)";
+
+    // The fixed keys BlockchainLMDB uses for the two service-node state blobs (see db_lmdb.cpp).
+    constexpr int64_t SERVICE_NODE_BLOB_SHORT_TERM_KEY = 1;
+    constexpr int64_t SERVICE_NODE_BLOB_LONG_TERM_KEY = 2;
+
     // Core tables in the order they can be emptied without violating a foreign key.
     constexpr std::array ALL_TABLES{
-            "key_images", "outputs", "transactions", "blocks", "txpool", "alt_blocks"};
+            "key_images",
+            "outputs",
+            "transactions",
+            "blocks",
+            "txpool",
+            "alt_blocks",
+            "checkpoint_signatures",
+            "checkpoints",
+            "service_node_data",
+            "service_node_proofs"};
 
     // The database file and the write-ahead log / shared memory files SQLite keeps beside it.
     std::array<fs::path, 3> db_files(const fs::path& db) {
@@ -287,6 +345,123 @@ CREATE INDEX alt_blocks_height ON alt_blocks(height);
         return data;
     }
 
+    // --- checkpoint column handling ---------------------------------------------------------
+    // Reads a checkpoint whose `checkpoints` row has already been located, loading its signatures
+    // (if any) from checkpoint_signatures.  Mirrors BlockchainLMDB's convert_mdb_val_to_checkpoint.
+    checkpoint_t load_checkpoint(
+            db::Database& db, int64_t height, const crypto::hash& hash, checkpoint_type type) {
+        checkpoint_t checkpoint{};
+        checkpoint.type = type;
+        checkpoint.height = as_u64(height);
+        checkpoint.block_hash = hash;
+        for (auto row : db.prepared_results<int64_t, blob_guts<crypto::signature>>(
+                     "SELECT voter_index, signature FROM checkpoint_signatures WHERE height = ? "
+                     "ORDER BY voter_index",
+                     height)) {
+            auto& [voter_index, signature] = row;
+            checkpoint.signatures.emplace_back(
+                    static_cast<uint16_t>(voter_index), signature.value);
+        }
+        return checkpoint;
+    }
+
+    // --- service-node proof serialisation ---------------------------------------------------
+    // Byte-for-byte the same fixed-size POD layout BlockchainLMDB stores (so the blob we keep in the
+    // service_node_proofs table is identical to the one LMDB keeps).  The service-node layer owns the
+    // meaning of these fields; this backend only serialises/deserialises them.
+    template <typename C>
+    C host_to_little_container(const C& c) {
+        C result{c};
+        for (auto& x : result)
+            oxenc::host_to_little_inplace(x);
+        return result;
+    }
+    template <typename C>
+    C little_to_host_container(const C& c) {
+        C result{c};
+        for (auto& x : result)
+            oxenc::little_to_host_inplace(x);
+        return result;
+    }
+
+    struct service_node_proof_serialized_old {
+        service_node_proof_serialized_old() = default;
+        service_node_proof_serialized_old(const service_nodes::proof_info& info) :
+                timestamp{oxenc::host_to_little(info.timestamp)},
+                ip{oxenc::host_to_little(info.proof->public_ip)},
+                storage_https_port{oxenc::host_to_little(info.proof->storage_https_port)},
+                quorumnet_port{oxenc::host_to_little(info.proof->qnet_port)},
+                version{host_to_little_container(info.proof->version)},
+                storage_omq_port{oxenc::host_to_little(info.proof->storage_omq_port)},
+                pubkey_ed25519{info.proof->pubkey_ed25519} {}
+
+        void update(service_nodes::proof_info& info) const {
+            info.timestamp = oxenc::little_to_host(timestamp);
+            if (info.timestamp > info.effective_timestamp)
+                info.effective_timestamp = info.timestamp;
+            info.proof->public_ip = oxenc::little_to_host(ip);
+            info.proof->storage_https_port = oxenc::little_to_host(storage_https_port);
+            info.proof->storage_omq_port = oxenc::little_to_host(storage_omq_port);
+            info.proof->qnet_port = oxenc::little_to_host(quorumnet_port);
+            info.proof->version = little_to_host_container(version);
+            info.proof->storage_server_version = {0, 0, 0};
+            info.proof->lokinet_version = {0, 0, 0};
+            info.update_pubkey(pubkey_ed25519);
+        }
+
+        uint64_t timestamp;
+        uint32_t ip;
+        uint16_t storage_https_port;
+        uint16_t quorumnet_port;
+        std::array<uint16_t, 3> version;
+        uint16_t storage_omq_port;
+        crypto::ed25519_public_key pubkey_ed25519;
+    };
+    static_assert(
+            sizeof(service_node_proof_serialized_old) == 56,
+            "service node serialization struct has unexpected size and/or padding");
+
+    struct service_node_proof_serialized : service_node_proof_serialized_old {
+        service_node_proof_serialized() = default;
+        service_node_proof_serialized(const service_nodes::proof_info& info) :
+                service_node_proof_serialized_old{info},
+                storage_server_version{
+                        host_to_little_container(info.proof->storage_server_version)},
+                lokinet_version{host_to_little_container(info.proof->lokinet_version)} {}
+        std::array<uint16_t, 3> storage_server_version{};
+        std::array<uint16_t, 3> lokinet_version{};
+        char _padding[4]{};
+
+        void update(service_nodes::proof_info& info) const {
+            if (!info.proof)
+                info.proof = std::make_unique<uptime_proof::Proof>();
+            service_node_proof_serialized_old::update(info);
+            info.proof->storage_server_version =
+                    little_to_host_container(storage_server_version);
+            info.proof->lokinet_version = little_to_host_container(lokinet_version);
+            // BLS pubkey & pop are only temporary during the HF20 transition period, so we don't
+            // store or retrieve them, which means they don't persist across a restart.
+        }
+    };
+    static_assert(
+            sizeof(service_node_proof_serialized) == 72,
+            "service node serialization struct has unexpected size and/or padding");
+
+    // Decodes a stored proof blob (either the 56-byte legacy or 72-byte current layout) into `proof`.
+    void load_service_node_proof(std::string_view blob, service_nodes::proof_info& proof) {
+        if (blob.size() == sizeof(service_node_proof_serialized_old)) {
+            service_node_proof_serialized_old s;
+            std::memcpy(&s, blob.data(), sizeof(s));
+            s.update(proof);
+        } else if (blob.size() >= sizeof(service_node_proof_serialized)) {
+            service_node_proof_serialized s;
+            std::memcpy(&s, blob.data(), sizeof(s));
+            s.update(proof);
+        } else {
+            throw DB_ERROR("Service node proof blob has unexpected size {}"_format(blob.size()));
+        }
+    }
+
 }  // namespace
 
 void BlockchainSQLiteDB::m2_stub(const char* method) {
@@ -345,9 +520,22 @@ void BlockchainSQLiteDB::open(
         if (version == 0) {
             SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
             m_db->db.exec(SCHEMA);
+            m_db->db.exec(SCHEMA_V2);
             m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
             tx.commit();
             oxen::log::info(logcat, "Created SQLite blockchain database {}", filename);
+        } else if (version < SCHEMA_VERSION) {
+            SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
+            if (version < 2)  // M2b-1: add checkpoint + service-node tables
+                m_db->db.exec(SCHEMA_V2);
+            m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
+            tx.commit();
+            oxen::log::info(
+                    logcat,
+                    "Migrated SQLite blockchain database {} from schema v{} to v{}",
+                    filename,
+                    version,
+                    SCHEMA_VERSION);
         }
     } catch (const DB_OPEN_FAILURE&) {
         m_db.reset();
@@ -1619,41 +1807,140 @@ bool BlockchainSQLiteDB::for_all_alt_blocks(
 }
 
 // =========================================================================================
-// TODO(M2b) -- diverged rewards / service-node / consensus state, pruning, histograms.
-// These deliberately throw rather than guess at xeqm's diverged schema.
+// M2b-1 -- quorum-signed checkpoints, service-node data + proofs, pruning and histograms.
+// These mirror BlockchainLMDB's semantics against the SQLite schema.  The rewards / batching-v2 /
+// accrued-history / fallback / rev1 seams remain in db_sqlite.{h,cpp} and are left for M2b-2.
 // =========================================================================================
 
 void BlockchainSQLiteDB::update_block_checkpoint(checkpoint_t const& checkpoint) {
-    M2_STUB("update_block_checkpoint");
-}
-void BlockchainSQLiteDB::remove_block_checkpoint(uint64_t height) {
-    M2_STUB("remove_block_checkpoint");
-}
-bool BlockchainSQLiteDB::get_block_checkpoint(uint64_t height, checkpoint_t& checkpoint) const {
-    M2_STUB("get_block_checkpoint");
-}
-bool BlockchainSQLiteDB::get_top_checkpoint(checkpoint_t& checkpoint) const {
-    M2_STUB("get_top_checkpoint");
-}
-std::vector<checkpoint_t> BlockchainSQLiteDB::get_checkpoints_range(
-        uint64_t start, uint64_t end, size_t num_desired_checkpoints) const {
-    M2_STUB("get_checkpoints_range");
+    in_write_txn([&](db::Database& db) {
+        const auto height = as_i64(checkpoint.height);
+        db.prepared_exec(
+                "INSERT INTO checkpoints (height, hash, type) VALUES (?, ?, ?) "
+                "ON CONFLICT(height) DO UPDATE SET hash = excluded.hash, type = excluded.type",
+                height,
+                as_guts(checkpoint.block_hash),
+                static_cast<int>(checkpoint.type));
+        // Replace any existing signatures for this height (the ON CONFLICT above keeps the row, so
+        // the ON DELETE CASCADE does not fire; clear them explicitly).
+        db.prepared_exec("DELETE FROM checkpoint_signatures WHERE height = ?", height);
+        for (const auto& sig : checkpoint.signatures)
+            db.prepared_exec(
+                    "INSERT INTO checkpoint_signatures (height, voter_index, signature) "
+                    "VALUES (?, ?, ?)",
+                    height,
+                    int{sig.voter_index},
+                    as_guts(sig.signature));
+    });
 }
 
+void BlockchainSQLiteDB::remove_block_checkpoint(uint64_t height) {
+    // The ON DELETE CASCADE on checkpoint_signatures removes the signatures with the row.
+    in_write_txn([&](db::Database& db) {
+        db.prepared_exec("DELETE FROM checkpoints WHERE height = ?", as_i64(height));
+    });
+}
+
+bool BlockchainSQLiteDB::get_block_checkpoint(uint64_t height, checkpoint_t& checkpoint) const {
+    check_open();
+    auto row = m_db->prepared_maybe_get<blob_guts<crypto::hash>, int>(
+            "SELECT hash, type FROM checkpoints WHERE height = ?", as_i64(height));
+    if (!row)
+        return false;
+    checkpoint = load_checkpoint(
+            *m_db,
+            as_i64(height),
+            std::get<0>(*row).value,
+            static_cast<checkpoint_type>(std::get<1>(*row)));
+    return true;
+}
+
+bool BlockchainSQLiteDB::get_top_checkpoint(checkpoint_t& checkpoint) const {
+    check_open();
+    auto row = m_db->prepared_maybe_get<int64_t, blob_guts<crypto::hash>, int>(
+            "SELECT height, hash, type FROM checkpoints ORDER BY height DESC LIMIT 1");
+    if (!row)
+        return false;
+    auto& [height, hash, type] = *row;
+    checkpoint = load_checkpoint(
+            *m_db, height, hash.value, static_cast<checkpoint_type>(type));
+    return true;
+}
+
+// The same results as BlockchainLMDB's cursor walk: start and end are clamped to the stored
+// checkpoints' heights, and the result is the checkpoints between them (both inclusive), in order
+// from start towards end (descending if start > end), at most num_desired_checkpoints of them.
+std::vector<checkpoint_t> BlockchainSQLiteDB::get_checkpoints_range(
+        uint64_t start, uint64_t end, size_t num_desired_checkpoints) const {
+    check_open();
+    std::vector<checkpoint_t> result;
+
+    auto bottom = m_db->prepared_maybe_get<int64_t>(
+            "SELECT height FROM checkpoints ORDER BY height LIMIT 1");
+    auto top = m_db->prepared_maybe_get<int64_t>(
+            "SELECT height FROM checkpoints ORDER BY height DESC LIMIT 1");
+    if (!bottom || !top)
+        return result;
+
+    start = std::clamp(start, as_u64(*bottom), as_u64(*top));
+    end = std::clamp(end, as_u64(*bottom), as_u64(*top));
+    const int64_t limit =
+            num_desired_checkpoints == GET_ALL_CHECKPOINTS ? -1 : as_i64(num_desired_checkpoints);
+
+    std::vector<std::tuple<int64_t, blob_guts<crypto::hash>, int>> rows;
+    for (auto row : m_db->prepared_results<int64_t, blob_guts<crypto::hash>, int>(
+                 start <= end ? "SELECT height, hash, type FROM checkpoints "
+                                "WHERE height BETWEEN ? AND ? ORDER BY height LIMIT ?"
+                              : "SELECT height, hash, type FROM checkpoints "
+                                "WHERE height BETWEEN ? AND ? ORDER BY height DESC LIMIT ?",
+                 as_i64(std::min(start, end)),
+                 as_i64(std::max(start, end)),
+                 limit))
+        rows.push_back(std::move(row));
+
+    result.reserve(rows.size());
+    for (auto& [height, hash, type] : rows)
+        result.push_back(
+                load_checkpoint(*m_db, height, hash.value, static_cast<checkpoint_type>(type)));
+    return result;
+}
+
+// Removes every output of the given amount, as BlockchainLMDB::prune_outputs does (used by the
+// blockchain_prune_known_spent_data utility, not by normal operation).
 void BlockchainSQLiteDB::prune_outputs(uint64_t amount) {
-    M2_STUB("prune_outputs");
+    oxen::log::info(logcat, "Pruning outputs for amount {}", amount);
+    in_write_txn([&](db::Database& db) {
+        db.prepared_exec("DELETE FROM outputs WHERE amount = ?", as_i64(amount));
+    });
 }
+
+// This backend is a full (non-pruning) node: it stores every transaction's prunable data and has no
+// pruning-seed property, matching how xeqm runs (the --prune-blockchain path is disabled in
+// cryptonote_core, and service nodes must retain the full chain).  BlockchainLMDB returns 0 when no
+// pruning seed is stored, which is the value the normal block-processing path reads here.
 uint32_t BlockchainSQLiteDB::get_blockchain_pruning_seed() const {
-    M2_STUB("get_blockchain_pruning_seed");
+    check_open();
+    return 0;
 }
+
+// Enabling blockchain pruning is not supported by the SQLite backend (it would require a pruning
+// stripe scheme this port deliberately does not invent).  Returns false rather than silently
+// claiming success; this is only reachable via the explicit prune_blockchain RPC/console command.
 bool BlockchainSQLiteDB::prune_blockchain(uint32_t pruning_seed) {
-    M2_STUB("prune_blockchain");
+    check_open();
+    oxen::log::warning(logcat, "Blockchain pruning is not supported by the SQLite backend");
+    return false;
 }
+
+// Pruning is not enabled on this backend, so there is nothing to update/check; BlockchainLMDB's
+// prune worker likewise returns true ("pruning not enabled, nothing to do") for a non-pruned node.
 bool BlockchainSQLiteDB::update_pruning() {
-    M2_STUB("update_pruning");
+    check_open();
+    return true;
 }
 bool BlockchainSQLiteDB::check_pruning() {
-    M2_STUB("check_pruning");
+    check_open();
+    return true;
 }
 
 std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>>
@@ -1662,40 +1949,177 @@ BlockchainSQLiteDB::get_output_histogram(
         bool unlocked,
         uint64_t recent_cutoff,
         uint64_t min_count) const {
-    M2_STUB("get_output_histogram");
+    check_open();
+    std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> histogram;
+
+    if (amounts.empty()) {
+        // Visits each distinct amount by seeking to the next one, rather than scanning every output
+        // (nearly all of which have amount 0).
+        for (auto amount = m_db->prepared_maybe_get<int64_t>(
+                     "SELECT amount FROM outputs ORDER BY amount LIMIT 1");
+             amount;
+             amount = m_db->prepared_maybe_get<int64_t>(
+                     "SELECT amount FROM outputs WHERE amount > ? ORDER BY amount LIMIT 1",
+                     *amount)) {
+            if (auto n = num_outputs(*m_db, *amount); n >= min_count)
+                histogram[as_u64(*amount)] = {n, 0, 0};
+        }
+    } else {
+        for (auto amount : amounts)
+            if (auto n = num_outputs(*m_db, as_i64(amount)); n >= min_count)
+                histogram[amount] = {n, 0, 0};
+    }
+
+    if (unlocked || recent_cutoff > 0) {
+        const uint64_t chain_top = chain_height(*m_db);
+        for (auto& [amount, counts] : histogram) {
+            auto& [total, unlocked_count, recent] = counts;
+            unlocked_count = total;
+            for (auto row : m_db->prepared_results<int64_t, int64_t>(
+                         "SELECT o.height, b.timestamp FROM outputs o "
+                         "JOIN blocks b ON b.height = o.height "
+                         "WHERE o.amount = ? ORDER BY o.amount_index DESC",
+                         as_i64(amount))) {
+                auto& [out_height, timestamp] = row;
+                if (as_u64(out_height) + DEFAULT_TX_SPENDABLE_AGE <= chain_top) {
+                    if (recent_cutoff == 0 || as_u64(timestamp) < recent_cutoff)
+                        break;
+                    ++recent;
+                } else {
+                    --unlocked_count;
+                }
+            }
+        }
+    }
+
+    return histogram;
 }
+
+// Like BlockchainLMDB, this also counts the first output (if any) above to_height: LMDB's walk over
+// the outputs counts each one before checking whether it has passed to_height.
 bool BlockchainSQLiteDB::get_output_distribution(
         uint64_t amount,
         uint64_t from_height,
         uint64_t to_height,
         std::vector<uint64_t>& distribution,
         uint64_t& base) const {
-    M2_STUB("get_output_distribution");
+    check_open();
+    distribution.clear();
+
+    const uint64_t db_height = chain_height(*m_db);
+    if (from_height >= db_height)
+        return false;
+    distribution.resize(db_height - from_height, 0);
+
+    uint64_t below = 0;
+    auto add = [&](uint64_t height, uint64_t n) {
+        if (height >= from_height)
+            distribution[height - from_height] += n;
+        else
+            below += n;
+    };
+
+    const uint64_t last = to_height > 0 ? to_height : db_height;
+    below = as_u64(m_db->prepared_get<int64_t>(
+            "SELECT COUNT(*) FROM outputs WHERE amount = ? AND height < ? AND height <= ?",
+            as_i64(amount),
+            as_i64(from_height),
+            as_i64(last)));
+    for (auto row : m_db->prepared_results<int64_t, int64_t>(
+                 "SELECT height, COUNT(*) FROM outputs WHERE amount = ? AND height >= ? "
+                 "AND height <= ? GROUP BY height",
+                 as_i64(amount),
+                 as_i64(from_height),
+                 as_i64(last))) {
+        auto& [height, n] = row;
+        add(as_u64(height), as_u64(n));
+    }
+    if (to_height > 0)
+        if (auto next = m_db->prepared_maybe_get<int64_t>(
+                    "SELECT height FROM outputs WHERE amount = ? AND height > ? "
+                    "ORDER BY height LIMIT 1",
+                    as_i64(amount),
+                    as_i64(to_height)))
+            add(as_u64(*next), 1);
+
+    distribution[0] += below;
+    for (size_t n = 1; n < distribution.size(); ++n)
+        distribution[n] += distribution[n - 1];
+    base = 0;
+    return true;
 }
 
+// Service-node state and proofs are stored as opaque blobs, exactly as BlockchainLMDB stores them.
+
 void BlockchainSQLiteDB::set_service_node_data(const std::string& data, bool long_term) {
-    M2_STUB("set_service_node_data");
+    const int64_t key = long_term ? SERVICE_NODE_BLOB_LONG_TERM_KEY : SERVICE_NODE_BLOB_SHORT_TERM_KEY;
+    in_write_txn([&](db::Database& db) {
+        db.prepared_exec(
+                "INSERT INTO service_node_data (id, data) VALUES (?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+                key,
+                as_blob(data));
+    });
 }
+
 bool BlockchainSQLiteDB::get_service_node_data(std::string& data, bool long_term) const {
-    M2_STUB("get_service_node_data");
+    check_open();
+    const int64_t key = long_term ? SERVICE_NODE_BLOB_LONG_TERM_KEY : SERVICE_NODE_BLOB_SHORT_TERM_KEY;
+    auto st = m_db->prepared_bind("SELECT data FROM service_node_data WHERE id = ?", key);
+    if (!st->executeStep())
+        return false;
+    data = col_str(st->getColumn(0));
+    return true;
 }
+
 void BlockchainSQLiteDB::clear_service_node_data() {
-    M2_STUB("clear_service_node_data");
+    in_write_txn([](db::Database& db) { db.prepared_exec("DELETE FROM service_node_data"); });
 }
+
 bool BlockchainSQLiteDB::get_service_node_proof(
         const crypto::public_key& pubkey, service_nodes::proof_info& proof) const {
-    M2_STUB("get_service_node_proof");
+    check_open();
+    auto st = m_db->prepared_bind(
+            "SELECT proof FROM service_node_proofs WHERE pubkey = ?", as_guts(pubkey));
+    if (!st->executeStep())
+        return false;
+    load_service_node_proof(col_str(st->getColumn(0)), proof);
+    return true;
 }
+
 std::unordered_map<crypto::public_key, service_nodes::proof_info>
 BlockchainSQLiteDB::get_all_service_node_proofs() const {
-    M2_STUB("get_all_service_node_proofs");
+    check_open();
+    std::unordered_map<crypto::public_key, service_nodes::proof_info> result;
+    auto st = m_db->prepared_st("SELECT pubkey, proof FROM service_node_proofs");
+    while (st->executeStep()) {
+        crypto::public_key pubkey = blob_guts<crypto::public_key>{st->getColumn(0)};
+        service_nodes::proof_info info;
+        load_service_node_proof(col_str(st->getColumn(1)), info);
+        result.emplace(pubkey, std::move(info));
+    }
+    return result;
 }
+
 void BlockchainSQLiteDB::set_service_node_proof(
         const crypto::public_key& pubkey, const service_nodes::proof_info& proof) {
-    M2_STUB("set_service_node_proof");
+    service_node_proof_serialized data{proof};
+    in_write_txn([&](db::Database& db) {
+        db.prepared_exec(
+                "INSERT INTO service_node_proofs (pubkey, proof) VALUES (?, ?) "
+                "ON CONFLICT(pubkey) DO UPDATE SET proof = excluded.proof",
+                as_guts(pubkey),
+                as_blob(std::string_view{reinterpret_cast<const char*>(&data), sizeof(data)}));
+    });
 }
+
 bool BlockchainSQLiteDB::remove_service_node_proof(const crypto::public_key& pubkey) {
-    M2_STUB("remove_service_node_proof");
+    bool removed = false;
+    in_write_txn([&](db::Database& db) {
+        removed = db.prepared_exec(
+                          "DELETE FROM service_node_proofs WHERE pubkey = ?", as_guts(pubkey)) > 0;
+    });
+    return removed;
 }
 
 #if defined(__GNUC__) || defined(__clang__)

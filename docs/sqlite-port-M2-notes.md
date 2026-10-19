@@ -1,8 +1,10 @@
 # SQLite blockchain backend port — M2 notes
 
-**Status:** M2a (data-access foundation + core chain-storage path), 2026-10-19.
+**Status:** M2a (data-access foundation + core chain-storage path) + M2b-1 (non-rewards
+consensus/storage methods), 2026-10-19.
 Branch `feat/sqlite-light-node`. Companion to [`sqlite-port-M1-notes.md`](sqlite-port-M1-notes.md).
 Upstream reference: oxen-core [PR #1895](https://github.com/oxen-io/oxen-core/pull/1895).
+See [§6 M2b-1](#6-m2b-1--checkpoints-service-node-data--proofs-pruning-histograms) for the latest step.
 
 ## M2a goal and scope
 
@@ -143,3 +145,50 @@ LMDB remains `DEFAULT_DB_TYPE`; the SQLite path is reached only when `XEQM_DB_BA
 (see `new_db()` in `blockchain_db.cpp`). With this milestone that path can open a database, store a
 block and read it back, but it is **not** yet a drop-in daemon backend: selecting it on a real node
 will throw as soon as a checkpoint, service-node, pruning or histogram method is reached.
+
+## 6. M2b-1 — checkpoints, service-node data + proofs, pruning, histograms
+
+M2b-1 replaces the M2a `TODO(M2b)` throwers for the **non-rewards** consensus/storage methods with
+real implementations mirroring `BlockchainLMDB`. The rewards / batching-v2 / accrued-history /
+fallback-miner / rev1 seams stay untouched in `sqlite/db_sqlite.{h,cpp}` and are left for **M2b-2**.
+After M2b-1 there are no remaining throwers in `blockchain_sqlite.cpp`.
+
+### Schema v2 (`PRAGMA user_version = 2`)
+
+Fresh databases get these tables at open; a v1 (M2a) database is migrated by running `SCHEMA_V2`
+alone (`open()` applies it when the stored version is `< 2`). Added tables:
+
+- `checkpoints` (`height` PK, `hash`, `type`) — quorum-signed and hardcoded checkpoints. **No** FK to
+  `blocks`: hardcoded checkpoints are written at startup, before the chain reaches their heights.
+- `checkpoint_signatures` (`height` FK → `checkpoints` `ON DELETE CASCADE`, `voter_index`,
+  `signature`; PK `(height, voter_index)`) — service-node checkpoint signatures. Replacing or
+  removing a checkpoint drops its signatures via the cascade.
+- `service_node_data` (`id` PK = short-/long-term key, `data`) — the two opaque SNL state blobs.
+- `service_node_proofs` (`pubkey` PK, `proof`) — each proof as a fixed-size POD-serialized blob.
+
+### What M2b-1 made REAL
+
+- **Checkpoints:** `update_block_checkpoint` (upsert + replace signatures),
+  `remove_block_checkpoint`, `get_block_checkpoint`, `get_top_checkpoint`, `get_checkpoints_range`
+  (the clamped start→end walk, ascending or descending, limited to `num_desired_checkpoints`).
+- **Service-node data + proofs:** `set`/`get`/`clear_service_node_data`,
+  `get`/`set`/`remove_service_node_proof`, `get_all_service_node_proofs`. Proofs use the **same POD
+  layout `BlockchainLMDB` uses** (`service_node_proof_serialized{,_old}`, 72/56 bytes, little-endian),
+  copied into this file's anonymous namespace; the blob is stored as-is and not reconciled into
+  relational columns. The 56-byte legacy layout is still read back.
+- **Pruning:** `prune_outputs` deletes every output of an amount (as LMDB does). This backend is a
+  full (non-pruning) node — matching how xeqm runs (`--prune-blockchain` is disabled in
+  `cryptonote_core`, and SNs must keep the full chain) — so `get_blockchain_pruning_seed()` returns
+  `0`, and `check_pruning()`/`update_pruning()` return `true` ("pruning not enabled, nothing to do",
+  as LMDB's prune worker does for a non-pruned node). `prune_blockchain()` is **not** supported: it
+  logs a warning and returns `false` rather than inventing a pruning-stripe scheme or silently
+  claiming success. It is only reachable via the explicit prune RPC/console command.
+- **Histograms / distribution:** `get_output_histogram` and `get_output_distribution`, computed over
+  the M2a `outputs` (+ `blocks` for timestamps) tables, reproducing LMDB's results (including LMDB's
+  counting of the first output just past `to_height` in the distribution).
+
+### Still TODO(M2b-2)
+
+Everything tied to xeqm's diverged rewards state: rewards / batching-v2 / accrued-history,
+fallback-miner / rev1 signed-fallback, and the `db_sqlite` → `rewards_db` rename. These live in
+`sqlite/db_sqlite.{h,cpp}`, which M2b-1 does not touch.
