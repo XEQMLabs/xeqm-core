@@ -248,7 +248,9 @@ class BlockchainSQLiteDB : public BlockchainDB {
     cryptonote::network_type m_nettype = cryptonote::network_type::UNDEFINED;
     int m_db_flags = 0;
     bool m_read_only = false;
-    bool m_open = false;
+    // NB: open/ready state lives in the public BlockchainDB::m_open base member (like BlockchainLMDB).
+    // Do not redeclare it here: a shadowing member would be set by our methods but leave the base
+    // m_open (read via BlockchainDB*: is_open(), core::init_blockchain_db) false, failing startup.
 
     mutable std::mutex m_lock;
 

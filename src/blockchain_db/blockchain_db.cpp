@@ -60,15 +60,14 @@ const command_line::arg_flag arg_db_salvage = {
 
 std::unique_ptr<BlockchainDB> new_db() {
     // LMDB is the default backend and the only one used by mainnet.  The combined SQLite
-    // backend is an M1 scaffold (see sqlite/blockchain_sqlite.h) and is selected only when
-    // explicitly requested via the XEQM_DB_BACKEND environment variable, so default behaviour
-    // is unchanged.  A proper `--db-backend` daemon flag can replace this env var later.
+    // backend is selected only when explicitly requested via the XEQM_DB_BACKEND environment
+    // variable, so default behaviour is unchanged.  A proper `--db-backend` daemon flag can
+    // replace this env var later.
     if (const char* backend = std::getenv("XEQM_DB_BACKEND");
         backend && std::string_view{backend} == "sqlite") {
         log::warning(
                 logcat,
-                "XEQM_DB_BACKEND=sqlite: selecting the experimental SQLite blockchain backend "
-                "(M1 scaffold, not yet usable)");
+                "XEQM_DB_BACKEND=sqlite: selecting the experimental SQLite blockchain backend");
         return std::make_unique<BlockchainSQLiteDB>();
     }
     return std::make_unique<BlockchainLMDB>();
