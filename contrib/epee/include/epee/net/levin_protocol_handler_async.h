@@ -539,6 +539,11 @@ public:
           {
             return false;
           }
+          // A peer that has not completed the handshake may only send small packets.
+          if(!m_connection_context.m_handshake_complete && m_current_head.m_cb > LEVIN_INITIAL_MAX_PACKET_SIZE)
+          {
+            return false;
+          }
         }
         break;
       default:

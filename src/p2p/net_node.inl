@@ -1033,6 +1033,7 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(
                     add_host_fail(context.m_remote_address);
                     return;
                 }
+                context.m_handshake_complete = true;
                 hsh_result = true;
                 if (!just_take_peerlist) {
                     if (!m_payload_handler.process_payload_sync_data(
@@ -2421,6 +2422,7 @@ int node_server<t_payload_net_handler>::handle_handshake(
     // associate peer_id with this connection
     context.peer_id = arg.node_data.peer_id;
     context.m_in_timedsync = false;
+    context.m_handshake_complete = true;
 
     if (arg.node_data.my_port && zone.m_can_pingback) {
         peerid_type peer_id_l = arg.node_data.peer_id;

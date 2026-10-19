@@ -73,6 +73,7 @@ namespace levin
 
 
 #define LEVIN_DEFAULT_MAX_PACKET_SIZE 100000000      //100MB by default
+#define LEVIN_INITIAL_MAX_PACKET_SIZE 262144         //256KB until the p2p handshake completes
 
 #define LEVIN_PACKET_REQUEST			0x00000001
 #define LEVIN_PACKET_RESPONSE		0x00000002
