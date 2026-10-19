@@ -32,6 +32,7 @@ add_subdirectory(sesh_transition)
 oxen_add_library(cryptonote_core
   blockchain.cpp
   cryptonote_core.cpp
+  history.cpp
   sesh_transition/sesh_transition.cpp
   service_node_rules.cpp
   service_node_list.cpp
