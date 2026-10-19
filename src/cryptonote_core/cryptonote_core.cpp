@@ -64,7 +64,7 @@ extern "C" {
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
-#include "history.h"
+#include "blockchain_db/history.h"
 #include "epee/memwipe.h"
 #include "epee/net/local_ip.h"
 #include "epee/string_tools.h"
@@ -936,20 +936,28 @@ bool core::init(
             abort);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize blockchain storage");
 
-    // Report the effective block-history retention window (M4a only reports; it does not prune).
-    if (uint64_t cur_height = blockchain.get_current_blockchain_height();
-        m_history == 0)
+    // Apply the configured block-history retention to the backend (M4b).  history == 0 (a full node,
+    // the default) is a complete no-op on every backend; a limited history needs the SQLite backend
+    // (the base BlockchainDB::set_history throws otherwise), and from here on the backend drops block
+    // bodies and transactions that fall outside the window as the chain grows (trim-on-add).
+    try {
+        blockchain.db().set_history(m_history);
+    } catch (const std::exception& e) {
+        log::error(globallogcat, "Failed to apply --history setting: {}", e.what());
+        return false;
+    }
+    if (uint64_t cur_height = blockchain.get_current_blockchain_height(); m_history == 0)
         log::info(globallogcat, "History: keeping full chain");
-    else {
-        uint64_t window = history_window(m_nettype, m_history, cur_height);
+    else
         log::info(
                 globallogcat,
-                "History: keeping {} blocks (requested {}, minimum {} at height {})",
-                window,
+                "History: keeping {} blocks (requested {}, minimum {} at height {}); oldest kept "
+                "body at {}",
+                history_window(m_nettype, m_history, cur_height),
                 m_history,
                 history_minimum(m_nettype, cur_height),
-                cur_height);
-    }
+                cur_height,
+                blockchain.db().history_start());
 
     r = mempool.init(max_txpool_weight);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize memory pool");

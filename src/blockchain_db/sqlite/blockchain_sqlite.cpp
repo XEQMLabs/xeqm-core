@@ -46,6 +46,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "blockchain_db/history.h"
 #include "checkpoints/checkpoints.h"
 #include "common/format.h"
 #include "common/guts.h"
@@ -68,8 +69,9 @@ namespace {
     auto logcat = oxen::log::Cat("blockchain.db.sqlite");
 
     // PRAGMA user_version of the current schema.  v1 = M2a core chain tables; v2 = M2b-1 adds the
-    // quorum-signed checkpoint tables and the service-node blob/proof stores (see SCHEMA_V2).
-    constexpr int SCHEMA_VERSION = 2;
+    // quorum-signed checkpoint tables and the service-node blob/proof stores (see SCHEMA_V2); v3 =
+    // M4b adds the light-node trimmed_txes table (see SCHEMA_V3).
+    constexpr int SCHEMA_VERSION = 3;
 
     // Upper bound on the values bound into one `IN (...)` list.
     constexpr size_t MAX_IN_LIST = 500;
@@ -230,6 +232,28 @@ CREATE TABLE service_node_proofs (
 ) STRICT, WITHOUT ROWID;
 )";
 
+    // Schema v3 (M4b): the light-node trimmed-tx record.  Applied in full on a fresh database, and
+    // as a migration on a v1/v2 database (see open()).
+    //
+    // When a limited history drops a block's transactions (trim_history_to), the hashes of the
+    // dropped non-miner, input-less transactions are recorded here.  A transaction that spends inputs
+    // is kept out of the chain again by its spent key images (key_images is kept for every height),
+    // but an input-less one has no such guard, so without this record tx_exists() would wrongly allow
+    // it to be re-included (the chain requires unique transaction hashes).  These rows are kept for
+    // good: the blocks they came from are below the kept history, which the chain can never rewind
+    // into, so nothing removes them.  (Miner txs are not recorded: they are part of their block and
+    // can never be included as a block's transactions.)
+    constexpr auto SCHEMA_V3 = R"(
+CREATE TABLE trimmed_txes (
+    hash   BLOB    NOT NULL CHECK(length(hash) = 32),
+    hash8  BLOB    GENERATED ALWAYS AS (substr(hash, 1, 8)) VIRTUAL,
+    height INTEGER NOT NULL,
+    type   INTEGER NOT NULL
+) STRICT;
+CREATE INDEX trimmed_txes_hash8  ON trimmed_txes(hash8);
+CREATE INDEX trimmed_txes_height ON trimmed_txes(height);
+)";
+
     // The fixed keys BlockchainLMDB uses for the two service-node state blobs (see db_lmdb.cpp).
     constexpr int64_t SERVICE_NODE_BLOB_SHORT_TERM_KEY = 1;
     constexpr int64_t SERVICE_NODE_BLOB_LONG_TERM_KEY = 2;
@@ -239,6 +263,7 @@ CREATE TABLE service_node_proofs (
             "key_images",
             "outputs",
             "transactions",
+            "trimmed_txes",
             "blocks",
             "txpool",
             "alt_blocks",
@@ -262,6 +287,59 @@ CREATE TABLE service_node_proofs (
     uint64_t num_outputs(db::Database& db, int64_t amount) {
         return as_u64(db.prepared_get<int64_t>(
                 "SELECT COALESCE(MAX(amount_index) + 1, 0) FROM outputs WHERE amount = ?", amount));
+    }
+
+    // Reads / writes a uint64 value stored in the `properties` table (history, history_start).  The
+    // key is a c-string (bound no-copy) because the db wrapper has no string_view binding; only
+    // string literals are ever passed.
+    uint64_t get_count_property(db::Database& db, const char* key) {
+        return as_u64(
+                db.prepared_maybe_get<int64_t>("SELECT value FROM properties WHERE key = ?", key)
+                        .value_or(0));
+    }
+    void set_count_property(db::Database& db, const char* key, uint64_t value) {
+        db.prepared_exec(
+                "INSERT INTO properties (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                key,
+                as_i64(value));
+    }
+
+    // A "transfer" tx always carries spendable key-image inputs (it spends funds), so the key_images
+    // kept for every height already block its re-inclusion and it need not be recorded in
+    // trimmed_txes.  Mirrors upstream #1895's is_transfer_type.  Being wrong only in the
+    // over-inclusive direction (recording a type that does have key images) is harmless; only
+    // FAILING to record a genuinely input-less type would be unsafe, and standard/stake always have
+    // inputs, so excluding exactly those is safe.
+    constexpr bool is_transfer_type(txtype t) {
+        return t == txtype::standard || t == txtype::stake;
+    }
+
+    // The stored `type` values of the input-less transactions, as a comma list for an SQL `IN (...)`.
+    const std::string& zero_input_types() {
+        static const std::string list = [] {
+            std::string types;
+            for (uint16_t t = 0; t < static_cast<uint16_t>(txtype::_count); t++)
+                if (!is_transfer_type(static_cast<txtype>(t)))
+                    types += "{}{}"_format(types.empty() ? "" : ",", t);
+            return types;
+        }();
+        return list;
+    }
+
+    // Block processing never reads a block whose body has been dropped as outside the kept history
+    // (see history_minimum), so a read that reaches here is a bug (or an RPC request for an old
+    // block): logged every time in a debug build, and once otherwise.
+    void note_dropped_block_read(uint64_t height) {
+#ifdef NDEBUG
+        static std::atomic<bool> logged{false};
+        if (logged.exchange(true))
+            return;
+#endif
+        oxen::log::error(
+                logcat,
+                "Read of block {}, whose body is outside the history this database keeps",
+                height);
     }
 
     template <typename T>
@@ -521,6 +599,7 @@ void BlockchainSQLiteDB::open(
             SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
             m_db->db.exec(SCHEMA);
             m_db->db.exec(SCHEMA_V2);
+            m_db->db.exec(SCHEMA_V3);
             m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
             tx.commit();
             oxen::log::info(logcat, "Created SQLite blockchain database {}", filename);
@@ -528,6 +607,8 @@ void BlockchainSQLiteDB::open(
             SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
             if (version < 2)  // M2b-1: add checkpoint + service-node tables
                 m_db->db.exec(SCHEMA_V2);
+            if (version < 3)  // M4b: add the light-node trimmed-tx table
+                m_db->db.exec(SCHEMA_V3);
             m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
             tx.commit();
             oxen::log::info(
@@ -537,6 +618,10 @@ void BlockchainSQLiteDB::open(
                     version,
                     SCHEMA_VERSION);
         }
+
+        // Load the stored history settings (0/0 = a full node that keeps everything).
+        m_history = get_count_property(*m_db, "history");
+        m_history_start = get_count_property(*m_db, "history_start");
     } catch (const DB_OPEN_FAILURE&) {
         m_db.reset();
         throw;
@@ -587,8 +672,11 @@ void BlockchainSQLiteDB::reset() {
     SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
     for (auto table : ALL_TABLES)
         m_db->db.exec("DELETE FROM {}"_format(table));
-    m_db->db.exec("DELETE FROM properties WHERE key = 'max_block_size'");
+    // The `history` setting (how much to keep) stays, but with no blocks left there is no dropped
+    // history to remember.
+    m_db->db.exec("DELETE FROM properties WHERE key IN ('max_block_size', 'history_start')");
     tx.commit();
+    m_history_start = 0;
 }
 
 std::vector<fs::path> BlockchainSQLiteDB::get_filenames() const {
@@ -796,6 +884,11 @@ void BlockchainSQLiteDB::add_block(
             as_i64(coins_generated),
             prev_rct_outputs + as_i64(num_rct_outs),
             as_blob(block_blob));
+    // NB: trimming is NOT done here.  After the DB write, the block is still processed by the service
+    // node list, ONS and the block-add hooks, which read recent block bodies (up to the retention
+    // minimum back).  So the trim is driven from Blockchain::handle_block_to_main_chain, once that
+    // whole-block processing is done (see BlockchainDB::trim_history), keeping the oldest in-window
+    // body available throughout it.
 }
 
 void BlockchainSQLiteDB::remove_block() {
@@ -872,8 +965,12 @@ T BlockchainSQLiteDB::get_stored_block(uint64_t height, size_t* size) const {
         throw BLOCK_DNE(
                 "Attempt to get block from height {} failed -- block not in db"_format(height));
     auto blob = st->getColumn(0);
-    if (blob.isNull())
+    if (blob.isNull()) {
+        // The block's body was dropped as outside the kept history; treated as not-found.  Block
+        // processing never reads these, so a real read of one is a bug (or an RPC for an old block).
+        note_dropped_block_read(height);
         throw BLOCK_DNE("Block at height {} is not stored in the db"_format(height));
+    }
     std::string bd = col_str(blob);
     if (size)
         *size = bd.size();
@@ -1031,6 +1128,124 @@ uint64_t BlockchainSQLiteDB::height() const {
 }
 
 // =========================================================================================
+// Light-node history retention (M4b)
+// =========================================================================================
+
+namespace {
+    // Background catch-up for a large backlog (converting an existing full database, or shrinking the
+    // window) is deferred to a follow-on (M4b-2).  A from-scratch `--history N` node never builds a
+    // backlog: trim-on-add drops roughly one block per block added.  To keep each inline drop bounded
+    // even in the backlog case, trim_history drops at most this many heights per call; any remainder
+    // is drained over subsequent block adds.
+    constexpr uint64_t INLINE_TRIM_MAX = 2'000;
+}  // namespace
+
+uint64_t BlockchainSQLiteDB::history_trim_target() const {
+    if (!m_history.load())
+        return 0;
+    const uint64_t h = height();
+    const uint64_t window = history_window(m_nettype, m_history.load(), h);
+    return h > window ? h - window : 0;
+}
+
+uint64_t BlockchainSQLiteDB::history_window_start() const {
+    if (!m_history.load())
+        return 0;
+    return std::max<uint64_t>(m_history_start.load(), history_trim_target());
+}
+
+void BlockchainSQLiteDB::set_history(uint64_t blocks) {
+    check_open();
+    if (blocks == m_history.load())
+        return;
+    if (blocks == 0)
+        throw DB_ERROR(
+                "This blockchain database keeps only the last {} blocks of history, and can't be "
+                "made to keep all of it again: resync from scratch, or install a full "
+                "database"_format(m_history.load()));
+    if (blocks < HISTORY_MIN_BLOCKS)
+        throw DB_ERROR("A history of {} blocks is less than the minimum of {}"_format(
+                blocks, HISTORY_MIN_BLOCKS));
+    if (m_read_only)
+        throw DB_ERROR("Can't change the history of a database opened read-only");
+
+    const uint64_t previous = m_history.load();
+    in_write_txn([&](db::Database& db) { set_count_property(db, "history", blocks); });
+    m_history = blocks;
+    oxen::log::warning(
+            logcat,
+            "The blockchain database now keeps the last {} blocks of history (it kept {})",
+            blocks,
+            previous ? "the last {} blocks"_format(previous) : "all of it"s);
+    // What is now outside the window is dropped by trim-on-add as the chain advances (and, once
+    // implemented, the background catch-up): the node keeps the new window from here on.
+}
+
+void BlockchainSQLiteDB::trim_history() {
+    if (!m_history.load() || m_read_only)
+        return;
+    check_open();
+    const uint64_t target = history_trim_target();
+    const uint64_t start = m_history_start.load();
+    if (target <= start)
+        return;
+    // Drop at most INLINE_TRIM_MAX heights now; a larger backlog is drained over later block adds
+    // (background catch-up is deferred to M4b-2).
+    trim_history_to(std::min(target, start + INLINE_TRIM_MAX));
+}
+
+void BlockchainSQLiteDB::trim_history_to(uint64_t to) {
+    const uint64_t from = m_history_start.load();
+    if (to <= from)
+        return;
+    in_write_txn([&](db::Database& db) {
+        // Keep every per-height index column (height, hash, timestamp, difficulty/cumulative
+        // difficulty, weight, emission, rct count): the difficulty/timestamp/weight/emission and
+        // pulse-timing checks read them for all heights.  Only the block body is dropped.
+        db.prepared_exec(
+                "UPDATE blocks SET blob = NULL WHERE height >= ? AND height < ? AND blob IS NOT NULL",
+                as_i64(from),
+                as_i64(to));
+        // Record the input-less non-miner txs leaving storage so tx_exists still finds them (see
+        // SCHEMA_V3).  Done here, not by a trigger on transactions: popping a block also deletes its
+        // transactions (via the blocks cascade), but those are leaving the chain and must be
+        // re-includable; only the trim's deletes are of transactions that stay in the chain.
+        db.prepared_exec(
+                "INSERT INTO trimmed_txes (hash, height, type) "
+                "SELECT hash, height, type FROM transactions "
+                "WHERE height >= ? AND height < ? AND NOT miner AND type IN ({})"_format(
+                        zero_input_types()),
+                as_i64(from),
+                as_i64(to));
+        db.prepared_exec(
+                "DELETE FROM transactions WHERE height >= ? AND height < ?",
+                as_i64(from),
+                as_i64(to));
+        // Stale alternative-chain blocks below the window can go.  Outputs and key_images are KEPT
+        // for every height (ring-signature decoys and double-spend guards read them regardless of the
+        // window).  Checkpoints are also kept: they are tiny and chain-finality reads the recent
+        // ones, and find_immutable_checkpoint (which the reference uses to pick a safe cutoff) is not
+        // ported here, so keeping all is the safe choice.
+        db.prepared_exec("DELETE FROM alt_blocks WHERE height < ?", as_i64(to));
+        set_count_property(db, "history_start", to);
+    });
+    m_history_start = to;
+    oxen::log::debug(
+            logcat, "Dropped block bodies/transactions for heights {} to {}", from, to - 1);
+}
+
+void BlockchainSQLiteDB::start_history_catch_up() {
+    // Deferred to M4b-2.  A from-scratch --history N node needs no catch-up (trim-on-add keeps it
+    // correct); only converting an existing full database, or shrinking the window, builds a backlog,
+    // which trim-on-add drains gradually (INLINE_TRIM_MAX heights per block added) until then.
+    if (m_history.load() && !m_read_only && history_trim_target() > m_history_start.load())
+        oxen::log::info(
+                logcat,
+                "A block-history backlog remains to be dropped; it is drained as blocks are added "
+                "(background catch-up is not yet implemented)");
+}
+
+// =========================================================================================
 // Transactions (write + read)
 // =========================================================================================
 
@@ -1046,6 +1261,14 @@ uint64_t BlockchainSQLiteDB::add_transaction_data(
                 as_guts(tx_hash)))
         throw TX_EXISTS(
                 "Attempting to add transaction that's already in the db (tx id {})"_format(*id));
+    // A limited history may have dropped this tx's row while recording its hash (input-less txs
+    // only); it is still in the chain below the kept history, so re-adding it is forbidden.
+    if (m_history_start.load() &&
+        db.prepared_maybe_get<int64_t>(
+                "SELECT height FROM trimmed_txes WHERE hash8 = substr(?1, 1, 8) AND hash = ?1",
+                as_guts(tx_hash)))
+        throw TX_EXISTS(
+                "Attempting to add transaction that's already in the chain (below the kept history)");
 
     const transaction& tx = txp.first;
     const std::string& blob = txp.second;
@@ -1097,7 +1320,16 @@ void BlockchainSQLiteDB::remove_transaction_data(const crypto::hash& tx_hash, co
 
 bool BlockchainSQLiteDB::tx_exists(const crypto::hash& h) const {
     uint64_t tx_id;
-    return tx_exists(h, tx_id);
+    if (tx_exists(h, tx_id))
+        return true;
+    // A limited history may have dropped the tx row but recorded its hash (input-less txs): it is
+    // still in the chain, so it exists.
+    if (!m_history_start.load())
+        return false;
+    return m_db->prepared_maybe_get<int64_t>(
+                        "SELECT height FROM trimmed_txes WHERE hash8 = substr(?1, 1, 8) AND hash = ?1",
+                        as_guts(h))
+            .has_value();
 }
 
 bool BlockchainSQLiteDB::tx_exists(const crypto::hash& h, uint64_t& tx_id) const {

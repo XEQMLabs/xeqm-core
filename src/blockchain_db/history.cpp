@@ -2,7 +2,6 @@
 
 #include <common/format.h>
 #include <cryptonote_basic/hardfork.h>
-#include <cryptonote_core/service_node_rules.h>
 #include <networks.h>
 
 #include <algorithm>
@@ -14,12 +13,24 @@ namespace cryptonote {
 
 using namespace std::literals;
 
+namespace {
+    // The service node staking lock period, in blocks.  Inlined from
+    // service_nodes::staking_num_lock_blocks so that this module can live in blockchain_db (which is
+    // below cryptonote_core in the library graph) rather than depending on the compiled service-node
+    // rules; it is purely a function of the network config, so the two cannot diverge.
+    uint64_t staking_num_lock_blocks(network_type nettype) {
+        switch (nettype) {
+            case network_type::FAKECHAIN: return 30;
+            case network_type::TESTNET: return get_config(nettype).BLOCKS_IN(48h);
+            default: return get_config(nettype).BLOCKS_IN(14 * 24h);
+        }
+    }
+}  // namespace
+
 uint64_t history_minimum(network_type nettype, uint64_t height) {
     auto hf15 = hard_fork_begins(nettype, hf::hf15_ons);
     if (!hf15 || height < *hf15)
-        return std::max(
-                HISTORY_MIN_BLOCKS,
-                service_nodes::staking_num_lock_blocks(nettype) + HISTORY_LOCK_MARGIN);
+        return std::max(HISTORY_MIN_BLOCKS, staking_num_lock_blocks(nettype) + HISTORY_LOCK_MARGIN);
     return HISTORY_MIN_BLOCKS;
 }
 

@@ -143,6 +143,13 @@ class BlockchainSQLiteDB : public BlockchainDB {
     crypto::hash top_block_hash(uint64_t* block_height = NULL) const override;
     block get_top_block() const override;
     uint64_t height() const override;
+    // --- light-node history retention (M4b) ---
+    uint64_t history() const override { return m_history.load(); }
+    uint64_t history_start() const override { return m_history_start.load(); }
+    uint64_t history_window_start() const override;
+    void set_history(uint64_t blocks) override;
+    void trim_history() override;
+    void start_history_catch_up() override;
     bool tx_exists(const crypto::hash& h) const override;
     bool tx_exists(const crypto::hash& h, uint64_t& tx_id) const override;
     uint64_t get_tx_unlock_time(const crypto::hash& h) const override;
@@ -236,6 +243,15 @@ class BlockchainSQLiteDB : public BlockchainDB {
     void require_writer(std::string_view action) const;
     void require_batch_writer() const;
 
+    // The height below which the kept history ends, as of the current height (0 if all is kept, i.e.
+    // a full node).  Blocks at [history_start, trim target) are dropped by the next trim.
+    uint64_t history_trim_target() const;
+    // Drops the block bodies and transactions outside the kept history, for heights
+    // [m_history_start, to), and records the dropped input-less txs in trimmed_txes.  Must be called
+    // by the thread holding the write transaction (it runs inline within it, so a trim and the block
+    // add that triggered it commit together).
+    void trim_history_to(uint64_t to);
+
     template <typename T>
     T get_block_column(uint64_t height, std::string_view column, std::string_view what) const;
     template <typename T>
@@ -260,6 +276,12 @@ class BlockchainSQLiteDB : public BlockchainDB {
     std::atomic<std::thread::id> m_writer{};
     std::atomic<bool> m_batch_active{false};
     bool m_batch_transactions = true;
+
+    // The stored `history` / `history_start` properties (see history() / history_start()).  Both 0
+    // means a full node (keep everything), which is the default and a complete no-op.  Atomic so an
+    // RPC thread reading served_history()/history_start() while the chain advances is safe.
+    std::atomic<uint64_t> m_history{0};
+    std::atomic<uint64_t> m_history_start{0};
 };
 
 }  // namespace cryptonote

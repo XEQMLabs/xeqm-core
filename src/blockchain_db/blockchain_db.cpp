@@ -78,6 +78,24 @@ void BlockchainDB::init_options(boost::program_options::options_description& des
     command_line::add_arg(desc, arg_db_salvage);
 }
 
+void BlockchainDB::set_history(uint64_t blocks) {
+    // Only the sqlite backend overrides this.  Keeping everything (blocks == 0) is always a no-op, so
+    // a full node is unaffected regardless of backend; any limited history is refused here.
+    if (blocks != 0)
+        throw DB_ERROR{
+                "Keeping a limited block history (--history) needs the SQLite blockchain backend "
+                "(XEQM_DB_BACKEND=sqlite)"};
+}
+
+uint64_t BlockchainDB::served_history() const {
+    if (!history())
+        return 0;
+    const uint64_t h = height();
+    const uint64_t start = history_window_start();
+    // 0 would claim the whole chain, so even a node with nothing to serve claims a single block.
+    return start < h ? h - start : 1;
+}
+
 void BlockchainDB::pop_block() {
     block blk;
     std::vector<transaction> txs;
