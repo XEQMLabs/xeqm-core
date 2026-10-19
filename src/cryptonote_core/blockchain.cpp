@@ -5492,6 +5492,24 @@ bool Blockchain::basic_block_checks(cryptonote::block const& blk, bool alt_block
         }
     }
 
+    // Pulse-recovery: a fallback block may not be dated more than two Pulse rounds into the future.
+    if (auto [blk_ver, blk_rev] = get_network_version_revision(m_nettype, blk_height);
+        m_nettype != network_type::FAKECHAIN && !blk.has_pulse() &&
+        feature::pulse_recovery(blk_ver, blk_rev)) {
+        const auto round = tools::to_seconds(get_config(m_nettype).PULSE_ROUND_TIMEOUT);
+        const uint64_t limit = get_adjusted_time() + 2 * round;
+        if (blk.timestamp > limit) {
+            log::warning(
+                    logverify,
+                    "Fallback block with id: {}, timestamp {} is more than two Pulse rounds ahead "
+                    "of local time {}",
+                    blk_hash,
+                    blk.timestamp,
+                    get_adjusted_time());
+            return false;
+        }
+    }
+
     // When verifying an alt block, we're replacing the blk at blk_height, not
     // adding a new block to the chain
     // sanity check basic miner tx properties;
