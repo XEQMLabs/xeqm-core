@@ -441,60 +441,7 @@ bool command_parser_executor::print_transaction_pool_stats(const std::vector<std
     return m_executor.print_transaction_pool_stats();
 }
 
-bool command_parser_executor::start_mining(const std::vector<std::string>& args) {
-    if (!args.size()) {
-        std::cout << "Please specify a wallet address to mine for: "
-                     "start_mining {<addr>|none} [threads={N|auto}] [num_blocks=N]"
-                  << std::endl;
-        return true;
-    }
-
-    std::string address = args.front();
-    if (address == "none")
-        ;
-    else if (cryptonote::address_parse_info info;
-             !cryptonote::get_account_address_from_str(
-                     info, cryptonote::network_type::TESTNET, address) &&
-             !cryptonote::get_account_address_from_str(
-                     info, cryptonote::network_type::MAINNET, address) &&
-             !cryptonote::get_account_address_from_str(
-                     info, cryptonote::network_type::DEVNET, address) &&
-             !cryptonote::get_account_address_from_str(
-                     info, cryptonote::network_type::STAGENET, address)) {
-        std::cout << "target account address has wrong format" << std::endl;
-        return true;
-    } else if (info.is_subaddress) {
-        tools::fail_msg_writer("subaddress for mining reward is not yet supported!");
-        return true;
-    }
-
-    std::string_view threads_val =
-            tools::find_prefixed_value(args.begin() + 1, args.end(), "threads="sv);
-    std::string_view num_blocks_val =
-            tools::find_prefixed_value(args.begin() + 1, args.end(), "num_blocks="sv);
-
-    unsigned int threads_count = 1, num_blocks = 0;
-    if (threads_val.size() && !tools::parse_int(threads_val, threads_count)) {
-        tools::fail_msg_writer("Failed to parse threads value {}", threads_val);
-        return false;
-    }
-
-    if (num_blocks_val.size())
-        tools::parse_int(num_blocks_val, num_blocks);
-    m_executor.start_mining(address, threads_count, num_blocks);
-    return true;
-}
-
-bool command_parser_executor::stop_mining(const std::vector<std::string>& args) {
-    if (!args.empty())
-        return false;
-
-    return m_executor.stop_mining();
-}
-
-bool command_parser_executor::mining_status(const std::vector<std::string>& args) {
-    return m_executor.mining_status();
-}
+// start_mining / stop_mining / mining_status removed: PoW block production has been retired.
 
 bool command_parser_executor::stop_daemon(const std::vector<std::string>& args) {
     if (!args.empty())

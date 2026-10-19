@@ -511,35 +511,12 @@ bool rpc_command_executor::show_status() {
     if (!maybe_hf)
         return false;
     auto& hfinfo = *maybe_hf;
-    bool has_mining_info = false, mining_active = false;
-    long mining_hashrate = 0;
-
-    bool mining_busy = false;
     bool restricted_response = false;
     if (auto it = info.find("start_time");
         it != info.end() &&
         it->get<uint64_t>() > 0)  // This will only be non-null if we were recognized as admin
-                                  // (which we need for mining info)
     {
         restricted_response = true;
-        if (auto maybe_mining_info = try_running(
-                    [this] { return invoke<MINING_STATUS>(false); },
-                    "Failed to retrieve mining info")) {
-            has_mining_info = true;
-            auto& mres = *maybe_mining_info;
-            if (mres["status"] == STATUS_BUSY)
-                mining_busy = true;
-            else if (mres["status"] != STATUS_OK) {
-                tools::fail_msg_writer("Failed to retrieve mining info");
-                return false;
-            } else {
-                mining_active = mres["active"].get<bool>();
-                if (mining_active)
-                    mining_hashrate = mres["speed"].get<long>();
-            }
-        } else {
-            return false;
-        }
     }
 
     std::string my_sn_key, my_bls;
@@ -629,11 +606,6 @@ bool rpc_command_executor::show_status() {
         msg += ", syncing";
 
     auto hf_version = hfinfo["version"].get<cryptonote::hf>();
-    if (hf_version < cryptonote::feature::PULSE && !has_mining_info)
-        msg += ", mining info unavailable";
-    if (has_mining_info && !mining_busy && mining_active)
-        msg.append(", mining at {}", get_mining_speed(mining_hashrate));
-
     if (hf_version < cryptonote::feature::PULSE)
         msg.append(
                 ", net hash {}",
@@ -715,34 +687,7 @@ bool rpc_command_executor::show_status() {
     return true;
 }
 
-bool rpc_command_executor::mining_status() {
-    auto maybe_mining_info = try_running(
-            [this] { return invoke<MINING_STATUS>(false); }, "Failed to retrieve mining info");
-    if (!maybe_mining_info)
-        return false;
-
-    bool mining_busy = false;
-    auto& mres = *maybe_mining_info;
-    if (mres["status"].get<std::string_view>() == STATUS_BUSY)
-        mining_busy = true;
-    else if (mres["status"].get<std::string_view>() != STATUS_OK) {
-        tools::fail_msg_writer("Failed to retrieve mining info");
-        return false;
-    }
-    bool active = mres["active"].get<bool>();
-    if (mining_busy || !active)
-        tools::msg_writer("Not currently mining");
-    else {
-        tools::msg_writer(
-                "Mining at {} with {} threads",
-                get_mining_speed(mres["speed"].get<long>()),
-                mres["threads_count"].get<int>());
-        tools::msg_writer("Mining address: {}", mres["address"].get<std::string_view>());
-    }
-    tools::msg_writer("PoW algorithm: {}", mres["pow_algorithm"].get<std::string_view>());
-
-    return true;
-}
+// mining_status() removed: PoW block production has been retired.
 
 static const char* get_address_type_name(epee::net_utils::address_type address_type) {
     switch (address_type) {
@@ -1256,25 +1201,7 @@ bool rpc_command_executor::print_transaction_pool_stats() {
     return true;
 }
 
-bool rpc_command_executor::start_mining(std::string address, int num_threads, int num_blocks) {
-    json args{
-            {"num_blocks", num_blocks},
-            {"threads_count", num_threads},
-            {"miner_address", std::move(address)}};
-    if (!try_running(
-                [this, &args] { return invoke<START_MINING>(args); }, "Unable to start mining"))
-        return false;
-
-    tools::success_msg_writer(
-            "Mining started with {} thread(s).{}",
-            std::max(num_threads, 1),
-            num_blocks ? " Will stop after {} blocks"_format(num_blocks) : "");
-    return true;
-}
-
-bool rpc_command_executor::stop_mining() {
-    return invoke_simple<STOP_MINING>("Couldn't stop mining", "Mining stopped");
-}
+// start_mining / stop_mining / mining_status removed: PoW block production has been retired.
 
 bool rpc_command_executor::stop_daemon() {
     return invoke_simple<STOP_DAEMON>("Couldn't stop daemon", "Stop signal sent");

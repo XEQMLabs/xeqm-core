@@ -80,18 +80,6 @@ void parse_request(GET_PENDING_EVENTS& pe, rpc_input in) {
     get_values(in, "include_mempool", pe.request.include_mempool);
 }
 
-void parse_request(START_MINING& start_mining, rpc_input in) {
-    get_values(
-            in,
-            "miner_address",
-            required{start_mining.request.miner_address},
-            "num_blocks",
-            start_mining.request.num_blocks,
-            "slow_mining",
-            start_mining.request.slow_mining,
-            "threads_count",
-            start_mining.request.threads_count);
-}
 void parse_request(GET_OUTPUTS& get_outputs, rpc_input in) {
     get_values(
             in, "as_tuple", get_outputs.request.as_tuple, "get_txid", get_outputs.request.get_txid);
