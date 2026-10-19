@@ -10311,13 +10311,18 @@ void wallet2::get_outs(
                     "Couldn't retrive list of outputs that are to be excluded from selection");
 
         std::sort(output_blacklist.begin(), output_blacklist.end());
-        if (output_blacklist.size() * 0.05 > (double)rct_offsets.size()) {
-            log::warning(
-                    logcat,
-                    "More than 5% of outputs are blacklisted ({}/{}), please notify the Oxen "
-                    "developers",
-                    output_blacklist.size(),
-                    rct_offsets.size());
+        // The daemon is untrusted: a blacklist that names unknown outputs or covers more than
+        // 5% of all outputs would let it steer decoy selection, so refuse it outright.
+        if (has_rct_distribution) {
+            const uint64_t num_rct_outputs = rct_offsets.back();
+            THROW_WALLET_EXCEPTION_IF(
+                    !output_blacklist.empty() && output_blacklist.back() >= num_rct_outputs,
+                    error::get_output_blacklist,
+                    "Daemon blacklist names outputs that do not exist");
+            THROW_WALLET_EXCEPTION_IF(
+                    output_blacklist.size() > num_rct_outputs / 20,
+                    error::get_output_blacklist,
+                    "Daemon blacklists more than 5% of outputs");
         }
 
         nlohmann::json res;
