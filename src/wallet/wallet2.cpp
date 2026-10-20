@@ -10313,14 +10313,18 @@ void wallet2::get_outs(
         std::sort(output_blacklist.begin(), output_blacklist.end());
         // The daemon is untrusted: a blacklist that names unknown outputs or covers more than
         // 5% of all outputs would let it steer decoy selection, so refuse it outright.
+        // A young chain legitimately blacklists a large share of a small output set (every
+        // stake output is blacklisted), so the ratio check waits for the set to grow.
         if (has_rct_distribution) {
+            constexpr uint64_t BLACKLIST_RATIO_MIN_OUTPUTS = 100000;
             const uint64_t num_rct_outputs = rct_offsets.back();
             THROW_WALLET_EXCEPTION_IF(
                     !output_blacklist.empty() && output_blacklist.back() >= num_rct_outputs,
                     error::get_output_blacklist,
                     "Daemon blacklist names outputs that do not exist");
             THROW_WALLET_EXCEPTION_IF(
-                    output_blacklist.size() > num_rct_outputs / 20,
+                    num_rct_outputs >= BLACKLIST_RATIO_MIN_OUTPUTS &&
+                            output_blacklist.size() > num_rct_outputs / 20,
                     error::get_output_blacklist,
                     "Daemon blacklists more than 5% of outputs");
         }
