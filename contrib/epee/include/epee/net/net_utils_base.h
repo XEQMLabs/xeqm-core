@@ -377,6 +377,7 @@ namespace net_utils
     double m_current_speed_up;
     double m_max_speed_down;
     double m_max_speed_up;
+    bool m_handshake_complete = false;  // set by the p2p layer once COMMAND_HANDSHAKE succeeds
 
     connection_context_base(connection_id_t connection_id,
                             const network_address &remote_address, bool is_income,

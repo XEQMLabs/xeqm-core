@@ -346,8 +346,6 @@ jobs:
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-sqlite3
             mingw-w64-x86_64-curl
-            mingw-w64-x86_64-hidapi
-            mingw-w64-x86_64-libusb
             mingw-w64-x86_64-zstd
             mingw-w64-x86_64-gmp
             mingw-w64-x86_64-unbound

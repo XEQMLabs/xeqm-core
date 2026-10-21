@@ -206,6 +206,10 @@ void http_server::create_rpc_endpoints(uWS::App& http) {
 
 namespace {
 
+    // Largest request body accepted from public callers and from admin callers.
+    constexpr size_t MAX_PUBLIC_BODY_SIZE = 4 * 1024 * 1024;
+    constexpr size_t MAX_ADMIN_BODY_SIZE = 64 * 1024 * 1024;
+
     struct call_data {
         http_server& http;
         core_rpc_server& core_rpc;
@@ -587,6 +591,15 @@ void http_server::handle_base_request(
                 data->request.body = std::string{d};
             else
                 std::get<std::string>(data->request.body) += d;
+            // Stop buffering once the body exceeds what this caller may send.
+            const size_t limit =
+                    data->request.context.admin ? MAX_ADMIN_BODY_SIZE : MAX_PUBLIC_BODY_SIZE;
+            if (std::get<std::string>(data->request.body).size() > limit) {
+                data->aborted = true;
+                data->http.error_response(data->res, http_server_base::HTTP_PAYLOAD_TOO_LARGE);
+                data->res.close();
+                return;
+            }
         }
         if (!done)
             return;
@@ -615,6 +628,13 @@ void http_server::handle_json_rpc_request(HttpResponse& res, HttpRequest& req) {
     res.onAborted([data] { data->aborted = true; });
     res.onData([buffer = ""s, data, restricted = m_restricted](
                        std::string_view d, bool done) mutable {
+        // Stop buffering once the body exceeds what this caller may send.
+        if (buffer.size() + d.size() > (restricted ? MAX_PUBLIC_BODY_SIZE : MAX_ADMIN_BODY_SIZE)) {
+            data->aborted = true;
+            data->http.error_response(data->res, http_server_base::HTTP_PAYLOAD_TOO_LARGE);
+            data->res.close();
+            return;
+        }
         if (!done) {
             buffer += d;
             return;

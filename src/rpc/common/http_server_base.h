@@ -59,7 +59,8 @@ class http_server_base {
 
     static constexpr http_response_code HTTP_OK{200, "OK"sv},
             HTTP_BAD_REQUEST{400, "Bad Request"sv}, HTTP_FORBIDDEN{403, "Forbidden"sv},
-            HTTP_NOT_FOUND{404, "Not Found"sv}, HTTP_ERROR{500, "Internal Server Error"sv},
+            HTTP_NOT_FOUND{404, "Not Found"sv}, HTTP_PAYLOAD_TOO_LARGE{413, "Payload Too Large"sv},
+            HTTP_ERROR{500, "Internal Server Error"sv},
             HTTP_SERVICE_UNAVAILABLE{503, "Service Unavailable"sv};
 
   protected:

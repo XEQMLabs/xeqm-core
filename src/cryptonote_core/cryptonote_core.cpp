@@ -1455,11 +1455,7 @@ static bool is_canonical_bulletproof_layout(const std::vector<rct::Bulletproof>&
 //-----------------------------------------------------------------------------------------------
 void core::parse_incoming_tx_accumulated_batch(
         std::vector<tx_verification_batch_info>& tx_info, bool kept_by_block) {
-    if (kept_by_block && blockchain.is_within_compiled_block_hash_area()) {
-        log::trace(logcat, "Skipping semantics check for txs kept by block in embedded hash area");
-        return;
-    }
-
+    // Always check semantics: the embedded hash area is keyed on our height, not the tx's block.
     std::vector<const rct::rctSig*> rvv;
     for (size_t n = 0; n < tx_info.size(); ++n) {
         if (!tx_info[n].result || tx_info[n].already_have)

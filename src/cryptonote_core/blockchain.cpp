@@ -1686,8 +1686,8 @@ bool Blockchain::prevalidate_block_rewards(const block& b, uint64_t height, hf h
             return false;
         }
 
-        txversion min_version = transaction::get_max_version_for_hf(hf_version);
-        txversion max_version = transaction::get_min_version_for_hf(hf_version);
+        txversion min_version = transaction::get_min_version_for_hf(hf_version);
+        txversion max_version = transaction::get_max_version_for_hf(hf_version);
         if (miner_tx.version < min_version || miner_tx.version > max_version) {
             log::error(
                     logverify,
@@ -5488,6 +5488,24 @@ bool Blockchain::basic_block_checks(cryptonote::block const& blk, bool alt_block
                     blk_hash,
                     blk.tx_eth_count,
                     blk.tx_hashes.size());
+            return false;
+        }
+    }
+
+    // Pulse-recovery: a fallback block may not be dated more than two Pulse rounds into the future.
+    if (auto [blk_ver, blk_rev] = get_network_version_revision(m_nettype, blk_height);
+        m_nettype != network_type::FAKECHAIN && !blk.has_pulse() &&
+        feature::pulse_recovery(blk_ver, blk_rev)) {
+        const auto round = tools::to_seconds(get_config(m_nettype).PULSE_ROUND_TIMEOUT);
+        const uint64_t limit = get_adjusted_time() + 2 * round;
+        if (blk.timestamp > limit) {
+            log::warning(
+                    logverify,
+                    "Fallback block with id: {}, timestamp {} is more than two Pulse rounds ahead "
+                    "of local time {}",
+                    blk_hash,
+                    blk.timestamp,
+                    get_adjusted_time());
             return false;
         }
     }
