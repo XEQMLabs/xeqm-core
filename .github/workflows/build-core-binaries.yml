@@ -1027,3 +1027,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: release-assets/*
+          # Repeat the publish job's state or the update would turn a draft rc public.
+          draft: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-qa') || contains(github.ref_name, '-pre') }}
