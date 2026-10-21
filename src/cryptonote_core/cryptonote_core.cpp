@@ -159,15 +159,25 @@ static const command_line::arg_flag arg_omq_quorumnet_public{
         "commands as if passed to --lmq-curve-public. "
         "Note that even without this option the quorumnet port can be used for RPC commands by "
         "--lmq-admin and --lmq-user pubkeys."};
+static const command_line::arg_descriptor<std::string> arg_fallback_signer_key_file = {
+        "fallback-signer-key-file",
+        "Path to a file holding the hex secret key (64 hex chars, keep it 0600) that authorizes "
+        "this daemon to sign HF22 fallback blocks; its public key must be listed in the "
+        "network's FALLBACK_MINER_PUBKEYS"};
+static const command_line::arg_descriptor<uint32_t> arg_fallback_signer_delay_rounds = {
+        "fallback-signer-delay-rounds",
+        "Pulse rounds to hold back past the fallback timestamp before this daemon signs a "
+        "fallback block (0 = primary signer; give each backup signer a larger value)",
+        0};
+// Deprecated aliases for the two options above. RandomX/PoW mining was retired; these blocks are
+// signed, not mined, so the options were renamed to --fallback-signer-*. The old names are kept so
+// existing fleet configs keep working; using one emits a deprecation warning.
 static const command_line::arg_descriptor<std::string> arg_fallback_miner_key_file = {
         "fallback-miner-key-file",
-        "Path to a file holding the hex secret key (64 hex chars, keep it 0600) that authorizes "
-        "this daemon to produce HF22 fallback miner blocks; its public key must be listed in the "
-        "network's FALLBACK_MINER_PUBKEYS"};
+        "Deprecated alias for --fallback-signer-key-file."};
 static const command_line::arg_descriptor<uint32_t> arg_fallback_miner_delay_rounds = {
         "fallback-miner-delay-rounds",
-        "Pulse rounds to hold back past the fallback timestamp before this daemon produces a "
-        "fallback block (0 = primary miner; give each backup miner a larger value)",
+        "Deprecated alias for --fallback-signer-delay-rounds.",
         0};
 static const command_line::arg_descriptor<std::vector<std::string>> arg_l2_provider = {
         "l2-provider",
@@ -381,8 +391,10 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_l2_oxend);
     command_line::add_arg(desc, arg_storage_server_port);
     command_line::add_arg(desc, arg_quorumnet_port);
-    command_line::add_arg(desc, arg_fallback_miner_key_file);
-    command_line::add_arg(desc, arg_fallback_miner_delay_rounds);
+    command_line::add_arg(desc, arg_fallback_signer_key_file);
+    command_line::add_arg(desc, arg_fallback_signer_delay_rounds);
+    command_line::add_arg(desc, arg_fallback_miner_key_file);      // deprecated alias
+    command_line::add_arg(desc, arg_fallback_miner_delay_rounds);  // deprecated alias
 
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);
@@ -504,10 +516,29 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
         return false;
 
     {
-        auto key_file = command_line::get_arg(vm, arg_fallback_miner_key_file);
+        auto key_file = command_line::get_arg(vm, arg_fallback_signer_key_file);
+        uint32_t delay_rounds = command_line::get_arg(vm, arg_fallback_signer_delay_rounds);
+        // Deprecated --fallback-miner-* aliases: prefer the new names, fall back to the old ones
+        // (with a warning) so existing configs keep working.
+        if (key_file.empty()) {
+            auto old_key = command_line::get_arg(vm, arg_fallback_miner_key_file);
+            if (!old_key.empty()) {
+                log::warning(
+                        logcat,
+                        "--fallback-miner-key-file is deprecated; use --fallback-signer-key-file");
+                key_file = old_key;
+            }
+        }
+        if (command_line::is_arg_defaulted(vm, arg_fallback_signer_delay_rounds) &&
+            !command_line::is_arg_defaulted(vm, arg_fallback_miner_delay_rounds)) {
+            log::warning(
+                    logcat,
+                    "--fallback-miner-delay-rounds is deprecated; use "
+                    "--fallback-signer-delay-rounds");
+            delay_rounds = command_line::get_arg(vm, arg_fallback_miner_delay_rounds);
+        }
         if (!key_file.empty()) {
-            m_fallback_miner_delay_rounds =
-                    command_line::get_arg(vm, arg_fallback_miner_delay_rounds);
+            m_fallback_miner_delay_rounds = delay_rounds;
             if (!load_fallback_miner_key(tools::utf8_path(key_file)))
                 return false;
         }
@@ -515,7 +546,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
             get_hard_fork_heights(m_nettype, hf::hf22_sn_policy).first)
             log::warning(
                     logcat,
-                    "FALLBACK_MINER_PUBKEYS is empty for this network: no fallback miner blocks "
+                    "FALLBACK_MINER_PUBKEYS is empty for this network: no fallback signer blocks "
                     "will be accepted once HF22 activates");
     }
 
@@ -2417,7 +2448,7 @@ block_complete_entry get_block_complete_entry(block& b, tx_memory_pool& pool) {
 bool core::load_fallback_miner_key(const fs::path& path) {
     std::error_code ec;
     if (!fs::is_regular_file(path, ec)) {
-        log::error(logcat, "--fallback-miner-key-file: {} is not a readable file", path.string());
+        log::error(logcat, "fallback signer key file: {} is not a readable file", path.string());
         return false;
     }
 #ifndef _WIN32
@@ -2425,12 +2456,12 @@ bool core::load_fallback_miner_key(const fs::path& path) {
     if (!ec && (perms & (fs::perms::group_all | fs::perms::others_all)) != fs::perms::none)
         log::warning(
                 logcat,
-                "--fallback-miner-key-file: {} is accessible by other users; chmod 600 it",
+                "fallback signer key file: {} is accessible by other users; chmod 600 it",
                 path.string());
 #endif
     std::string hex;
     if (!tools::slurp_file(path, hex)) {
-        log::error(logcat, "--fallback-miner-key-file: failed to read {}", path.string());
+        log::error(logcat, "fallback signer key file: failed to read {}", path.string());
         return false;
     }
     while (!hex.empty() && std::isspace(static_cast<unsigned char>(hex.back())))
@@ -2439,7 +2470,7 @@ bool core::load_fallback_miner_key(const fs::path& path) {
     if (!tools::try_load_from_hex_guts(hex, m_fallback_miner_key) ||
         !crypto::secret_key_to_public_key(m_fallback_miner_key, pub)) {
         m_fallback_miner_key = crypto::null<crypto::secret_key>;
-        log::error(logcat, "--fallback-miner-key-file: expected a 64-hex-character secret key");
+        log::error(logcat, "fallback signer key file: expected a 64-hex-character secret key");
         return false;
     }
     const auto& allowed = get_net_config().FALLBACK_MINER_PUBKEYS;
