@@ -5956,6 +5956,14 @@ bool Blockchain::handle_block_to_main_chain(
         for (const auto& hook : m_block_post_add_hooks)
             hook(hook_data);
     }
+
+    // Light-node history retention (trim-on-add): now that the block and every subsystem that reads
+    // recent block bodies (service node list, ONS, block-add hooks) are done with it, drop the block
+    // bodies/transactions that have fallen outside the kept history window.  This keeps the oldest
+    // in-window body available throughout the block's processing above.  A no-op for a full node and
+    // for the LMDB backend (BlockchainDB::trim_history).
+    m_db->trim_history();
+
     return true;
 }
 //------------------------------------------------------------------

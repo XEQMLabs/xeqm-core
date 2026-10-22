@@ -83,6 +83,9 @@ struct connection_info {
 
     uint32_t pruning_seed;
 
+    // The peer's advertised served block history (0 = serves the whole chain).
+    uint64_t remote_history;
+
     uint8_t address_type;
 };
 
@@ -159,6 +162,9 @@ struct CORE_SYNC_DATA {
     uint32_t pruning_seed;
     std::vector<uint64_t> blink_blocks;
     std::vector<crypto::hash> blink_hash;
+    // How many of the most recent blocks the node can serve, or 0 if it can serve all of them.
+    // Nodes that predate this send nothing, which reads as 0: they all keep the whole chain.
+    uint64_t history = 0;
 
     KV_MAP_SERIALIZABLE
 };

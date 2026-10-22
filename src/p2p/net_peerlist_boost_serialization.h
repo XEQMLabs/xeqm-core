@@ -41,7 +41,7 @@
 #include "net/tor_address.h"
 #include "p2p/p2p_protocol_defs.h"
 
-BOOST_CLASS_VERSION(nodetool::peerlist_entry, 3)
+BOOST_CLASS_VERSION(nodetool::peerlist_entry, 4)
 
 namespace boost::serialization {
 template <class T, class Archive>
@@ -222,6 +222,14 @@ inline void serialize(Archive& a, nodetool::peerlist_entry& pl, const ver_type v
         uint16_t rpc_port = 0;
         a & rpc_port;
     }
+
+    // Served block history added at version 4; records written by an older build omit it, in which
+    // case pl.history keeps its default of 0 (serves the whole chain).  ver is a
+    // boost::serialization::version_type whose boost::operators comparisons with an integer other
+    // than < recurse forever, so it is compared as a plain unsigned.
+    const unsigned version = ver;
+    if (version >= 4)
+        a & pl.history;
 }
 
 template <class Archive, class ver_type>
