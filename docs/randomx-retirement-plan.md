@@ -108,7 +108,8 @@ source of operator confusion. This is a non-consensus change and needs no hard f
 
 Keep, do not remove:
 
-- `--fallback-miner-key-file` and the key loading, because the **signed** fallback still uses that
+- `--fallback-signer-key-file` (old name `--fallback-miner-key-file` still accepted) and the key
+  loading, because the **signed** fallback still uses that
   key to sign blocks in `core::handle_block_found` (`cryptonote_core.cpp:2567-2600`). This flag is
   no longer about PoW.
 - `miner::find_nonce_for_given_block`, which is used for genesis generation

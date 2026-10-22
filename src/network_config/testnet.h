@@ -8,7 +8,7 @@ inline constexpr std::array seeds = {
         "84.247.143.210:18080"sv,
 };
 
-// HF22 testnet fallback miner; the matching secret is testnet/fallback-miner-testnet.key.
+// HF22 testnet fallback signer; the matching secret is testnet/fallback-miner-testnet.key.
 inline constexpr std::array fallback_miner_pubkeys = {
         "fc3f4e927eb61bc9e2edcff069936a96bdb893f74f7c9ec80f8fc52983e349f5"sv,
 };

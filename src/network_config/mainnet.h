@@ -14,8 +14,8 @@ inline constexpr std::array seeds = {
         "217.216.108.148:9230"sv, // seed-5.xeqmlabs.com
 };
 
-// HF22 authorized fallback miners: one dedicated key per host, secret loaded on that host via
-// --fallback-miner-key-file, staggered with --fallback-miner-delay-rounds 0 / 2 / 4.
+// HF22 authorized fallback signers: one dedicated key per host, secret loaded on that host via
+// --fallback-signer-key-file, staggered with --fallback-signer-delay-rounds 0 / 2 / 4.
 inline constexpr std::array fallback_miner_pubkeys = {
         "69c287255899a3633906b4c3e358f42748c0894987672a28730e9bb7b31b27c9"sv,  // maple, delay 0
         "bdffb531a652ce95e7ba62c4589d7f7138cbbfe10927cc1f2708c7ea4603aab1"sv,  // surf, delay 2
@@ -75,7 +75,7 @@ inline constexpr network_config config{
         .PULSE_STAGE_TIMEOUT = 10s,
         .PULSE_ROUND_TIMEOUT = 30s,
         .PULSE_MAX_START_ADJUSTMENT = 15s,
-        .PULSE_MINER_FALLBACK_ROUNDS = 2,   // 2 * 30s = 60s: survival mode - resume fast via authorized fallback miner to protect SN uptime credit (HF22)
+        .PULSE_MINER_FALLBACK_ROUNDS = 2,   // 2 * 30s = 60s: survival mode - resume fast via authorized fallback signer to protect SN uptime credit (HF22)
         .FALLBACK_MINER_PUBKEYS = fallback_miner_pubkeys,
         .PULSE_MIN_SERVICE_NODES = 12,
         .BATCHING_INTERVAL = 20,

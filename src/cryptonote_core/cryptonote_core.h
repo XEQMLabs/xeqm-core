@@ -338,7 +338,8 @@ class core final {
      */
     bool handle_block_found(block& b, block_verification_context& bvc);
 
-    // HF22 fallback miner (--fallback-miner-key-file / --fallback-miner-delay-rounds)
+    // HF22 fallback signer (--fallback-signer-key-file / --fallback-signer-delay-rounds; the
+    // old --fallback-miner-* names are still accepted as deprecated aliases)
     bool load_fallback_miner_key(const fs::path& path);
     bool fallback_miner_may_produce(const block& b);
 
