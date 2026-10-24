@@ -35,10 +35,24 @@ Database::StatementWrapper Database::prepared_st(const std::string& query) {
     return StatementWrapper{sts->try_emplace(query, db, query).first->second};
 }
 
-Database::Database(const std::filesystem::path& db_path, const std::string_view db_password) :
+Database::Database(
+        const std::filesystem::path& db_path, std::string_view db_password, open_mode mode) :
         db{db_path,
-           SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX,
+           (mode == open_mode::read_only ? SQLite::OPEN_READWRITE
+                                         : (SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE)) |
+                   SQLite::OPEN_FULLMUTEX,
            5000 /*ms*/} {
+    if (mode == open_mode::read_only) {
+        // Reader connection: never writes (query_only guards it) and must NOT set journal_mode (the
+        // writer owns WAL).  Opening READWRITE (not READONLY) gives reliable WAL read access without
+        // the read-only-WAL shared-memory pitfalls.
+        db.tryExec("PRAGMA query_only = ON");
+        db.tryExec("PRAGMA foreign_keys = ON");
+        if (not db_password.empty())
+            db.key(std::string{db_password});
+        return;
+    }
+
     // Don't fail on these because we can still work even if they fail
     if (int rc = db.tryExec("PRAGMA journal_mode = WAL"); rc != SQLITE_OK)
         log::error(sqlitedb_logcat, "Failed to set journal mode to WAL: {}", sqlite3_errstr(rc));

@@ -588,28 +588,28 @@ void BlockchainSQLiteDB::open(
         if (filename.has_parent_path())
             fs::create_directories(filename.parent_path());
 
-        m_db = std::make_unique<db::Database>(filename, ""sv);
+        m_wconn = std::make_unique<db::Database>(filename, ""sv);
 
-        int version = m_db->db.execAndGet("PRAGMA user_version").getInt();
+        int version = m_wconn->db.execAndGet("PRAGMA user_version").getInt();
         if (version > SCHEMA_VERSION)
             throw DB_OPEN_FAILURE(
                     "{} has schema version {}, but this build only supports up to {}; it was "
                     "probably created by a newer version"_format(filename, version, SCHEMA_VERSION));
         if (version == 0) {
-            SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
-            m_db->db.exec(SCHEMA);
-            m_db->db.exec(SCHEMA_V2);
-            m_db->db.exec(SCHEMA_V3);
-            m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
+            SQLite::Transaction tx{m_wconn->db, SQLite::TransactionBehavior::IMMEDIATE};
+            m_wconn->db.exec(SCHEMA);
+            m_wconn->db.exec(SCHEMA_V2);
+            m_wconn->db.exec(SCHEMA_V3);
+            m_wconn->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
             tx.commit();
             oxen::log::info(logcat, "Created SQLite blockchain database {}", filename);
         } else if (version < SCHEMA_VERSION) {
-            SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
+            SQLite::Transaction tx{m_wconn->db, SQLite::TransactionBehavior::IMMEDIATE};
             if (version < 2)  // M2b-1: add checkpoint + service-node tables
-                m_db->db.exec(SCHEMA_V2);
+                m_wconn->db.exec(SCHEMA_V2);
             if (version < 3)  // M4b: add the light-node trimmed-tx table
-                m_db->db.exec(SCHEMA_V3);
-            m_db->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
+                m_wconn->db.exec(SCHEMA_V3);
+            m_wconn->db.exec("PRAGMA user_version = {}"_format(SCHEMA_VERSION));
             tx.commit();
             oxen::log::info(
                     logcat,
@@ -620,13 +620,13 @@ void BlockchainSQLiteDB::open(
         }
 
         // Load the stored history settings (0/0 = a full node that keeps everything).
-        m_history = get_count_property(*m_db, "history");
-        m_history_start = get_count_property(*m_db, "history_start");
+        m_history = get_count_property(*m_wconn, "history");
+        m_history_start = get_count_property(*m_wconn, "history_start");
     } catch (const DB_OPEN_FAILURE&) {
-        m_db.reset();
+        m_wconn.reset();
         throw;
     } catch (const std::exception& e) {
-        m_db.reset();
+        m_wconn.reset();
         throw DB_OPEN_FAILURE(
                 "Failed to open blockchain database {}: {}"_format(filename, e.what()));
     }
@@ -650,7 +650,11 @@ void BlockchainSQLiteDB::close() {
     } catch (const std::exception& e) {
         oxen::log::error(logcat, "Failed to sync the blockchain database on close: {}", e.what());
     }
-    m_db.reset();
+    {
+        std::unique_lock lk{m_readers_mutex};
+        m_readers.clear();
+    }
+    m_wconn.reset();
     m_open = false;
 }
 
@@ -658,7 +662,7 @@ void BlockchainSQLiteDB::sync() {
     check_open();
     if (m_read_only)
         return;
-    m_db->db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+    m_wconn->db.exec("PRAGMA wal_checkpoint(PASSIVE)");
 }
 
 // Deliberately nothing: synchronous=NORMAL (set at open) is already safe against corruption, and a
@@ -669,12 +673,12 @@ void BlockchainSQLiteDB::reset() {
     check_open();
     if (m_writer.load() != std::thread::id{})
         throw DB_ERROR("Cannot reset the database while a write transaction is open");
-    SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
+    SQLite::Transaction tx{m_wconn->db, SQLite::TransactionBehavior::IMMEDIATE};
     for (auto table : ALL_TABLES)
-        m_db->db.exec("DELETE FROM {}"_format(table));
+        m_wconn->db.exec("DELETE FROM {}"_format(table));
     // The `history` setting (how much to keep) stays, but with no blocks left there is no dropped
     // history to remember.
-    m_db->db.exec("DELETE FROM properties WHERE key IN ('max_block_size', 'history_start')");
+    m_wconn->db.exec("DELETE FROM properties WHERE key IN ('max_block_size', 'history_start')");
     tx.commit();
     m_history_start = 0;
 }
@@ -736,11 +740,11 @@ db::Database& BlockchainSQLiteDB::write_conn() {
     check_open();
     if (m_writer.load() != std::this_thread::get_id())
         throw DB_ERROR("Attempted a blockchain database write without an open write transaction");
-    return *m_db;
+    return *m_wconn;
 }
 
 void BlockchainSQLiteDB::begin_write(bool batch) {
-    m_write.emplace(m_db->db, SQLite::TransactionBehavior::IMMEDIATE);
+    m_write.emplace(m_wconn->db, SQLite::TransactionBehavior::IMMEDIATE);
     m_batch_active = batch;
     m_writer = std::this_thread::get_id();
 }
@@ -830,16 +834,58 @@ void BlockchainSQLiteDB::block_wtxn_abort() {
         end_write(false);
 }
 
-// With a single shared connection there is no separate read-transaction snapshot to open: reads run
-// in autocommit (serialised by OPEN_FULLMUTEX), and the writer thread's reads run inside its own
-// write transaction (so they see its uncommitted writes).  See docs/sqlite-port-M2-notes.md for the
-// concurrency caveat and the connection-pool work this leaves for a later milestone.
+// Reads run on a per-thread read-only connection, isolated from the writer's connection, so an RPC or
+// validation read never collides with the block-ingest write transaction (which previously threw
+// SQLITE_LOCKED and shut the daemon down).  The writer thread's own reads use m_wconn so they see its
+// uncommitted writes.  In WAL, one writer connection plus many reader connections coexist with
+// snapshot isolation.
+db::Database& BlockchainSQLiteDB::read_conn() const {
+    check_open();
+    if (m_writer.load() == std::this_thread::get_id())
+        return *m_wconn;
+    auto tid = std::this_thread::get_id();
+    {
+        std::shared_lock lk{m_readers_mutex};
+        if (auto it = m_readers.find(tid); it != m_readers.end())
+            return *it->second;
+    }
+    std::unique_lock lk{m_readers_mutex};
+    auto& c = m_readers[tid];
+    if (!c)
+        c = std::make_unique<db::Database>(m_filename, ""sv, db::Database::open_mode::read_only);
+    return *c;
+}
+
+namespace {
+    // Per-thread read-transaction depth so nested block_rtxn_start() calls reuse the outer snapshot.
+    thread_local int tls_rtxn_depth = 0;
+}  // namespace
+
+// Opens a WAL read snapshot on the calling thread's read-only connection so a multi-statement read
+// sees one consistent view.  Returns true only when it actually started one (the caller then pairs it
+// with block_rtxn_stop); the writer thread and nested calls return false.
 bool BlockchainSQLiteDB::block_rtxn_start() const {
     check_open();
-    return false;
+    if (m_writer.load() == std::this_thread::get_id())
+        return false;
+    if (tls_rtxn_depth > 0)
+        return false;
+    read_conn().db.exec("BEGIN DEFERRED");
+    tls_rtxn_depth = 1;
+    return true;
 }
-void BlockchainSQLiteDB::block_rtxn_stop() const {}
-void BlockchainSQLiteDB::block_rtxn_abort() const {}
+void BlockchainSQLiteDB::block_rtxn_stop() const {
+    if (m_writer.load() == std::this_thread::get_id() || tls_rtxn_depth == 0)
+        return;
+    read_conn().db.exec("COMMIT");  // read-only snapshot; this just releases it
+    tls_rtxn_depth = 0;
+}
+void BlockchainSQLiteDB::block_rtxn_abort() const {
+    if (m_writer.load() == std::this_thread::get_id() || tls_rtxn_depth == 0)
+        return;
+    read_conn().db.exec("ROLLBACK");
+    tls_rtxn_depth = 0;
+}
 
 // =========================================================================================
 // Blocks (write)
