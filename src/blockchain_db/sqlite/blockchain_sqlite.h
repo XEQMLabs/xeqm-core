@@ -66,6 +66,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <unordered_map>
 #include <sqlitedb/database.hpp>
 #include <string>
 #include <string_view>
@@ -230,11 +232,11 @@ class BlockchainSQLiteDB : public BlockchainDB {
     void in_write_txn(F&& f) {
         check_open();
         if (m_writer.load() == std::this_thread::get_id()) {
-            f(*m_db);
+            f(*m_wconn);
             return;
         }
-        SQLite::Transaction tx{m_db->db, SQLite::TransactionBehavior::IMMEDIATE};
-        f(*m_db);
+        SQLite::Transaction tx{m_wconn->db, SQLite::TransactionBehavior::IMMEDIATE};
+        f(*m_wconn);
         tx.commit();
     }
 
@@ -259,7 +261,30 @@ class BlockchainSQLiteDB : public BlockchainDB {
     std::vector<uint64_t> get_block_weight_column(
             std::string_view column, uint64_t start_height, size_t count) const;
 
-    std::unique_ptr<db::Database> m_db;
+    // The single WRITER connection (read-write, WAL).  Only the write path and the writer thread's
+    // own reads touch it directly.
+    std::unique_ptr<db::Database> m_wconn;
+
+    // Reader isolation: each non-writer thread gets its own read-only connection to the same WAL file,
+    // so RPC/validation reads never share the writer's connection.  Sharing one connection caused
+    // SQLITE_LOCKED (fatal) when a read collided with the block-ingest write transaction.  Lazily
+    // created per thread, cleared on close().
+    mutable std::shared_mutex m_readers_mutex;
+    mutable std::unordered_map<std::thread::id, std::unique_ptr<db::Database>> m_readers;
+
+    // Connection reads should use: the writer thread (while it holds its write txn) uses m_wconn so it
+    // sees its own uncommitted writes; every other thread uses its own read-only connection.
+    db::Database& read_conn() const;
+
+    // Thread-dispatching stand-in so the existing `m_db->...` read call sites route through
+    // read_conn(), while the write path uses m_wconn directly.
+    struct ConnRouter {
+        const BlockchainSQLiteDB* self;
+        db::Database* operator->() const { return &self->read_conn(); }
+        db::Database& operator*() const { return self->read_conn(); }
+    };
+    ConnRouter m_db{this};
+
     fs::path m_filename;
     cryptonote::network_type m_nettype = cryptonote::network_type::UNDEFINED;
     int m_db_flags = 0;
