@@ -49,6 +49,11 @@ struct peerlist_entry {
     peerid_type id;
     int64_t last_seen;
     uint32_t pruning_seed;
+    // The peer's advertised served block history, as in cryptonote::CORE_SYNC_DATA: 0 if it keeps
+    // every block, otherwise how many of the most recent blocks it keeps.  A length, unlike an
+    // earliest height, stays true of the peer as its chain grows, so a stale entry still says what
+    // the peer can serve.  Old peers omit it, which reads as 0 (full).
+    uint64_t history = 0;
 
     KV_MAP_SERIALIZABLE
 };

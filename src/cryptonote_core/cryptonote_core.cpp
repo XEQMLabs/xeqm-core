@@ -64,6 +64,7 @@ extern "C" {
 #include "cryptonote_basic/hardfork.h"
 #include "cryptonote_config.h"
 #include "cryptonote_core.h"
+#include "blockchain_db/history.h"
 #include "epee/memwipe.h"
 #include "epee/net/local_ip.h"
 #include "epee/string_tools.h"
@@ -253,6 +254,14 @@ static const command_line::arg_descriptor<uint64_t> arg_store_quorum_history = {
         0};
 static const command_line::arg_flag arg_disable_ip_check = {
         "disable-ip-check", "Disable the periodic Service Node IP check"};
+static const command_line::arg_descriptor<std::string> arg_history = {
+        "history",
+        "How much block history (block bodies and transactions) to keep.  'full' (the default) "
+        "keeps the entire chain; otherwise give a number of blocks, or a duration such as 2w, 3d "
+        "or 12h, which is converted to blocks at the network's target block time.  The value must "
+        "be at least 720 blocks; the node always keeps at least the minimum that block processing "
+        "requires regardless of this setting.",
+        "full"};
 
 // Loads stubs that fail if invoked.  The stubs are replaced in the
 // cryptonote_protocol/quorumnet.cpp glue code.
@@ -393,6 +402,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_keep_alt_blocks);
 
     command_line::add_arg(desc, arg_store_quorum_history);
+    command_line::add_arg(desc, arg_history);
     command_line::add_arg(desc, arg_omq_quorumnet_public);
     command_line::add_arg(desc, arg_disable_ip_check);
 
@@ -406,6 +416,13 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
         m_nettype = command_line::get_network(vm);
 
     m_check_uptime_proof_interval.interval(get_net_config().UPTIME_PROOF_CHECK_INTERVAL);
+
+    try {
+        m_history = parse_history(command_line::get_arg(vm, arg_history), m_nettype);
+    } catch (const std::exception& e) {
+        log::error(globallogcat, "Invalid --history value: {}", e.what());
+        return false;
+    }
 
     m_config_folder = tools::utf8_path(command_line::get_arg(vm, arg_data_dir));
 
@@ -918,6 +935,29 @@ bool core::init(
             get_checkpoints,
             abort);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize blockchain storage");
+
+    // Apply the configured block-history retention to the backend (M4b).  history == 0 (a full node,
+    // the default) is a complete no-op on every backend; a limited history needs the SQLite backend
+    // (the base BlockchainDB::set_history throws otherwise), and from here on the backend drops block
+    // bodies and transactions that fall outside the window as the chain grows (trim-on-add).
+    try {
+        blockchain.db().set_history(m_history);
+    } catch (const std::exception& e) {
+        log::error(globallogcat, "Failed to apply --history setting: {}", e.what());
+        return false;
+    }
+    if (uint64_t cur_height = blockchain.get_current_blockchain_height(); m_history == 0)
+        log::info(globallogcat, "History: keeping full chain");
+    else
+        log::info(
+                globallogcat,
+                "History: keeping {} blocks (requested {}, minimum {} at height {}); oldest kept "
+                "body at {}",
+                history_window(m_nettype, m_history, cur_height),
+                m_history,
+                history_minimum(m_nettype, cur_height),
+                cur_height,
+                blockchain.db().history_start());
 
     r = mempool.init(max_txpool_weight);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize memory pool");

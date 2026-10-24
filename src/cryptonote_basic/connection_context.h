@@ -66,6 +66,7 @@ struct cryptonote_connection_context : public epee::net_utils::connection_contex
             0};  // in debug purpose: problem with double callback rise
     crypto::hash m_last_known_hash{};
     uint32_t m_pruning_seed{0};
+    uint64_t m_remote_history{0};  // peer's advertised served block history (0 = whole chain)
     bool m_anchor{false};
     // size_t m_score{0};  TODO: add score calculations
 };

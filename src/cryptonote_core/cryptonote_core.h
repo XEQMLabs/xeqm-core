@@ -603,6 +603,13 @@ class core final {
      */
     bool offline() const { return m_offline; }
 
+    /**
+     * @brief how many recent blocks of bodies/transactions this node is configured to keep
+     *
+     * @return the parsed --history value in blocks, or 0 for a full node (keep everything)
+     */
+    uint64_t history() const { return m_history; }
+
     // Initiates an asynchronous rewards signing request to the network's nodes and returns
     // immediately.  `callback` gets invoked once the requests are finished.
     void bls_rewards_request(
@@ -918,6 +925,7 @@ class core final {
     uint64_t m_target_blockchain_height;  //!< blockchain height target
 
     network_type m_nettype;  //!< which network are we on?
+    uint64_t m_history = 0;  //!< --history: how many recent blocks of bodies/txs to keep (0 = full)
     crypto::secret_key m_fallback_miner_key{};   //!< HF22: signs fallback miner blocks when set
     uint32_t m_fallback_miner_delay_rounds = 0;  //!< HF22: rounds to hold back behind the primary
     uint64_t m_last_fallback_height = 0;         //!< Pulse-recovery: last height a signature fallback was emitted
