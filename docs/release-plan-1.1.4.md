@@ -21,7 +21,7 @@ Built on 1.1.3, which already includes the review fixes from #58. Three headline
 The SQLite backend ships today as experimental and opt-in. To call it production-ready in this release, close the following:
 
 - Drop the "experimental" label the daemon logs on backend selection.
-- Decide the deferred isolated-reader connection pool. Reads are currently serialized on a single connection, which is fine for a public RPC node but should be settled before a busy node runs SQLite.
+- Isolated-reader connection pool. **Done (#64).** This was a hard blocker, not a tuning nicety. On the single shared connection, a read colliding with the block-ingest write transaction threw `SQLITE_LOCKED`, which the daemon treats as fatal and shuts down. It was reproduced on a mainnet public RPC node under concurrent read load, which is why the SQLite public RPC nodes were rolled back to LMDB. The fix gives each non-writer thread its own read-only WAL connection and a real block read transaction, so reads take a snapshot instead of sharing the writer's connection (#64, landed on the #59 branch as commit `5aac6d1ca`). It is runtime-validated on a disposable node: 24 concurrent readers for 161s during continuous block ingest with zero wedges and no `SQLITE_LOCKED`, read p95 under 6ms up to 16 readers, and a from-scratch full-chain resync to tip with zero block mismatches against the LMDB reference. Re-enabling SQLite on the public RPC nodes now waits only on a fleet build cut from the #59 branch.
 - Complete a service-node soak, not just public RPC nodes. A single canary service node first, then host by host.
 - Live-verify the #58 fee-refuse path, which is source-confirmed today.
 - Merge #59 with a merge commit, to preserve the milestone history.
