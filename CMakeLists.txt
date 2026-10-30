@@ -492,6 +492,15 @@ if (USE_JEMALLOC AND NOT BUILD_STATIC_DEPS)
   if(JEMALLOC_FOUND)
     target_link_libraries(jemalloc INTERFACE PkgConfig::JEMALLOC)
   endif()
+elseif (USE_JEMALLOC AND BUILD_STATIC_DEPS)
+  # Without this the portable static build falls back to the system glibc malloc, which
+  # fragments and retains memory under the SQLite block-verify allocation churn and climbs
+  # anon RSS without plateau on aarch64 (~300 MB+ over a 10k-block re-verify, extrapolating to
+  # ~1.1 GB over a full chain); jemalloc returns freed memory to the OS and stays bounded
+  # (~100 MB). jemalloc is built from source as a static dependency (cmake/StaticBuild.cmake);
+  # link it whole-archive so the interposed malloc/free and operator new/delete are all pulled
+  # in, keeping the binary portable (no libjemalloc.so runtime dependency).
+  target_link_libraries(jemalloc INTERFACE $<LINK_LIBRARY:WHOLE_ARCHIVE,jemalloc_static>)
 endif()
 
 if(NOT BUILD_STATIC_DEPS)
