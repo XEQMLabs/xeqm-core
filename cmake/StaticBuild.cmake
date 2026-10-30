@@ -366,16 +366,21 @@ add_static_target(zlib zlib_external libz.a)
 # the portable static binary keeps jemalloc's allocator instead of falling back to glibc malloc,
 # which fragments and climbs anon RSS under the SQLite block-verify path on aarch64. -fPIC so the
 # static archive links into the position-independent executable; --disable-shared skips the .so.
-build_external(jemalloc
-  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
-    "CC=${deps_cc}" "CXX=${deps_cxx}"
-    "CFLAGS=${deps_CFLAGS} -fPIC" "CXXFLAGS=${deps_CXXFLAGS} -fPIC"
-    ${cross_extra} env ./configure ${cross_host} --prefix=${DEPS_DESTDIR} --disable-shared
-  BUILD_BYPRODUCTS
-    ${DEPS_DESTDIR}/lib/libjemalloc.a
-    ${DEPS_DESTDIR}/include/jemalloc/jemalloc.h
-)
-add_static_target(jemalloc_static jemalloc_external libjemalloc.a)
+# Excluded on Windows: jemalloc 5.3.0's C++ integration (jemalloc_cpp.cpp) does not build under
+# MinGW (std::__throw_bad_alloc is absent there), and the static build never linked jemalloc on
+# Windows to begin with, so that target keeps its default allocator.
+if(NOT (WIN32 OR MINGW OR (CMAKE_CROSSCOMPILING AND ARCH_TRIPLET MATCHES mingw)))
+  build_external(jemalloc
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
+      "CC=${deps_cc}" "CXX=${deps_cxx}"
+      "CFLAGS=${deps_CFLAGS} -fPIC" "CXXFLAGS=${deps_CXXFLAGS} -fPIC"
+      ${cross_extra} env ./configure ${cross_host} --prefix=${DEPS_DESTDIR} --disable-shared
+    BUILD_BYPRODUCTS
+      ${DEPS_DESTDIR}/lib/libjemalloc.a
+      ${DEPS_DESTDIR}/include/jemalloc/jemalloc.h
+  )
+  add_static_target(jemalloc_static jemalloc_external libjemalloc.a)
+endif()
 
 
 

@@ -492,7 +492,7 @@ if (USE_JEMALLOC AND NOT BUILD_STATIC_DEPS)
   if(JEMALLOC_FOUND)
     target_link_libraries(jemalloc INTERFACE PkgConfig::JEMALLOC)
   endif()
-elseif (USE_JEMALLOC AND BUILD_STATIC_DEPS)
+elseif (USE_JEMALLOC AND BUILD_STATIC_DEPS AND TARGET jemalloc_static)
   # Without this the portable static build falls back to the system glibc malloc, which
   # fragments and retains memory under the SQLite block-verify allocation churn and climbs
   # anon RSS without plateau on aarch64 (~300 MB+ over a 10k-block re-verify, extrapolating to
