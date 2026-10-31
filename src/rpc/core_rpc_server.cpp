@@ -1712,6 +1712,9 @@ static json json_connection_info(const connection_info& ci) {
     // supported on Oxen:
     if (ci.pruning_seed)
         info["pruning_seed"] = ci.pruning_seed;
+    // Peer's advertised served block history (0 = whole chain). Always included so a full
+    // node reports 0 and a light node reports its window (consumed by light-node selection).
+    info["remote_history"] = ci.remote_history;
     return info;
 }
 

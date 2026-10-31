@@ -985,13 +985,22 @@ std::optional<timings> get_round_timings(
     if (!hf16 || blockchain.get_current_blockchain_height() < *hf16)
         return std::nullopt;
 
-    cryptonote::block genesis_block;
-    if (!blockchain.get_block_by_height(*hf16 - 1, genesis_block))
+    // The Pulse genesis block is the block just before HF16.  Only its timestamp and height are
+    // needed here, so read the timestamp index column rather than the whole block: that column is
+    // kept for every height, so a light node that has dropped this (fixed, far-back) block's body
+    // can still compute round timings.  (This matches the light-storage design in
+    // blockchain_db/history.h, which assumes pulse timing reads only `blocks` index columns.)
+    uint64_t const genesis_height = *hf16 - 1;
+    uint64_t genesis_timestamp;
+    try {
+        genesis_timestamp = blockchain.db().get_block_timestamp(genesis_height);
+    } catch (const std::exception&) {
         return std::nullopt;
+    }
 
     auto times = std::make_optional<timings>();
-    uint64_t const delta_height = block_height - genesis_block.get_height();
-    times->genesis_timestamp = clock::from_time_t(genesis_block.timestamp);
+    uint64_t const delta_height = block_height - genesis_height;
+    times->genesis_timestamp = clock::from_time_t(genesis_timestamp);
 
     times->prev_timestamp = clock::from_time_t(prev_timestamp);
     times->ideal_timestamp = times->genesis_timestamp + conf.TARGET_BLOCK_TIME * delta_height;

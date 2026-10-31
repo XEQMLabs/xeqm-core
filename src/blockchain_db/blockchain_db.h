@@ -1150,6 +1150,63 @@ class BlockchainDB {
      */
     virtual uint64_t height() const = 0;
 
+    // --- Light-node block-history retention (see blockchain_db/history.h; sqlite backend only) ---
+
+    /**
+     * @brief how much history the database keeps, as stored in it
+     *
+     * @return 0 if it keeps all of it (a full node), otherwise the number of recent blocks whose
+     * bodies and transactions it keeps (at least that many: see history_window).
+     */
+    virtual uint64_t history() const { return 0; }
+
+    /**
+     * @brief the height of the oldest block whose body (and transactions) the database still has:
+     * everything below it has been dropped as outside the history it keeps.
+     */
+    virtual uint64_t history_start() const { return 0; }
+
+    /**
+     * @brief the height the kept history starts at, by its setting
+     *
+     * Blocks below this are no longer kept, even if some are still physically present (below
+     * history_start()) because a backlog is still being dropped: nothing may count on them.
+     */
+    virtual uint64_t history_window_start() const { return 0; }
+
+    /**
+     * @brief how many of the most recent blocks the database can serve peers (for advertisement)
+     *
+     * The blocks from history_window_start() up.  @return 0 if it keeps every block.
+     */
+    uint64_t served_history() const;
+
+    /**
+     * @brief starts dropping, in the background, any history that is no longer kept beyond what the
+     * trim-on-add drops as blocks arrive (as when the history is first limited on an existing db)
+     *
+     * Base/default: does nothing.  A from-scratch limited node never has a backlog, so trim-on-add
+     * alone keeps it correct.
+     */
+    virtual void start_history_catch_up() {}
+
+    /**
+     * @brief change how much history the database keeps
+     *
+     * @param blocks 0 to keep everything, otherwise at least HISTORY_MIN_BLOCKS
+     *
+     * @throw DB_ERROR if the backend cannot keep a limited history (only the sqlite backend can), or
+     * if asked to keep everything again after keeping a limited history.
+     */
+    virtual void set_history(uint64_t blocks);
+
+    /**
+     * @brief drop the block bodies, transactions and other per-height data that have left the kept
+     * history (see history_window), if any have.  Cheap when there is nothing to drop; a no-op for a
+     * database that keeps everything.
+     */
+    virtual void trim_history() {}
+
     /**
      * <!--
      * TODO: Rewrite (if necessary) such that all calls to remove_* are

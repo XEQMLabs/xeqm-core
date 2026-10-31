@@ -41,6 +41,10 @@
 #include "epee/string_tools.h"
 #include "lmdb/db_lmdb.h"
 #include "ringct/rctOps.h"
+#include "sqlite/blockchain_sqlite.h"
+
+#include <cstdlib>
+#include <string_view>
 
 namespace cryptonote {
 
@@ -55,12 +59,41 @@ const command_line::arg_flag arg_db_salvage = {
         "db-salvage", "Try to salvage a blockchain database if it seems corrupted"};
 
 std::unique_ptr<BlockchainDB> new_db() {
+    // LMDB is the default backend and the only one used by mainnet.  The combined SQLite
+    // backend is selected only when explicitly requested via the XEQM_DB_BACKEND environment
+    // variable, so default behaviour is unchanged.  A proper `--db-backend` daemon flag can
+    // replace this env var later.
+    if (const char* backend = std::getenv("XEQM_DB_BACKEND");
+        backend && std::string_view{backend} == "sqlite") {
+        log::warning(
+                logcat,
+                "XEQM_DB_BACKEND=sqlite: selecting the experimental SQLite blockchain backend");
+        return std::make_unique<BlockchainSQLiteDB>();
+    }
     return std::make_unique<BlockchainLMDB>();
 }
 
 void BlockchainDB::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_db_sync_mode);
     command_line::add_arg(desc, arg_db_salvage);
+}
+
+void BlockchainDB::set_history(uint64_t blocks) {
+    // Only the sqlite backend overrides this.  Keeping everything (blocks == 0) is always a no-op, so
+    // a full node is unaffected regardless of backend; any limited history is refused here.
+    if (blocks != 0)
+        throw DB_ERROR{
+                "Keeping a limited block history (--history) needs the SQLite blockchain backend "
+                "(XEQM_DB_BACKEND=sqlite)"};
+}
+
+uint64_t BlockchainDB::served_history() const {
+    if (!history())
+        return 0;
+    const uint64_t h = height();
+    const uint64_t start = history_window_start();
+    // 0 would claim the whole chain, so even a node with nothing to serve claims a single block.
+    return start < h ? h - start : 1;
 }
 
 void BlockchainDB::pop_block() {

@@ -347,7 +347,12 @@ class Database {
         return exec_and_maybe_get<T...>(prepared_st(query), bind...);
     }
 
-    explicit Database(const std::filesystem::path& db_path, const std::string_view db_password);
+    enum class open_mode { read_write, read_only };
+
+    explicit Database(
+            const std::filesystem::path& db_path,
+            std::string_view db_password,
+            open_mode mode = open_mode::read_write);
 
     ~Database() = default;
 };
