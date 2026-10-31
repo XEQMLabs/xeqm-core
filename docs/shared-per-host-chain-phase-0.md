@@ -23,8 +23,9 @@ track the tip as a separate writer process advances it, while doing so over dist
 without an exclusive-ownership conflict? Everything else (production writer service, mempool
 redesign, fleet rollout) is deliberately out of scope until that is proven.
 
-Phase 0 is sequenced after the 1.1.4 SQLite backend proves out in single-node soak, per #62.
-This document can be written and reviewed now; the spike work waits for that gate.
+Shared per-host chain storage is part of the 1.1.4 release, so Phase 0 is in-scope 1.1.4 work
+and the go/no-go gate for the feature, not post-release R&D. It runs on LMDB first; the SQLite
+shared store remains a follow-on gated on the LMDB model proving out.
 
 ## Code map (where the real work is)
 
@@ -110,9 +111,9 @@ already deliver most of the memory and disk win even before SQLite.
 - **Reader vs writer liveness.** A long-lived reader snapshot can hold back LMDB reclamation or
   SQLite WAL checkpointing; define snapshot lifetime limits and confirm a slow reader cannot
   stall the writer.
-- **Writer process shape.** #62 recommends a keyless chain service as a supervised singleton.
-  Phase 0's writer can be a normal daemon in writer mode; decide whether the production writer
-  is a trimmed keyless build or the full daemon with SN duties disabled.
+- **Writer process shape.** The production writer is a keyless chain service. Phase 0's writer
+  can be a normal daemon in writer mode; decide whether the production writer is a trimmed
+  keyless build or the full daemon with SN duties disabled.
 - **Correlated failure and fallback.** One DB and one writer is a shared failure domain. Keep at
   least one LMDB node current and the LMDB bootstrap published throughout, so a shared-chain
   stall has a fallback that needs no code patch.
@@ -120,8 +121,9 @@ already deliver most of the memory and disk win even before SQLite.
 ## Explicitly out of scope for Phase 0
 
 - The production keyless writer service and its systemd supervision.
-- Writer failover of any kind (Phase 0 assumes a single supervised writer; peer election is a
-  later phase if ever).
+- Writer failover (Phase 0 assumes a single writer). Reader auto-promotion is the committed
+  failover model and a later phase, not Phase 0: leadership anchored to the write lock
+  (acquire-to-promote), a renewing lease for the stalled-writer case, and writer self-fencing.
 - The SQLite true cross-process read-only open (tracked as its own task; Phase 0 runs on LMDB).
 - Any fleet rollout. First production target, when phases complete, is missoula.
 - A cross-host shared chain or Postgres; that is a separate, later track.
