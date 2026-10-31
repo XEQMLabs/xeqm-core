@@ -128,6 +128,63 @@ already deliver most of the memory and disk win even before SQLite.
 - Any fleet rollout. First production target, when phases complete, is missoula.
 - A cross-host shared chain or Postgres; that is a separate, later track.
 
+## Phase 0 results (2026-10-31)
+
+Phase 0 ran on the fernando signer-bootstrap testnet (LMDB) and the outcome is go. The results below
+also sharpen what Phase 1 actually has to build.
+
+A `--db-readonly` daemon flag was added that ORs `DBF_RDONLY` into the `db_flags` builder before
+`db->open(...)`. A second daemon started with that flag, the same `--data-dir` as a live writer,
+distinct ports, no service-node keys, and `--out-peers=0 --in-peers=0` opened the writer's LMDB with no
+ownership conflict and tracked the tip exactly: reader height equalled writer height with an identical
+`top_block_hash` block for block as the writer advanced. Because the reader had zero network peers, the
+shared LMDB is the only possible source of its advancing tip. It served real reads, the writer was
+unaffected, and the host's unrelated production daemon was never touched.
+
+The backend read-only open was not the hard part. `DBF_RDONLY` maps to `MDB_RDONLY` on the first try
+and `is_read_only()` reports it correctly. The real work is that the daemon init path writes derived
+state in place, assuming the process owns the chain. Each such write throws LMDB `EACCES` ("Failed to
+create a transaction ... Permission denied", a write transaction on a read-only environment) until it is
+guarded. The reader came up after the flag plus a small set of `!is_read_only()` guards on the init-path
+writes (`Blockchain::init` fixup, the `service_node_list::reset` writes, and the checkpoint-file load).
+The codebase already guards several init writes (`drop_alt_blocks`, the cumulative-weight-limit update,
+`checkpoints::init`, the init pop-loop, the SQLite reconcile), so the reader role is a modest, bounded
+set of guards rather than a rewrite.
+
+The service-node-state load-only check then ran against a chain carrying real persisted SN state (three
+funded nodes registered by distinct operators). It separated what reads for free from what does not:
+
+- The read-only SN-state load works. A read-only reader's `service_node_list::load()` reads the writer's
+  persisted SN-list blob from the shared LMDB and reconstructs the full, correct set. The reader's
+  `get_service_nodes` returned all three nodes with the exact pubkeys and registration heights the writer
+  had, with no write and no ownership conflict. The reward-batching SQLite loaded read-only as well.
+- Writer persistence cadence is a gap. The SN-list blob is persisted only periodically and on a clean
+  shutdown. A writer that runs continuously, and so never shuts down cleanly, can leave the shared
+  database with an absent or stale SN-list blob, in which case the reader's `load()` fails and falls back
+  to an empty state. This was reproduced directly: with the writer running continuously from genesis the
+  reader loaded zero nodes, and only after a clean writer restart forced a `store()` did a fresh reader
+  load all three. Phase 1 must have the writer checkpoint derived SN state to the shared store on a
+  frequent cadence so readers always have a current blob.
+- Reader staleness is the central gap. The reader's SN projection does not advance with the tip, because
+  the block-add hooks that advance `service_node_list` never fire on a passive reader: it maps committed
+  blocks, it does not ingest them through the handler. With the block tip at the same height on both
+  daemons, the writer's nodes showed a current `last_reward_block_height` while the reader's stayed frozen
+  roughly fifty blocks back and did not move as the tip climbed. So a reader knows every block but its
+  consensus projection, the service-node set and therefore quorum and Pulse membership, goes stale.
+  Phase 1's central task is a reader-side refresh-to-tip path: periodically re-run the load of the latest
+  persisted blob with a cheap in-memory replay to the tip, or have the reader re-read a derived state the
+  writer persists. Opening the database read-only is the small part; keeping the reader's derived
+  consensus projections current is the real engineering, and it is tractable because the replay is
+  read-only and cheap.
+- A periodic pruning task writes unguarded. On the reader it throws `EACCES` once per second from a
+  background write transaction. It joins the `!is_read_only()` guard set.
+
+Not yet exercised, and carried into Phase 1: `MDB_MAP_RESIZED` across a writer mapsize growth, and the
+read-only mempool and txpool path (writer-owns).
+
+The Phase 0 code is a throwaway spike with debug instrumentation; the guards are reimplemented cleanly
+for Phase 1.
+
 ## Go / no-go to Phase 1
 
 Proceed to a production design only if Phase 0 shows: a read-only reader daemon opens the shared
