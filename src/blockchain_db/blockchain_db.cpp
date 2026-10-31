@@ -57,6 +57,10 @@ const command_line::arg_descriptor<std::string> arg_db_sync_mode = {
         "fast:async:250000000bytes"};
 const command_line::arg_flag arg_db_salvage = {
         "db-salvage", "Try to salvage a blockchain database if it seems corrupted"};
+const command_line::arg_flag arg_db_readonly = {
+        "db-readonly",
+        "Open the blockchain database read-only. One writer daemon maintains the shared per-host "
+        "chain; readers opened with this flag track the tip without writing."};
 
 std::unique_ptr<BlockchainDB> new_db() {
     // LMDB is the default backend and the only one used by mainnet.  The combined SQLite
@@ -76,6 +80,7 @@ std::unique_ptr<BlockchainDB> new_db() {
 void BlockchainDB::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_db_sync_mode);
     command_line::add_arg(desc, arg_db_salvage);
+    command_line::add_arg(desc, arg_db_readonly);
 }
 
 void BlockchainDB::set_history(uint64_t blocks) {

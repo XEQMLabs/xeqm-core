@@ -916,6 +916,10 @@ class core final {
     /// randomized in 6-7d between calls so that different oxends don't all trigger it at the same
     /// time.
     tools::periodic_task m_sn_archive_state_interval{"sn state storage", 6 * 24h, false, 24h};
+    /// interval at which a read-only shared per-host chain reader replays the writer's newly
+    /// committed blocks to keep its in-memory service node list current with the tip. Only active
+    /// when the chain DB was opened read-only (--db-readonly); a no-op otherwise.
+    tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 1s};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 

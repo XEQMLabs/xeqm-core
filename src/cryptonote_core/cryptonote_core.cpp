@@ -976,11 +976,15 @@ bool core::init(
                 "Error --block-sync-size cannot be greater than {}",
                 BLOCKS_SYNCHRONIZING_MAX_COUNT);
 
-    log::info(globallogcat, "Loading checkpoints");
-    CHECK_AND_ASSERT_MES(
-            update_checkpoints_from_json_file(),
-            false,
-            "One or more checkpoints loaded from json conflicted with existing checkpoints.");
+    // Loading json checkpoints writes them into the chain DB. A shared per-host chain reader opens
+    // the DB read-only and leaves checkpoints to the writer, which owns them in the shared chain.
+    if (!blockchain.db().is_read_only()) {
+        log::info(globallogcat, "Loading checkpoints");
+        CHECK_AND_ASSERT_MES(
+                update_checkpoints_from_json_file(),
+                false,
+                "One or more checkpoints loaded from json conflicted with existing checkpoints.");
+    }
 
     r = miner.init(vm, m_nettype);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize miner instance");
@@ -1012,6 +1016,7 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
     bool fast_sync = command_line::get_arg(vm, arg_fast_block_sync) != 0;
     uint64_t blocks_threads = command_line::get_arg(vm, arg_prep_blocks_threads);
     bool db_salvage = command_line::get_arg(vm, cryptonote::arg_db_salvage) != 0;
+    bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
 
     // make sure the data directory exists, and try to lock it
     if (std::error_code ec;
@@ -1103,6 +1108,15 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
 
         if (db_salvage)
             db_flags |= DBF_SALVAGE;
+
+        if (db_readonly) {
+            // Shared per-host chain reader: open the environment read-only (LMDB maps this to
+            // MDB_RDONLY). One writer daemon maintains the chain; readers never write it.
+            db_flags |= DBF_RDONLY;
+            log::info(
+                    globallogcat,
+                    "Opening the blockchain database READ-ONLY (shared per-host chain reader)");
+        }
 
         db->open(folder, m_nettype, db_flags);
         if (!db->m_open)
@@ -3001,10 +3015,19 @@ Use "help <command>" to see a command's documentation.
         snl.cleanup_proofs();
         return true;
     });
-    m_sn_archive_state_interval.do_call([&snl = service_node_list] {
-        snl.store();
-        return true;
-    });
+    // A shared per-host chain reader opens the DB read-only. store() persists derived SNL state and
+    // must only run on the writer; the reader keeps its state current via refresh-to-tip instead.
+    const bool db_read_only = blockchain.has_db() && blockchain.db().is_read_only();
+    if (!db_read_only)
+        m_sn_archive_state_interval.do_call([&snl = service_node_list] {
+            snl.store();
+            return true;
+        });
+    else
+        // Shared per-host chain reader: follow the writer by replaying its newly committed blocks
+        // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse
+        // reads current instead of frozen at the last persisted blob.
+        m_sn_reader_refresh_interval.do_call([this] { return blockchain.refresh_sn_list_readonly(); });
 
     std::chrono::seconds lifetime{time(nullptr) - get_start_time()};
     if (m_service_node &&
@@ -3014,8 +3037,11 @@ Use "help <command>" to see a command's documentation.
         do_uptime_proof_call();
     }
 
-    m_blockchain_pruning_interval.do_call(
-            [this] { return blockchain.update_blockchain_pruning(); });
+    // Pruning rewrites the chain DB; skip it entirely on a read-only shared-chain reader (it would
+    // otherwise throw EACCES on every interval tick). The writer owns pruning.
+    if (!db_read_only)
+        m_blockchain_pruning_interval.do_call(
+                [this] { return blockchain.update_blockchain_pruning(); });
     miner.on_idle();
     mempool.on_idle();
 
