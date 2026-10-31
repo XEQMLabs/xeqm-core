@@ -557,6 +557,11 @@ class service_node_list {
             const std::vector<cryptonote::transaction>& txs,
             const cryptonote::checkpoint_t* checkpoint,
             const std::optional<rescan_context>& rescan = std::nullopt);
+    // Shared per-host chain reader: advance the in-memory SN set and quorums by one block with no
+    // DB or reward-SQLite write (see Blockchain::refresh_sn_list_readonly). Blocks must be fed in
+    // strict height order from m_state.height + 1.
+    void process_block_readonly(
+            const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs);
     void blockchain_detached(uint64_t height);
     void init();
     void validate_miner_tx(const cryptonote::miner_tx_info& info) const;
