@@ -95,6 +95,13 @@ set(ZLIB_SOURCE zlib-${ZLIB_VERSION}.tar.xz)
 set(ZLIB_HASH SHA256=38ef96b8dfe510d42707d9c781877914792541133e1870841463bfa73f883e32
     CACHE STRING "zlib source hash")
 
+set(JEMALLOC_VERSION 5.3.0 CACHE STRING "jemalloc version")
+set(JEMALLOC_MIRROR ${LOCAL_MIRROR} https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSION}
+    CACHE STRING "jemalloc mirror(s)")
+set(JEMALLOC_SOURCE jemalloc-${JEMALLOC_VERSION}.tar.bz2)
+set(JEMALLOC_HASH SHA512=22907bb052096e2caffb6e4e23548aecc5cc9283dce476896a2b1127eee64170e3562fa2e7db9571298814a7a2c7df6e8d1fbe152bd3f3b0c1abec22a2de34b1
+    CACHE STRING "jemalloc source hash")
+
 set(CURL_VERSION 8.22.0 CACHE STRING "curl version")
 set(CURL_MIRROR ${LOCAL_MIRROR} https://curl.se/download https://curl.askapache.com
     CACHE STRING "curl mirror(s)")
@@ -352,6 +359,28 @@ build_external(zlib
     ${DEPS_DESTDIR}/include/zlib.h
 )
 add_static_target(zlib zlib_external libz.a)
+
+
+
+# jemalloc. Built from source and linked into the daemon (whole-archive, in CMakeLists.txt) so
+# the portable static binary keeps jemalloc's allocator instead of falling back to glibc malloc,
+# which fragments and climbs anon RSS under the SQLite block-verify path on aarch64. -fPIC so the
+# static archive links into the position-independent executable; --disable-shared skips the .so.
+# Excluded on Windows: jemalloc 5.3.0's C++ integration (jemalloc_cpp.cpp) does not build under
+# MinGW (std::__throw_bad_alloc is absent there), and the static build never linked jemalloc on
+# Windows to begin with, so that target keeps its default allocator.
+if(NOT (WIN32 OR MINGW OR (CMAKE_CROSSCOMPILING AND ARCH_TRIPLET MATCHES mingw)))
+  build_external(jemalloc
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
+      "CC=${deps_cc}" "CXX=${deps_cxx}"
+      "CFLAGS=${deps_CFLAGS} -fPIC" "CXXFLAGS=${deps_CXXFLAGS} -fPIC"
+      ${cross_extra} env ./configure ${cross_host} --prefix=${DEPS_DESTDIR} --disable-shared
+    BUILD_BYPRODUCTS
+      ${DEPS_DESTDIR}/lib/libjemalloc.a
+      ${DEPS_DESTDIR}/include/jemalloc/jemalloc.h
+  )
+  add_static_target(jemalloc_static jemalloc_external libjemalloc.a)
+endif()
 
 
 
