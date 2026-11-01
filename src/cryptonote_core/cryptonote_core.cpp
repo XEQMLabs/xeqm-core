@@ -3012,6 +3012,12 @@ bool core::add_new_block(
 bool core::prepare_handle_incoming_blocks(
         const std::vector<block_complete_entry>& blocks_entry, std::vector<block>& blocks) {
     m_incoming_tx_lock.lock();
+    // Shared per-host chain reader: the chain database is read-only and the writer commits blocks,
+    // which this daemon then sees through the shared database. Do not ingest blocks over p2p, since
+    // starting a write batch on the read-only database fails; drop them. The lock is still held for
+    // the paired cleanup_handle_incoming_blocks to release.
+    if (blockchain.db().is_read_only())
+        return true;
     if (!blockchain.prepare_handle_incoming_blocks(blocks_entry, blocks)) {
         cleanup_handle_incoming_blocks(false);
         return false;
@@ -3021,6 +3027,12 @@ bool core::prepare_handle_incoming_blocks(
 
 //-----------------------------------------------------------------------------------------------
 bool core::cleanup_handle_incoming_blocks(bool force_sync) {
+    // A shared per-host chain reader never started a write batch in prepare_handle_incoming_blocks,
+    // so there is nothing to finalise; just release the lock prepare took.
+    if (blockchain.db().is_read_only()) {
+        m_incoming_tx_lock.unlock();
+        return true;
+    }
     bool success = false;
     try {
         success = blockchain.cleanup_handle_incoming_blocks(force_sync);
@@ -3040,6 +3052,11 @@ bool core::handle_incoming_block(
     ZoneScoped;
     TRY_ENTRY();
     bvc = {};
+
+    // Shared per-host chain reader: do not ingest blocks over p2p. The writer commits them and this
+    // daemon sees them through the shared read-only database, so drop the incoming block silently.
+    if (blockchain.db().is_read_only())
+        return true;
 
     // note: we assume block weight is always >= block blob size, so we check incoming
     // blob size against the block weight limit, which acts as a sanity check without
