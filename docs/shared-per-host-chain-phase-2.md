@@ -13,19 +13,29 @@ the leadership token kept local to the host.
 
 ## Roles
 
-A shared-chain host runs one writer and N readers against one chain in one data directory.
+A shared-chain host runs one writer and N readers against one chain in one data directory. The role,
+writer or reader, is independent of what kind of node the daemon is: a service node, a public RPC
+node, and a seed are all the same daemon opening the same chain, and any of them can be the writer or
+a reader. A host often runs a mix, for example a public node or seed alongside several service nodes.
 
-- The writer is a keyless chain service. It is an ordinary daemon that syncs the chain over P2P and
-  commits blocks, with no service node keys and no quorum, Pulse or uptime-proof duties. Block
-  production is not the writer's job: Pulse blocks are produced and signed by the quorum and reach
-  the writer through normal block handling, which the writer commits like any syncing node. Keeping
-  the writer keyless means a writer crash never also drops a service node slot.
-- The readers are the host's service nodes, each a daemon started with `--db-readonly`. They hold
-  their own keys and proofs, read the shared chain, and participate in quorum and Pulse duties from
-  read-only chain state (Phase 1).
+- The writer is whichever daemon holds the write lock. It syncs the chain over P2P and commits blocks
+  read-write. Block production is not the writer's job: Pulse blocks are produced and signed by the
+  quorum and reach the writer through normal block handling, which the writer commits like any
+  syncing node, so the writer needs no service node keys.
+- The readers are every other daemon on the host, each started with `--db-readonly`. A reader that is
+  a service node holds its own keys and proofs and does quorum and Pulse duties from read-only chain
+  state (Phase 1); a reader that is a public node or seed just serves and syncs from the shared chain.
 
-One chain copy on disk, shared through the OS page cache because LMDB is memory-mapped, serves all
-of them. This is the per-host memory and disk saving the feature exists for.
+Keyless-ness is a property of the writer worth preserving, because a keyless writer crash never also
+drops a service node slot. It falls out naturally on a mixed host: a public node or seed is already
+keyless and already full-syncs the chain, so it is the natural steady-state writer, with the service
+nodes as readers. Reader promotion then only has to cover the case where that keyless writer is lost.
+On a host that runs only service nodes there is no keyless daemon to prefer, so one service node holds
+the lock and writes; it is not literally keyless, but there is no separate writer process to lose
+independently, so the crash-isolation that keyless-ness buys does not apply there.
+
+One chain copy on disk, shared through the OS page cache because LMDB is memory-mapped, serves all of
+them. This is the per-host memory and disk saving the feature exists for.
 
 ## Why not simply let any node write
 
@@ -115,23 +125,15 @@ bounded because the promoting reader was already at the tip. The lock is held co
 acquisition through the re-exec, so there is never a gap in which a second reader could also acquire
 it.
 
-Re-exec forces one genuine decision, because the promoting node is a service node (it holds keys)
-while the steady-state writer is meant to be keyless. Two coherent shapes:
-
-- A dedicated keyless writer process per host, with the reader service nodes separate. When the
-  writer dies the readers race for the lock and the winner re-execs into a keyless writer, which
-  costs that node its service node slot until an operator rebalances. This keeps the writer keyless
-  but makes a failover also a service-node outage on that host.
-- Every node on the host is a service node, and whichever one holds the lock additionally opens the
-  chain read-write and does the writer's work. Promotion is then just a re-exec that drops
-  `--db-readonly` while keeping the node's identity, and no service node slot is lost. The writer is
-  not keyless, but there is no separate writer process to lose independently, so the crash-isolation
-  that keyless-ness buys is moot here.
-
-The second shape is the simpler and more faithful reading of "auto-promote a reader", and it is the
-recommendation, with the keyless property kept as the steady-state ideal (a dedicated keyless writer
-can still be the normal writer, supervised to restart, with reader promotion as the backup when it
-cannot). This is the open decision called out below.
+The promoting node may be a service node, which holds keys, while the steady-state writer is ideally
+keyless. The role model in Roles resolves this without a separate writer process. On a host that runs
+a public node or seed, that keyless daemon is the steady-state writer and the service nodes are
+readers; if it is lost, a service node reader re-execs into writer mode and carries the chain until
+the keyless daemon returns and reclaims the role, so the key-holding writer is only a temporary
+failover state, not the norm. On a host with only service nodes, whichever holds the lock writes
+while keeping its identity, and no service node slot is lost to promotion. Either way promotion is the
+same re-exec that drops `--db-readonly`; the only difference is which daemon prefers to hold the lock
+in steady state (see the lock-preference open question below).
 
 ## No preemption, and the recovered writer
 
@@ -185,14 +187,13 @@ if ever.
 
 ## Open questions
 
-- Writer identity (the main one, see the promotion section): a dedicated keyless writer whose
-  failover costs a service node slot, or every node a service node with the lock-holder also writing.
-  The recommendation is the second, keeping keyless as the steady-state ideal with reader promotion as
-  the backup.
+- Lock preference. On a mixed host the keyless public node or seed should hold the lock in steady
+  state and the service nodes should defer to it, promoting only if it is lost. This needs a
+  preference, so a service node does not win the lock ahead of the keyless daemon on a normal start.
+  Options: the keyless daemon takes the lock eagerly while service nodes wait a short grace period
+  before trying; or an explicit per-node preference flag. To be decided at implementation.
 - Startup policy when the lock is already held: should a daemon started as a writer but finding the
   lock taken exit, or fall back to running as a reader. Falling back is friendlier for a host where
   the operator starts several daemons without designating the writer.
-- Whether a dedicated keyless writer, if run, is a trimmed build or the full daemon with service node
-  duties disabled.
 - Exact values for `T_renew`, `T_fence`, the reader staleness threshold and `T_poll`, set during the
   soak.
