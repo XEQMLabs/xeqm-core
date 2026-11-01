@@ -286,6 +286,45 @@ stops and rolls back before widening.
 5. Other multi-node hosts. The public nodes each run three daemons; once missoula is proven, the same
    writer-plus-readers model applies there, keyless pubnode as writer.
 
+### Stage 1 rehearsal results
+
+The fernando rehearsal ran three of the fifteen quorum service nodes as shared-chain reader service
+nodes (each keeping its own data directory, keys and identity, reading one shared chain through
+`--shared-chain-dir --db-readonly`, with the seed as the writer) while the other twelve stayed normal.
+It also needed a quorum-forming fix in the rig itself: round-0 Pulse removes the block leader from the
+candidate pool and the HF22 one-seat-per-operator dedup then needs `PULSE_MIN_UNIQUE_OPERATORS`
+candidates left, so a quorum of exactly the minimum size never forms a round-0 quorum; the rig needs
+more than the minimum number of service nodes. That is a property of the test rig, not the feature.
+
+What the rehearsal proved, and the two reader bugs it found and fixed (neither reachable by the
+keyless, p2p-isolated readers of the earlier soak):
+
+- A reader service node keeps its own identity, tracks the writer's tip from the shared chain, takes
+  part in Pulse as a validator (the full handshake, bitset, template, random-value and signing
+  stages), submits uptime proofs, stays active and is not decommissioned, over a sustained run.
+- Bug: a reader that keeps p2p peers (a real service node, unlike the isolated soak reader) received
+  blocks over p2p and tried to start a write batch to ingest them, which fails on the read-only
+  database and logged a write error on every pushed block. Fixed by dropping p2p block ingestion on a
+  read-only database (the reader gets committed blocks from the shared chain), guarding the three core
+  ingestion entry points so they no-op cleanly while the incoming-tx lock stays balanced.
+- Bug: when a reader was drawn as the Pulse block producer, the producer path reached the local commit
+  on the read-only database and the daemon terminated. Fixed so a read-only producer relays the block
+  it produced (the writer commits it and the reader then sees it through the shared chain) instead of
+  committing locally.
+- Rollback was exercised: a reader reverted to its own unit and data directory came back up read-write
+  on its own independent chain and resynced to the tip with no errors.
+
+### Known limitation: a reader does not lead a Pulse round
+
+A reader service node cannot generate a Pulse block template, because template generation opens a
+write transaction on the chain database, which fails on a read-only reader. This is caught: the round
+is abandoned and retried with the next leader, so it is a bounded liveness cost, not a crash or a
+decommission, and the reader keeps doing every validator duty. The cost is proportional to the readers'
+share of the global quorum: negligible for the two or three readers of the missoula pilot, but it must
+be fixed before a broad rollout converts most of the fleet's service nodes to readers. The fix is the
+reader-as-leader work (a write-free template path plus keeping the reader's in-memory sorted mempool
+current), scoped separately from this read-only pass.
+
 ### Interval starting values and the mainnet margin
 
 Start with the soak values and only tighten after watching real missoula load: `T_renew` 2s,
