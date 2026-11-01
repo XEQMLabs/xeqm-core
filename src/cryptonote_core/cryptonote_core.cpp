@@ -2938,6 +2938,20 @@ bool core::handle_block_found(block& b, block_verification_context& bvc) {
             log::error(logcat, "Cannot add block: {}", e.what());
             return false;
         }
+
+        // Shared per-host chain reader acting as the Pulse block producer: it cannot commit the
+        // block to the read-only chain database (the host writer commits it, and this daemon then
+        // sees it through the shared database), but it must still relay the block it produced so the
+        // writer and the other peers receive it. Skip the local add and just broadcast.
+        if (blockchain.db().is_read_only()) {
+            cryptonote_connection_context exclude_context{};
+            NOTIFY_NEW_FLUFFY_BLOCK::request arg{};
+            arg.current_blockchain_height = blockchain.get_current_blockchain_height();
+            arg.b = blocks[0];
+            m_pprotocol->relay_block(arg, exclude_context);
+            return true;
+        }
+
         std::vector<block> pblocks;
         if (!prepare_handle_incoming_blocks(blocks, pblocks)) {
             log::error(logcat, "Block found, but failed to prepare to add");
