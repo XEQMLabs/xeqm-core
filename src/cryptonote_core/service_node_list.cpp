@@ -5898,8 +5898,14 @@ proof_info::proof_info() : proof(std::make_unique<uptime_proof::Proof>()) {}
 void proof_info::store(const crypto::public_key& pubkey, cryptonote::Blockchain& blockchain) {
     if (!proof)
         proof = std::make_unique<uptime_proof::Proof>();
-    std::unique_lock lock{blockchain};
+    // A shared per-host chain reader must not write the shared DB; the writer owns the persisted
+    // uptime proofs. This proof_info (the in-memory entry) is already updated by the caller, so a
+    // reader skips only the DB persist and still serves correct state. Without this, replaying an
+    // SN registration while refreshing to the tip would throw EACCES on the read-only DB.
     auto& db = blockchain.db();
+    if (db.is_read_only())
+        return;
+    std::unique_lock lock{blockchain};
     db.set_service_node_proof(pubkey, *this);
 }
 
@@ -6205,6 +6211,10 @@ void service_node_list::cleanup_proofs() {
     auto locks = tools::unique_locks(m_sn_mutex, blockchain);
     auto now = std::chrono::system_clock::now();
     auto& db = blockchain.db();
+    // A shared per-host chain reader must not write the shared DB (and cannot open a write txn on
+    // it). The writer owns proof cleanup; the reader just leaves expired proofs in memory.
+    if (db.is_read_only())
+        return;
     cryptonote::db_wtxn_guard guard{db};
     for (auto it = proofs.begin(); it != proofs.end();) {
         auto& pubkey = it->first;
