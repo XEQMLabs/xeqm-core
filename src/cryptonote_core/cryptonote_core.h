@@ -44,6 +44,7 @@
 #include "service_node_list.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_voting.h"
+#include "shared_chain_lock.h"
 #include "tx_pool.h"
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
@@ -361,6 +362,15 @@ class core final {
      * @param desc return-by-reference the command line options set to add to
      */
     static void init_options(boost::program_options::options_description& desc);
+
+    /**
+     * @brief records the process argv for a later shared per-host chain promotion re-exec.
+     *
+     * A read-only reader that promotes to writer re-execs its own binary with the writer
+     * arguments (see try_promote). It needs the original command line to rebuild, so main()
+     * hands it over once at startup. No-op/safe to omit when promotion is not used.
+     */
+    static void set_process_argv(int argc, char const* const* argv);
 
     /**
      * @brief initializes the core as needed
@@ -799,6 +809,29 @@ class core final {
     bool check_disk_space();
 
     /**
+     * @brief shared per-host chain reader promotion attempt (step 3 of the failover design).
+     *
+     * Runs only on a read-only reader started with --shared-chain-promote, from the idle loop on
+     * m_promote_poll_interval. Tries a non-blocking acquire of the writer lock. While a healthy
+     * writer holds it the attempt fails and this daemon stays a reader (no preemption). When it
+     * succeeds (the writer exited or self-fenced), this daemon holds leadership and re-execs its
+     * own binary in writer mode, carrying the still-held, non-close-on-exec lock fd across the
+     * execv so leadership is continuous. On success execv does not return; on failure it exits
+     * the process so the freed lock lets another reader promote.
+     *
+     * @return true (so the periodic task keeps scheduling) while still a reader.
+     */
+    bool try_promote();
+
+    /**
+     * @brief re-exec this daemon in writer mode, inheriting the held lock fd. Never returns on
+     * success; returns only if execv failed.
+     *
+     * @param lock_fd the held writer-lock descriptor to pass through (kept open across execv)
+     */
+    void reexec_as_writer(int lock_fd);
+
+    /**
      * @brief Initializes service keys by loading or creating.  An Ed25519 key (from which we also
      * get an x25519 key) is always created; the Monero SN keypair is only created when running in
      * Service Node mode (as it is only used to sign registrations and uptime proofs); otherwise
@@ -916,6 +949,27 @@ class core final {
     /// randomized in 6-7d between calls so that different oxends don't all trigger it at the same
     /// time.
     tools::periodic_task m_sn_archive_state_interval{"sn state storage", 6 * 24h, false, 24h};
+    /// interval at which a read-only shared per-host chain reader replays the writer's newly
+    /// committed blocks to keep its in-memory service node list current with the tip. Only active
+    /// when the chain DB was opened read-only (--db-readonly); a no-op otherwise.
+    tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 1s};
+    /// interval at which a read-only shared per-host chain reader reloads its in-memory sorted
+    /// mempool from the shared txpool, so that if the reader is drawn as the Pulse block producer it
+    /// assembles the template from the writer's current pool instead of the snapshot taken at startup.
+    /// Only active when the chain DB was opened read-only; a no-op otherwise.
+    tools::periodic_task m_txpool_reader_refresh_interval{"txpool reader refresh", 5s};
+    /// interval at which a shared per-host chain writer (--shared-chain-writer) persists the recent
+    /// service node state, so a read-only reader always loads from a recent blob and only has a
+    /// small gap to replay. Distinct from the long-term archive guard above; only active on a
+    /// flagged writer.
+    tools::periodic_task m_sn_writer_store_interval{"sn writer store", 1min};
+    /// interval at which a shared per-host chain writer renews its lease and heartbeats the
+    /// self-fence watchdog. Must be shorter than the fence timeout below.
+    tools::periodic_task m_writer_lease_interval{"shared-chain lease", 2s};
+    /// interval at which a read-only shared per-host chain reader with --shared-chain-promote polls
+    /// the writer lock and, on acquiring it, re-execs into writer mode. Only active on a promotable
+    /// reader and after the startup grace has elapsed.
+    tools::periodic_task m_promote_poll_interval{"shared-chain promote poll", 3s};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 
@@ -969,6 +1023,30 @@ class core final {
     bool m_offline;
     bool m_pad_transactions;
     bool m_has_ip_check_disabled;
+    bool m_shared_chain_writer{false};  // --shared-chain-writer: this daemon is the shared-chain writer
+    // --shared-chain-dir: directory holding the shared per-host chain (blocks, ons.db, sqlite.db and
+    // the writer lock). Empty means the chain lives in m_config_folder (--data-dir) as before; when set
+    // the chain lives here while --data-dir keeps this node's service node keys and p2p state.
+    fs::path m_shared_chain_folder;
+    // Shared per-host chain writer leadership (held only when m_shared_chain_writer and the lock was
+    // acquired). The watchdog exits the process if the writer stalls, so the lock frees for a reader.
+    std::unique_ptr<shared_chain::writer_lock> m_writer_lock;
+    std::unique_ptr<shared_chain::fence_watchdog> m_fence_watchdog;
+    // Shared per-host chain reader promotion (--shared-chain-promote): a read-only reader that polls
+    // the writer lock and re-execs into writer mode when it can take it. m_promote_lock holds the
+    // lock from the winning acquire through the execv (its fd is deliberately not close-on-exec).
+    bool m_shared_chain_promote{false};
+    std::unique_ptr<shared_chain::writer_lock> m_promote_lock;
+    // Resolved path of the host-local writer lock file (folder/"writer.lock"), set during init so
+    // both the writer block and the reader promotion monitor use the same one.
+    fs::path m_writer_lock_path;
+    // When a promotable reader may first attempt the lock. A startup grace lets an eagerly-starting
+    // keyless writer win a cold-start race, so service nodes defer to it (lock-preference).
+    std::chrono::steady_clock::time_point m_promote_grace_until{};
+    // Test-only (--shared-chain-debug-stall-secs): seconds of uptime after which a writer stops
+    // heartbeating so the self-fence watchdog exits it; 0 = off. Used by the failover soak.
+    uint64_t m_shared_chain_debug_stall_secs{0};
+    bool m_shared_chain_debug_stalled{false};
 
     // Recently seen proof filter for uptime proofs so that we can drop repeated proofs without
     // processing them.

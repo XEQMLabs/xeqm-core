@@ -427,6 +427,18 @@ class tx_memory_pool {
     bool init(size_t max_txpool_weight = 0);
 
     /**
+     * @brief reload the in-memory sorted pool from the shared txpool (shared per-host chain reader)
+     *
+     * A read-only reader's in-memory pool is a snapshot taken at init and does not advance as the
+     * host writer accepts transactions. This re-reads the shared txpool so a reader that assembles a
+     * block template as the Pulse producer sees the writer's current pool. Read-only safe (the
+     * corrupt-entry removal in the reload is guarded on a read-only database).
+     *
+     * @return true on success
+     */
+    bool refresh_readonly() { return init(m_txpool_max_weight); }
+
+    /**
      * @brief attempts to save the transaction pool state to disk
      *
      * Currently fails (returns false) if the data directory from init()

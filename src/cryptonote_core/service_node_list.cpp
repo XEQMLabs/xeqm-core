@@ -3365,6 +3365,26 @@ void service_node_list::block_add(
     }
 }
 
+void service_node_list::process_block_readonly(
+        const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs) {
+    // Shared per-host chain reader: advance the in-memory SN set and quorums by exactly one block
+    // WITHOUT any write. Unlike block_add(), this never calls sql_db->add_block() or store() and
+    // never runs the SNL-vs-SQL height invariant check (the reader deliberately does not advance
+    // the reward SQLite, so that invariant does not apply). process_block() itself reads the chain
+    // DB through const references only and touches the reward SQLite solely at the hf21/hf22
+    // boundary heights, which a live chain is long past, so replaying forward here is write-free.
+    //
+    // The caller must feed blocks in strict height order starting at m_state.height + 1 (the chain
+    // the reader shares with the writer), which update_from_block() asserts.
+    std::lock_guard lock(m_sn_mutex);
+    if (block.major_version < hf::hf9_service_nodes) {
+        m_state.height = block.get_height();
+        return;
+    }
+    process_block(block, txs);
+    rebuild_key_image_cache();
+}
+
 static boost::random::mt19937_64 quorum_rng(
         hf hf_version, crypto::hash const& hash, quorum_type type) {
     ZoneScoped;
@@ -5878,8 +5898,14 @@ proof_info::proof_info() : proof(std::make_unique<uptime_proof::Proof>()) {}
 void proof_info::store(const crypto::public_key& pubkey, cryptonote::Blockchain& blockchain) {
     if (!proof)
         proof = std::make_unique<uptime_proof::Proof>();
-    std::unique_lock lock{blockchain};
+    // A shared per-host chain reader must not write the shared DB; the writer owns the persisted
+    // uptime proofs. This proof_info (the in-memory entry) is already updated by the caller, so a
+    // reader skips only the DB persist and still serves correct state. Without this, replaying an
+    // SN registration while refreshing to the tip would throw EACCES on the read-only DB.
     auto& db = blockchain.db();
+    if (db.is_read_only())
+        return;
+    std::unique_lock lock{blockchain};
     db.set_service_node_proof(pubkey, *this);
 }
 
@@ -6185,6 +6211,10 @@ void service_node_list::cleanup_proofs() {
     auto locks = tools::unique_locks(m_sn_mutex, blockchain);
     auto now = std::chrono::system_clock::now();
     auto& db = blockchain.db();
+    // A shared per-host chain reader must not write the shared DB (and cannot open a write txn on
+    // it). The writer owns proof cleanup; the reader just leaves expired proofs in memory.
+    if (db.is_read_only())
+        return;
     cryptonote::db_wtxn_guard guard{db};
     for (auto it = proofs.begin(); it != proofs.end();) {
         auto& pubkey = it->first;
@@ -7020,14 +7050,19 @@ void service_node_list::reset(bool delete_db_entry) {
     m_state = state_t{this};
     rebuild_key_image_cache();
 
-    if (blockchain.has_db() && delete_db_entry) {
+    // A shared per-host chain reader opens the DB read-only and must never clear persisted SNL or
+    // reward state; the writer owns those rows. On a reader this leaves the in-memory state empty,
+    // which the reader then fills from the writer's persisted blob via load() / refresh-to-tip.
+    const bool read_only = blockchain.has_db() && blockchain.db().is_read_only();
+
+    if (blockchain.has_db() && delete_db_entry && !read_only) {
         cryptonote::db_wtxn_guard txn_guard{blockchain.db()};
         blockchain.db().clear_service_node_data();
     }
 
     m_state.height = hard_fork_begins(blockchain.nettype(), hf::hf9_service_nodes).value_or(1) - 1;
 
-    if (delete_db_entry) {
+    if (delete_db_entry && !read_only) {
         // NOTE: Rescanning the SNL has side-effects on the SQL DB in particular, if we encounter
         // any ETH exits, a 'delayed_payment' row is added to the DB. If we _don't_ reset the SQL DB
         // then we double up on exit payments to be handed to them.

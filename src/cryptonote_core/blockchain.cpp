@@ -740,6 +740,65 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
     return true;
 }
 
+bool Blockchain::refresh_sn_list_readonly() {
+    // Only meaningful on a read-only shared-chain reader; a writer keeps its SN list current
+    // through the normal block-add path.
+    if (!m_db->is_read_only())
+        return true;
+
+    // Each top-level DB read renews this thread's LMDB read snapshot (as long as we are not nested
+    // in a batch or an outer read guard), so m_db->height() observes the writer's latest commit and
+    // every block we then read back is already committed and immutable. We bound the scan at this
+    // tip and only replay blocks below it.
+    uint64_t end_height = m_db->height();
+    uint64_t next_height = service_node_list.height() + 1;
+    if (next_height >= end_height)
+        return true;  // already at the tip
+
+    log::debug(
+            logcat,
+            "Shared-chain reader: refreshing service node list from height {} to tip {}",
+            next_height,
+            end_height);
+
+    for (uint64_t h = next_height; h < end_height; h++) {
+        block blk;
+        try {
+            blk = m_db->get_block_from_height(h);
+        } catch (const std::exception& e) {
+            log::warning(
+                    logcat,
+                    "Shared-chain reader: could not read block {} from the shared chain: {}",
+                    h,
+                    e.what());
+            return false;
+        }
+
+        std::vector<transaction> txs;
+        std::unordered_set<crypto::hash> missed;
+        if (!get_transactions(blk.tx_hashes, txs, &missed) || !missed.empty()) {
+            log::warning(
+                    logcat,
+                    "Shared-chain reader: missing transactions for block {}; will retry",
+                    h);
+            return false;
+        }
+
+        try {
+            service_node_list.process_block_readonly(blk, txs);
+        } catch (const std::exception& e) {
+            log::warning(
+                    logcat,
+                    "Shared-chain reader: failed to advance the service node list at block {}: {}",
+                    h,
+                    e.what());
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static bool exec_detach_hooks(
         Blockchain& blockchain,
         uint64_t detach_height,  // The new blockchain height, i.e. top block number is this - 1
@@ -841,7 +900,10 @@ bool Blockchain::init(
     else {
     }
 
-    if (m_nettype != network_type::FAKECHAIN)
+    // fixup() rewrites derived rows in place and so assumes this process owns the chain. A
+    // shared per-host chain reader opens the DB read-only and must not write; the writer owns
+    // fixups.
+    if (m_nettype != network_type::FAKECHAIN && !m_db->is_read_only())
         m_db->fixup(m_nettype);
 
     db_rtxn_guard rtxn_guard{*m_db};
@@ -988,6 +1050,16 @@ bool Blockchain::init(
             else
                 log::info(globallogcat, "Database fixup and reward rescan applied and confirmed");
         }
+    } else if (m_db->is_read_only() && m_nettype != network_type::FAKECHAIN) {
+        // Shared per-host chain reader: the writing catch-up above is skipped because we must not
+        // write. Instead replay the writer's committed blocks read-only so the SN list starts out
+        // current with the tip rather than frozen at the last persisted blob. core::on_idle then
+        // keeps it current.
+        if (!refresh_sn_list_readonly())
+            log::warning(
+                    globallogcat,
+                    "Shared-chain reader: initial service node list refresh did not reach the tip; "
+                    "core::on_idle will retry");
     }
 
     return true;

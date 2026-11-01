@@ -109,6 +109,10 @@ typedef std::pair<crypto::hash, uint64_t> tx_out_index;
 
 extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
 extern const command_line::arg_flag arg_db_salvage;
+// Opens the blockchain database read-only so several daemons on one host can share a single
+// chain maintained by one writer process (shared per-host chain storage). The reader opens the
+// LMDB environment with MDB_RDONLY and skips every init-path and background write.
+extern const command_line::arg_flag arg_db_readonly;
 
 #pragma pack(push, 1)
 

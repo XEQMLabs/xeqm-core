@@ -150,6 +150,10 @@ bool checkpoints::add_checkpoint(uint64_t height, const std::string& hash_str) {
     return r;
 }
 bool checkpoints::update_checkpoint(checkpoint_t const& checkpoint) {
+    // A shared per-host chain reader reads checkpoints from the shared database (the host writer
+    // stores them); it must not write them on the read-only database.
+    if (m_db->is_read_only())
+        return true;
     // NOTE(oxen): Assumes checkpoint is valid
     bool result = true;
     bool batch_started = false;
@@ -172,6 +176,10 @@ bool checkpoints::update_checkpoint(checkpoint_t const& checkpoint) {
 }
 //---------------------------------------------------------------------------
 void checkpoints::block_add(const block_add_info& info) {
+    // A shared per-host chain reader does not write the shared database; the host writer maintains
+    // and culls checkpoints.
+    if (m_db->is_read_only())
+        return;
     uint64_t const height = info.block.get_height();
     if (height < service_nodes::CHECKPOINT_STORE_PERSISTENTLY_INTERVAL ||
         info.block.major_version < hf::hf12_checkpointing)
@@ -217,6 +225,9 @@ void checkpoints::block_add(const block_add_info& info) {
 }
 //---------------------------------------------------------------------------
 void checkpoints::blockchain_detached(uint64_t height) {
+    // A shared per-host chain reader does not write the shared database.
+    if (m_db->is_read_only())
+        return;
     m_last_cull_height = std::min(m_last_cull_height, height);
 
     checkpoint_t top_checkpoint;

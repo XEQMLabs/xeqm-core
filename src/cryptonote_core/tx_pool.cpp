@@ -317,6 +317,13 @@ bool tx_memory_pool::add_tx(
     // find_transactions et al. (every other tx_pool method uses tools::unique_locks).
     // ABBA observed on seed-2 + seed-5 under inbound P2P NOTIFY_NEW_TRANSACTIONS traffic.
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // A shared per-host chain reader must not write the shared txpool (the host writer owns it, and
+    // this daemon reads the pool from the shared database). Refuse to add on a read-only database,
+    // which covers every add path (p2p, blink, and any other caller) at the write chokepoint.
+    if (m_blockchain.db().is_read_only()) {
+        tvc.m_verifivation_failed = false;
+        return false;
+    }
     if (blob.size() == 0) {
         oxen::log::error(logcat, "Could not add to txpool, blob is empty of tx: {}", id);
         throw oxen::traced<std::runtime_error>("Could not add to txpool, blob empty");
@@ -1075,6 +1082,11 @@ sorted_tx_container::iterator tx_memory_pool::find_tx_in_sorted_container(
 bool tx_memory_pool::remove_stuck_transactions() {
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
 
+    // Shared per-host chain reader: the mempool lives in the shared chain DB and is owned by the
+    // writer. A reader must not prune it (and cannot open a write txn on a read-only DB).
+    if (m_blockchain.db().is_read_only())
+        return true;
+
     std::list<std::pair<crypto::hash, uint64_t>> remove;
     m_blockchain.db().for_all_txpool_txes(
             [this, &remove](
@@ -1201,6 +1213,9 @@ bool tx_memory_pool::get_relayable_transactions(
 int tx_memory_pool::set_relayable(const std::vector<crypto::hash>& tx_hashes) {
     int updated = 0;
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // Shared per-host chain reader: the writer owns mempool relay state; a reader must not write it.
+    if (m_blockchain.db().is_read_only())
+        return updated;
     LockedTXN lock(m_blockchain);
     for (auto& tx : tx_hashes) {
         try {
@@ -1221,6 +1236,10 @@ int tx_memory_pool::set_relayable(const std::vector<crypto::hash>& tx_hashes) {
 //---------------------------------------------------------------------------------
 void tx_memory_pool::set_relayed(const std::vector<std::pair<crypto::hash, std::string>>& txs) {
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // Shared per-host chain reader: the writer owns the mempool and its relay bookkeeping; a reader
+    // must not write the shared DB.
+    if (m_blockchain.db().is_read_only())
+        return;
 
     const time_t now = time(NULL);
     LockedTXN lock(m_blockchain);
@@ -2013,7 +2032,9 @@ bool tx_memory_pool::fill_block_template(
             log::error(logcat, "Failed to check transaction readiness: {}", e.what());
             // continue, not fatal
         }
-        if (memcmp(&original_meta, &meta, sizeof(meta))) {
+        // A read-only reader (shared per-host chain) must not write the shared txpool; the meta
+        // update is only a caching optimisation owned by the writer, so skip it here.
+        if (memcmp(&original_meta, &meta, sizeof(meta)) && !m_blockchain.db().is_read_only()) {
             try {
                 m_blockchain.db().update_txpool_tx(txid, meta);
             } catch (const std::exception& e) {
@@ -2189,7 +2210,9 @@ bool tx_memory_pool::init(size_t max_txpool_weight) {
         if (!r)
             return false;
     }
-    if (!remove.empty()) {
+    // A shared per-host chain reader loads the pool read-only and must not write the shared DB;
+    // the writer owns removal of corrupt pool entries.
+    if (!remove.empty() && !m_blockchain.db().is_read_only()) {
         LockedTXN lock(m_blockchain);
         for (const auto& txid : remove) {
             try {
