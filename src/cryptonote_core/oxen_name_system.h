@@ -411,6 +411,12 @@ struct name_system_db {
 
   private:
     cryptonote::network_type nettype;
+    // True when this daemon opened the shared per-host chain (and so this ONS db) read-only. A
+    // read-only reader shares the writer's ons.db and must never write it: name lookups are plain
+    // SQL against the shared rows and compute expiry from the caller's chain height, so no state
+    // needs advancing here, but the init rebuild path and the destructor's settings save are
+    // skipped.
+    bool read_only = false;
     uint64_t last_processed_height = 0;
     crypto::hash last_processed_hash{};
     sql_compiled_statement save_owner_sql{*this};
