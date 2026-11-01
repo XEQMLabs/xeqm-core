@@ -60,6 +60,13 @@ references only, and touches the reward SQLite solely at the hf21 and hf22-fixup
 one-time transition and a one-time fixup). A live chain is long past both, so a reader that starts above
 them replays without any write.
 
+One block-driven write does not fall under that boundary rule: when a block registers or recommissions a
+service node, the state update persists that node's uptime proof through `proof_info::store`
+(`set_service_node_proof`). Replaying such a block on a reader would write the shared DB, so
+`proof_info::store` skips the persist on a read-only DB (the in-memory proof entry the caller already
+updated is what the reader serves), and the periodic `cleanup_proofs` (which removes expired proofs)
+returns early on a reader. The writer owns persisted proofs.
+
 Two wiring points:
 
 - Initial catch-up. `Blockchain::init` already skips the writing catch-up
@@ -90,6 +97,12 @@ On `feat/shared-chain-reader` (off `main`):
   once a minute (the cheap short-term store, separate from the long-term archive guard), so a reader on
   the host always loads from a recent blob. It is gated behind the flag, so ordinary fleet daemons keep
   their existing store cadence unchanged.
+- ONS read-only. The reader shares the writer's `ons.db` opened `SQLITE_OPEN_READONLY`. Name resolution
+  needs no per-block replay: lookups are plain SQL against the shared mapping rows and compute expiry
+  from the caller-supplied chain height (the live tip), never from the in-memory `last_processed_height`,
+  so a reader sees the writer's committed mappings as they land. `name_system_db` records a read-only
+  flag at init and skips the two writes it would otherwise do on a reader: the destructor's settings
+  save, and the init rebuild (DROP/recreate) path, which it refuses rather than attempts.
 
 Runtime-validated on the signer-bootstrap testnet against a chain with three registered service nodes.
 A read-only, network-isolated reader attached to the live writer's data directory and its service node
@@ -112,8 +125,6 @@ even a from-genesis replay stays write-free.
 
 ## Remaining in Phase 1
 
-- ONS read-only refresh. The ONS database already supports a read-only mode; give the reader the same
-  replay-to-tip for ONS state that it now has for the service node list.
 - Mempool read-only. The mempool lives in the chain database's txpool tables and is writer-owned. Confirm
   a reader reads it without writing.
 - `MDB_MAP_RESIZED`. Exercise a reader across a writer mapsize growth and handle the resize.
