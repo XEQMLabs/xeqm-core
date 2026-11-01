@@ -221,6 +221,22 @@ testnet inconvenience. Second, the host is mid SQLite soak: nine of the daemons 
 under their own monitor units. Shared-chain is LMDB only, so the pilot is drawn from the LMDB daemons
 and the SQLite soak is left completely alone.
 
+### Consolidation mechanism
+
+Each per-node data directory holds that node's service node keys (`key_ed25519`, `key_bls`) and its p2p
+state, while the chain itself (the LMDB database, `ons.db`, `sqlite.db` and the writer lock) is what the
+host shares. These cannot be the same directory, because pointing two service nodes at one data
+directory would make them share one key file and so one identity. The `--shared-chain-dir` flag performs
+the split: when set, the chain, `ons.db`, `sqlite.db` and the writer lock live in that shared directory,
+while `--data-dir` stays per-node for the keys and p2p state. The writer runs
+`--shared-chain-dir=<shared> --shared-chain-writer` on its own `--data-dir`, and each reader runs
+`--shared-chain-dir=<shared> --db-readonly --shared-chain-promote` on its own `--data-dir`. The
+promotion re-exec keeps `--shared-chain-dir`, so a promoted reader goes on using the same shared chain.
+This was validated on fernando: with the flag set the chain and writer lock are created only in the
+shared directory, each daemon writes its own distinct `key_ed25519` into its own `--data-dir`, a reader
+opens the shared chain read-only without creating a second chain, and a second explicit writer refuses
+on the one shared lock.
+
 ### Preconditions before any daemon is touched
 
 - PR #72 is reviewed and the shared-chain code is accepted into the 1.1.4-dev line. The rollout does
@@ -244,15 +260,18 @@ between steps. If any pilot node's decommission count rises or it lags at a Puls
 stops and rolls back before widening.
 
 1. Rehearsal on fernando. The single-host soak (step 4) already proved exactly-one-writer and bounded
-   failover with throwaway readers. This stage rehearses the part the soak did not: the real data
-   directory consolidation and the systemd mechanics. Point several real testnet service node units at
-   one shared data directory with the keyless node as writer, confirm each service node does its quorum
-   and Pulse duties from the read-only shared chain, then exercise the per-node rollback end to end.
-   Nothing mainnet is touched in this stage.
-2. missoula pilot, one writer and two readers. Make `xeqm-watcher` the writer by adding
-   `--shared-chain-writer` and leaving it on `/opt/xeqm-watcher/data`. Migrate exactly two LMDB service
-   nodes to read that same data directory with `--db-readonly --shared-chain-promote`, each keeping its
-   own keys, ports, Lokinet relay and service node identity. The other seventeen service nodes are left
+   failover with throwaway readers. This stage rehearses the part the soak did not: the real
+   consolidation through `--shared-chain-dir` and the systemd mechanics. The flag mechanics are proven
+   (see Consolidation mechanism). What remains is to point several real keyed testnet service nodes at
+   one shared chain directory with the keyless node as writer, confirm each service node keeps its own
+   identity and does its quorum and Pulse duties from the read-only shared chain (this needs the roughly
+   eleven-validator quorum rig, not the three-node setup, because three nodes do not form a Pulse
+   quorum), then exercise the per-node rollback end to end. Nothing mainnet is touched in this stage.
+2. missoula pilot, one writer and two readers. Point `xeqm-watcher` at a shared chain directory as the
+   writer (`--shared-chain-dir=<shared> --shared-chain-writer`, its own `--data-dir` unchanged). Migrate
+   exactly two LMDB service nodes to read that shared chain directory with
+   `--shared-chain-dir=<shared> --db-readonly --shared-chain-promote`, each keeping its own `--data-dir`,
+   keys, ports, Lokinet relay and service node identity. The other seventeen service nodes are left
    exactly as they are, on their own independent chains, as the safety net. Soak for a defined window
    (several days across at least one of each pilot node's own Pulse quorum rounds) watching the decomm
    soak and the two pilot nodes' tip, last reward height and quorum participation against a non-pilot
