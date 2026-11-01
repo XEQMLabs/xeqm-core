@@ -1075,6 +1075,11 @@ sorted_tx_container::iterator tx_memory_pool::find_tx_in_sorted_container(
 bool tx_memory_pool::remove_stuck_transactions() {
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
 
+    // Shared per-host chain reader: the mempool lives in the shared chain DB and is owned by the
+    // writer. A reader must not prune it (and cannot open a write txn on a read-only DB).
+    if (m_blockchain.db().is_read_only())
+        return true;
+
     std::list<std::pair<crypto::hash, uint64_t>> remove;
     m_blockchain.db().for_all_txpool_txes(
             [this, &remove](
@@ -1201,6 +1206,9 @@ bool tx_memory_pool::get_relayable_transactions(
 int tx_memory_pool::set_relayable(const std::vector<crypto::hash>& tx_hashes) {
     int updated = 0;
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // Shared per-host chain reader: the writer owns mempool relay state; a reader must not write it.
+    if (m_blockchain.db().is_read_only())
+        return updated;
     LockedTXN lock(m_blockchain);
     for (auto& tx : tx_hashes) {
         try {
@@ -1221,6 +1229,10 @@ int tx_memory_pool::set_relayable(const std::vector<crypto::hash>& tx_hashes) {
 //---------------------------------------------------------------------------------
 void tx_memory_pool::set_relayed(const std::vector<std::pair<crypto::hash, std::string>>& txs) {
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // Shared per-host chain reader: the writer owns the mempool and its relay bookkeeping; a reader
+    // must not write the shared DB.
+    if (m_blockchain.db().is_read_only())
+        return;
 
     const time_t now = time(NULL);
     LockedTXN lock(m_blockchain);
@@ -2189,7 +2201,9 @@ bool tx_memory_pool::init(size_t max_txpool_weight) {
         if (!r)
             return false;
     }
-    if (!remove.empty()) {
+    // A shared per-host chain reader loads the pool read-only and must not write the shared DB;
+    // the writer owns removal of corrupt pool entries.
+    if (!remove.empty() && !m_blockchain.db().is_read_only()) {
         LockedTXN lock(m_blockchain);
         for (const auto& txid : remove) {
             try {
