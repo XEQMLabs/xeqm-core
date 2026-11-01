@@ -199,7 +199,97 @@ if ever.
 4. A single-host soak on the testnet: one writer, several readers, kill and stall the writer, and
    confirm exactly-one-writer holds across clean exit, crash, and stall, with bounded failover time
    and no two-writer window.
-5. Fleet rollout, missoula first.
+5. Fleet rollout, missoula first. The staged runbook, the pilot scope, the interval starting values
+   and the rollback are in "Fleet rollout (step 5)" below.
+
+## Fleet rollout (step 5)
+
+### What missoula actually is
+
+missoula is the first target because it is the worst case the feature exists for: it runs about
+nineteen mainnet service nodes side by side, each a `xeqmnode_snodeN.service` systemd unit with its
+own `/var/lib/xeqm/snodeN` data directory and its own roughly 1.1 GB LMDB chain, so the host keeps
+close to twenty copies of one chain (the `/var/lib/xeqm` tree is about 28 GB). It also already runs a
+keyless local full node, `xeqm-watcher.service`, on data directory `/opt/xeqm-watcher/data`, port
+18230, with no service node key, and every service node already lists `127.0.0.1:18230` as a priority
+node. That keyless node is the natural steady-state writer: it is already keyless, already full-syncs,
+and the service nodes already lean on it, so no new process is introduced.
+
+Two facts set the risk level. First, these are mainnet service nodes, so a conversion that makes one
+lag means Missed Pulse Participation and a decommission, which is a real loss of stake time, not a
+testnet inconvenience. Second, the host is mid SQLite soak: nine of the daemons run the SQLite build
+under their own monitor units. Shared-chain is LMDB only, so the pilot is drawn from the LMDB daemons
+and the SQLite soak is left completely alone.
+
+### Preconditions before any daemon is touched
+
+- PR #72 is reviewed and the shared-chain code is accepted into the 1.1.4-dev line. The rollout does
+  not start from an unreviewed branch.
+- The binary is built on fernando, the sanctioned x86 builder, from the 1.1.4-dev line with the
+  shared-chain changes, and never built on missoula. It is deployed to missoula at a distinct path,
+  not over `/opt/xeqm/bin/xeqm-d`, so the existing LMDB and SQLite daemons keep their current binaries
+  and nothing else on the host changes when it lands.
+- The correlated-failure requirement holds throughout: at least one node keeps an independent current
+  LMDB chain and the LMDB bootstrap keeps publishing. Today missoula's per-node separate chains are
+  part of that independence, so consolidation must not leave missoula as the only current LMDB chain.
+  An independent current LMDB node off-host (for example maple) and the LMDB bootstrap stay in place
+  for the whole rollout.
+- A per-node rollback is staged and tested first (see Rollback), because the units and data directories
+  are being changed on live mainnet nodes.
+
+### Stages
+
+The rollout widens the blast radius one controlled step at a time, and the live decomm soak is the gate
+between steps. If any pilot node's decommission count rises or it lags at a Pulse round, the stage
+stops and rolls back before widening.
+
+1. Rehearsal on fernando. The single-host soak (step 4) already proved exactly-one-writer and bounded
+   failover with throwaway readers. This stage rehearses the part the soak did not: the real data
+   directory consolidation and the systemd mechanics. Point several real testnet service node units at
+   one shared data directory with the keyless node as writer, confirm each service node does its quorum
+   and Pulse duties from the read-only shared chain, then exercise the per-node rollback end to end.
+   Nothing mainnet is touched in this stage.
+2. missoula pilot, one writer and two readers. Make `xeqm-watcher` the writer by adding
+   `--shared-chain-writer` and leaving it on `/opt/xeqm-watcher/data`. Migrate exactly two LMDB service
+   nodes to read that same data directory with `--db-readonly --shared-chain-promote`, each keeping its
+   own keys, ports, Lokinet relay and service node identity. The other seventeen service nodes are left
+   exactly as they are, on their own independent chains, as the safety net. Soak for a defined window
+   (several days across at least one of each pilot node's own Pulse quorum rounds) watching the decomm
+   soak and the two pilot nodes' tip, last reward height and quorum participation against a non-pilot
+   node.
+3. Expand in waves. Add readers to the shared chain in small batches, a few at a time, soaking the
+   decomm watch between waves and tuning the intervals (below) against observed missoula load. Each wave
+   reclaims its nodes' duplicate chains only after that wave has soaked clean.
+4. Full missoula. All LMDB service nodes read the one shared chain maintained by the keyless writer, the
+   duplicate per-node chains are retired, and the roughly 20 GB plus the shared page cache saving is
+   reclaimed. The SQLite-soak nodes are folded in only when the shared-chain-on-SQLite follow-on is
+   ready, not as part of this LMDB rollout.
+5. Other multi-node hosts. The public nodes each run three daemons; once missoula is proven, the same
+   writer-plus-readers model applies there, keyless pubnode as writer.
+
+### Interval starting values and the mainnet margin
+
+Start with the soak values and only tighten after watching real missoula load: `T_renew` 2s,
+`T_fence` 15s, reader staleness threshold above `T_fence`, `T_poll` 3s, promote grace 30s. The ordering
+`T_renew` < `T_fence` < reader staleness holds.
+
+Mainnet gives a wide margin the testnet did not. Pulse rounds are minutes apart on mainnet against a
+1.5s testnet block, and the soak measured failover at about 1s on crash, 4s on clean exit and 13s on a
+self-fenced stall. A failover well under a single block interval means a promoted reader is writing
+again long before the next Pulse round it could owe a duty to, so the conservative values above carry
+little risk on mainnet and there is no need to shorten them for speed. The reason to revisit them is
+flapping: if a healthy host fails over repeatedly the values are too short or the box is sick, and the
+design treats repeated failover as an alarm, not a normal event.
+
+### Rollback
+
+Rollback is per node and does not depend on the shared chain being healthy. Each migrated service node
+keeps its original unit and its own former data directory until its wave has soaked clean, so reverting
+one node is restoring its unit to its own data directory and its own binary and restarting it, after
+which it resyncs or restores its independent chain from the LMDB bootstrap exactly as any node does. The
+writer is the keyless node, so a pilot rollback never removes a service node slot. The staged
+bootstrap-restore recipe already used for the decomm soak is the same path a rolled-back node takes to a
+current independent chain.
 
 ## Open questions
 
@@ -216,5 +306,6 @@ if ever.
   as `--db-readonly --shared-chain-promote` so a daemon that cannot take the lock actively promotes
   when the writer is lost rather than failing to start; the refuse-and-exit remains for a daemon
   explicitly told to be the writer.
-- Exact values for `T_renew`, `T_fence`, the reader staleness threshold and `T_poll`, set during the
-  soak.
+- Exact values for `T_renew`, `T_fence`, the reader staleness threshold and `T_poll`. Starting values
+  and the mainnet margin are in "Fleet rollout (step 5)"; the final values are tuned against observed
+  load during the fleet soak.
