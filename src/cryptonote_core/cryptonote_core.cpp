@@ -3402,6 +3402,11 @@ Use "help <command>" to see a command's documentation.
         // reads current instead of frozen at the last persisted blob.
         m_sn_reader_refresh_interval.do_call([this] { return blockchain.refresh_sn_list_readonly(); });
 
+        // Reload the in-memory sorted mempool from the shared txpool so that if this reader is drawn
+        // as the Pulse block producer it assembles the template from the writer's current pool rather
+        // than the snapshot taken at startup.
+        m_txpool_reader_refresh_interval.do_call([this] { return mempool.refresh_readonly(); });
+
         // Promotion: once the startup grace has elapsed, poll the writer lock and re-exec into
         // writer mode if the writer is gone and the lock can be taken (step 3 of the failover
         // design). try_promote never returns on a successful promotion.
