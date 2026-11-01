@@ -1019,6 +1019,10 @@ class core final {
     bool m_pad_transactions;
     bool m_has_ip_check_disabled;
     bool m_shared_chain_writer{false};  // --shared-chain-writer: this daemon is the shared-chain writer
+    // --shared-chain-dir: directory holding the shared per-host chain (blocks, ons.db, sqlite.db and
+    // the writer lock). Empty means the chain lives in m_config_folder (--data-dir) as before; when set
+    // the chain lives here while --data-dir keeps this node's service node keys and p2p state.
+    fs::path m_shared_chain_folder;
     // Shared per-host chain writer leadership (held only when m_shared_chain_writer and the lock was
     // acquired). The watchdog exits the process if the writer stalls, so the lock frees for a reader.
     std::unique_ptr<shared_chain::writer_lock> m_writer_lock;

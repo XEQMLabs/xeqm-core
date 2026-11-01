@@ -248,6 +248,13 @@ static const command_line::arg_flag arg_shared_chain_writer = {
         "Mark this daemon as the writer for a shared per-host chain: it persists service node state "
         "frequently so that read-only readers (--db-readonly) on the same host stay close to the tip. "
         "Has no effect on daemons without shared-chain readers."};
+static const command_line::arg_descriptor<std::string> arg_shared_chain_dir = {
+        "shared-chain-dir",
+        "Directory holding the shared per-host chain (blocks, ons.db, sqlite.db and the writer lock). "
+        "When set, several daemons on one host share this one chain while each keeps its own --data-dir "
+        "for its service node keys and p2p state. Empty (the default) keeps the chain in --data-dir as "
+        "before.",
+        ""};
 static const command_line::arg_flag arg_shared_chain_promote = {
         "shared-chain-promote",
         "For a read-only shared per-host chain reader (--db-readonly): poll the host-local writer "
@@ -438,6 +445,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_omq_quorumnet_public);
     command_line::add_arg(desc, arg_disable_ip_check);
     command_line::add_arg(desc, arg_shared_chain_writer);
+    command_line::add_arg(desc, arg_shared_chain_dir);
     command_line::add_arg(desc, arg_shared_chain_promote);
     command_line::add_arg(desc, arg_shared_chain_promote_grace);
     command_line::add_arg(desc, arg_shared_chain_lock_fd);
@@ -469,6 +477,8 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_offline = get_arg(vm, arg_offline);
     m_has_ip_check_disabled = get_arg(vm, arg_disable_ip_check);
     m_shared_chain_writer = get_arg(vm, arg_shared_chain_writer);
+    if (auto scd = command_line::get_arg(vm, arg_shared_chain_dir); !scd.empty())
+        m_shared_chain_folder = tools::utf8_path(scd);
     m_shared_chain_promote = get_arg(vm, arg_shared_chain_promote);
     m_shared_chain_debug_stall_secs = command_line::get_arg(vm, arg_shared_chain_debug_stall);
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
@@ -688,14 +698,41 @@ bool core::init(
     if (m_nettype == network_type::FAKECHAIN)
         folder /= "fake";
 
+    // The shared per-host chain lives in its own directory when --shared-chain-dir is set, so several
+    // daemons on one host share one chain (blocks, ons.db, sqlite.db and the writer lock) while each
+    // keeps its own --data-dir for its service node keys and p2p state. Without the flag the chain
+    // lives in the data directory exactly as before. Keys and p2p state always stay in m_config_folder.
+    auto chain_folder = folder;
+    if (!m_shared_chain_folder.empty()) {
+        chain_folder = m_shared_chain_folder;
+        if (m_nettype == network_type::FAKECHAIN)
+            chain_folder /= "fake";
+        // The chain is elsewhere, so nothing created the per-node data directory yet; the keys are
+        // written into it below.
+        if (std::error_code ec; !fs::is_directory(m_config_folder, ec) &&
+                                !fs::create_directories(m_config_folder, ec) && ec) {
+            log::error(
+                    globallogcat,
+                    "Failed to create data directory {}: {}",
+                    m_config_folder,
+                    ec.message());
+            return false;
+        }
+    }
+
     // The host-local writer lock path; shared by the writer block and the reader promotion monitor.
-    // The data folder may not exist yet on a fresh start, and the lock is taken before the chain DB
-    // (which would otherwise create it), so make sure it exists first.
-    m_writer_lock_path = folder / "writer.lock";
+    // It lives with the shared chain so every daemon on the host contends for the same one. The chain
+    // folder may not exist yet on a fresh start, and the lock is taken before the chain DB (which
+    // would otherwise create it), so make sure it exists first.
+    m_writer_lock_path = chain_folder / "writer.lock";
     if (m_shared_chain_writer) {
-        if (std::error_code ec;
-            !fs::is_directory(folder, ec) && !fs::create_directories(folder, ec) && ec) {
-            log::error(globallogcat, "Failed to create data directory {}: {}", folder, ec.message());
+        if (std::error_code ec; !fs::is_directory(chain_folder, ec) &&
+                                !fs::create_directories(chain_folder, ec) && ec) {
+            log::error(
+                    globallogcat,
+                    "Failed to create shared chain directory {}: {}",
+                    chain_folder,
+                    ec.message());
             return false;
         }
     }
@@ -768,18 +805,18 @@ bool core::init(
         m_promote_grace_until = std::chrono::steady_clock::now() + std::chrono::seconds{grace_s};
     }
 
-    auto db = init_blockchain_db(folder, vm);
+    auto db = init_blockchain_db(chain_folder, vm);
     if (!db)
         return false;
 
-    auto ons_db_file_path = folder / "ons.db";
-    if (fs::exists(folder / "lns.db"))
-        ons_db_file_path = folder / "lns.db";
+    auto ons_db_file_path = chain_folder / "ons.db";
+    if (fs::exists(chain_folder / "lns.db"))
+        ons_db_file_path = chain_folder / "lns.db";
 
     if (m_nettype == network_type::FAKECHAIN && !command_line::get_arg(vm, arg_keep_fakechain))
         fs::remove(ons_db_file_path);
 
-    auto sqlite_db_file_path = folder / "sqlite.db";
+    auto sqlite_db_file_path = chain_folder / "sqlite.db";
     if (m_nettype == network_type::FAKECHAIN) {
         sqlite_db_file_path = ":memory:";
     }
@@ -813,14 +850,14 @@ bool core::init(
 
             db->close();
             log::warning(globallogcat, "Removing blockchain database");
-            db->remove_data_file(folder / db->get_db_name());
+            db->remove_data_file(chain_folder / db->get_db_name());
             db.reset();
             log::warning(globallogcat, "Removing sqlite.db");
             fs::remove(sqlite_db_file_path);
             log::warning(globallogcat, "Removing ons.db");
             fs::remove(ons_db_file_path);
 
-            db = init_blockchain_db(folder, vm);
+            db = init_blockchain_db(chain_folder, vm);
             if (!db)
                 return false;
         }
