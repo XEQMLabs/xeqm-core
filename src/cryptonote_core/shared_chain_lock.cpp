@@ -155,6 +155,50 @@ std::optional<lease_info> writer_lock::read(const fs::path& lock_file) {
     return info;
 }
 
+std::unique_ptr<writer_lock> writer_lock::adopt(fs::path lock_file, int fd) {
+    if (fd < 0) {
+        oxen::log::error(logcat, "shared-chain writer lock adopt: invalid fd {}", fd);
+        return nullptr;
+    }
+    // The fd must be a valid, open descriptor inherited across the execv. If it is not, the
+    // promotion lost the lock and must not proceed as a writer.
+    if (::fcntl(fd, F_GETFD) == -1) {
+        oxen::log::error(
+                logcat,
+                "shared-chain writer lock adopt: fd {} is not open ({}); lock not inherited",
+                fd,
+                std::strerror(errno));
+        return nullptr;
+    }
+    // Re-assert the write lock on the inherited fd. We already hold it (fcntl locks survive execve),
+    // so this succeeds for us and is a no-op; a failure means we do not actually hold it.
+    struct flock fl {};
+    fl.l_type = F_WRLCK;
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;
+    if (::fcntl(fd, F_SETLK, &fl) == -1) {
+        oxen::log::error(
+                logcat,
+                "shared-chain writer lock adopt: cannot confirm lock on fd {}: {}",
+                fd,
+                std::strerror(errno));
+        return nullptr;
+    }
+
+    std::unique_ptr<writer_lock> lock{new writer_lock{std::move(lock_file)}};
+    lock->m_fd = fd;  // take ownership of the inherited descriptor as-is (do not reopen)
+    lock->m_held = true;
+    lock->write_record();  // stamp a fresh lease for this new writer process (new instance id)
+    oxen::log::info(
+            logcat,
+            "shared-chain writer lock adopted on {} across promotion (instance {:016x}, fd {})",
+            lock->m_file,
+            lock->m_instance_id,
+            fd);
+    return lock;
+}
+
 #else  // _WIN32: the shared per-host chain is a Linux-fleet feature; stub so the daemon still builds.
 
 bool writer_lock::try_acquire() {
@@ -169,6 +213,9 @@ void writer_lock::release() {
 }
 std::optional<lease_info> writer_lock::read(const fs::path&) {
     return std::nullopt;
+}
+std::unique_ptr<writer_lock> writer_lock::adopt(fs::path, int) {
+    return nullptr;
 }
 
 #endif

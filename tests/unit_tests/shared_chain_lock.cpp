@@ -12,6 +12,7 @@
 #include <thread>
 
 #ifndef _WIN32
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -108,6 +109,69 @@ TEST(shared_chain_lock, cross_process_exclusion) {
     // Parent releases: now a child can acquire (and releases on _exit).
     lock.release();
     EXPECT_TRUE(child_tries_acquire());
+
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
+// adopt() takes ownership of an already-held lock fd (the promotion path, where the fd is inherited
+// across execv). Here we stand in for the pre-exec acquire by locking an fd ourselves, then adopt
+// it: the adopted lock reports held, carries a fresh instance id, and writes a readable lease.
+TEST(shared_chain_lock, adopt_inherited_fd) {
+    auto path = temp_lock_path("adopt");
+
+    // Stand in for the pre-exec reader: open without O_CLOEXEC and take the write lock.
+    int fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(fd, -1);
+    struct flock fl {};
+    fl.l_type = F_WRLCK;
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;
+    ASSERT_NE(::fcntl(fd, F_SETLK, &fl), -1);
+
+    auto lock = sc::writer_lock::adopt(path, fd);
+    ASSERT_TRUE(lock);  // adopt took ownership of fd
+    EXPECT_TRUE(lock->held());
+    EXPECT_EQ(lock->fd(), fd);
+    EXPECT_NE(lock->instance_id(), 0u);
+    uint64_t id = lock->instance_id();
+
+    // Another process must not be able to acquire while we (via the adopted fd) hold it.
+    auto child_can_acquire = [&path]() -> bool {
+        pid_t pid = ::fork();
+        if (pid == 0) {
+            sc::writer_lock child{path};
+            bool got = child.try_acquire();
+            _exit(got ? 0 : 1);
+        }
+        int status = 0;
+        ::waitpid(pid, &status, 0);
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    };
+    EXPECT_FALSE(child_can_acquire());
+
+    // The adopted lock rewrote the lease with the new instance id; release first, then read.
+    lock->release();
+    EXPECT_FALSE(lock->held());
+    auto info = sc::writer_lock::read(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->instance_id, id);
+    EXPECT_EQ(info->pid, static_cast<int64_t>(::getpid()));
+
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
+// adopt() rejects a descriptor it cannot use: a negative fd, or one that is not open.
+TEST(shared_chain_lock, adopt_rejects_invalid_fd) {
+    auto path = temp_lock_path("adopt-bad");
+    EXPECT_FALSE(sc::writer_lock::adopt(path, -1));
+
+    int fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(fd, -1);
+    ::close(fd);  // now closed: adopt must refuse it
+    EXPECT_FALSE(sc::writer_lock::adopt(path, fd));
 
     std::error_code ec;
     fs::remove(path, ec);

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <thread>
 
@@ -76,6 +77,15 @@ class writer_lock {
     // works while the writer holds it). Returns nullopt if the file is absent, empty, or unparseable.
     // Must not be called by a process that holds the lock (see the fcntl warning above).
     static std::optional<lease_info> read(const fs::path& lock_file);
+
+    // Promotion: adopt a lock fd inherited across an execv. The calling process must already hold
+    // the fcntl write lock on `fd` (the pre-exec reader acquired it; fcntl record locks survive
+    // execve). This does NOT reopen the file, because opening and later closing a second fd would
+    // drop the inherited lock (see the fcntl warning above); it takes ownership of `fd` as-is. It
+    // re-asserts the lock as a sanity check and writes a fresh lease for the new writer process.
+    // Returns nullptr if `fd` is not a valid, held lock. On success the returned lock owns `fd` and
+    // releases it on destruction, exactly like an acquired lock.
+    static std::unique_ptr<writer_lock> adopt(fs::path lock_file, int fd);
 
   private:
     void write_record();  // serialise the lease to the held fd at offset 0
