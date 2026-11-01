@@ -1034,6 +1034,10 @@ class core final {
     // When a promotable reader may first attempt the lock. A startup grace lets an eagerly-starting
     // keyless writer win a cold-start race, so service nodes defer to it (lock-preference).
     std::chrono::steady_clock::time_point m_promote_grace_until{};
+    // Test-only (--shared-chain-debug-stall-secs): seconds of uptime after which a writer stops
+    // heartbeating so the self-fence watchdog exits it; 0 = off. Used by the failover soak.
+    uint64_t m_shared_chain_debug_stall_secs{0};
+    bool m_shared_chain_debug_stalled{false};
 
     // Recently seen proof filter for uptime proofs so that we can drop repeated proofs without
     // processing them.

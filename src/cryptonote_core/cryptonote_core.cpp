@@ -263,6 +263,10 @@ static const command_line::arg_descriptor<uint64_t> arg_shared_chain_promote_gra
 // held) lock descriptor instead of opening and acquiring a fresh one. Not for direct use.
 static const command_line::arg_descriptor<int> arg_shared_chain_lock_fd = {
         "shared-chain-lock-fd", "", -1};
+// Test-only fault injection: a shared-chain writer stops heartbeating its self-fence watchdog after
+// this many seconds of uptime, so the watchdog fences and exits the process. Hidden; 0 = off.
+static const command_line::arg_descriptor<uint64_t> arg_shared_chain_debug_stall = {
+        "shared-chain-debug-stall-secs", "", 0};
 static const command_line::arg_descriptor<std::string> arg_reorg_notify = {
         "reorg-notify",
         "Run a program for each reorg, '%s' will be replaced by the split height, "
@@ -437,6 +441,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_shared_chain_promote);
     command_line::add_arg(desc, arg_shared_chain_promote_grace);
     command_line::add_arg(desc, arg_shared_chain_lock_fd);
+    command_line::add_arg(desc, arg_shared_chain_debug_stall);
 
     mocknet_add_cli_arg(desc);
     miner::init_options(desc);
@@ -465,6 +470,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_has_ip_check_disabled = get_arg(vm, arg_disable_ip_check);
     m_shared_chain_writer = get_arg(vm, arg_shared_chain_writer);
     m_shared_chain_promote = get_arg(vm, arg_shared_chain_promote);
+    m_shared_chain_debug_stall_secs = command_line::get_arg(vm, arg_shared_chain_debug_stall);
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
 
@@ -3291,6 +3297,23 @@ Use "help <command>" to see a command's documentation.
             // writer; a healthy loop keeps the lease fresh for readers to observe.
             if (m_writer_lock || m_fence_watchdog)
                 m_writer_lease_interval.do_call([this] {
+                    // TEST-ONLY fault injection (--shared-chain-debug-stall-secs, hidden, default
+                    // off): after the given uptime, stop renewing the lease and heartbeating the
+                    // watchdog to simulate a stalled writer main loop. The watchdog thread, which is
+                    // unaffected, then self-fences and exits the process. Used by the single-host
+                    // failover soak to exercise the stall case; a no-op in normal operation.
+                    if (m_shared_chain_debug_stall_secs > 0 &&
+                        static_cast<uint64_t>(time(nullptr) - get_start_time()) >=
+                                m_shared_chain_debug_stall_secs) {
+                        if (!m_shared_chain_debug_stalled) {
+                            log::warning(
+                                    globallogcat,
+                                    "DEBUG: shared-chain writer ceasing heartbeats to simulate a "
+                                    "stall (self-fence expected)");
+                            m_shared_chain_debug_stalled = true;
+                        }
+                        return true;  // skip renew + heartbeat
+                    }
                     if (m_writer_lock)
                         m_writer_lock->renew();
                     if (m_fence_watchdog)
