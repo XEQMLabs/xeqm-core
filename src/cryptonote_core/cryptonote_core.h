@@ -920,6 +920,11 @@ class core final {
     /// committed blocks to keep its in-memory service node list current with the tip. Only active
     /// when the chain DB was opened read-only (--db-readonly); a no-op otherwise.
     tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 1s};
+    /// interval at which a shared per-host chain writer (--shared-chain-writer) persists the recent
+    /// service node state, so a read-only reader always loads from a recent blob and only has a
+    /// small gap to replay. Distinct from the long-term archive guard above; only active on a
+    /// flagged writer.
+    tools::periodic_task m_sn_writer_store_interval{"sn writer store", 1min};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 
@@ -973,6 +978,7 @@ class core final {
     bool m_offline;
     bool m_pad_transactions;
     bool m_has_ip_check_disabled;
+    bool m_shared_chain_writer{false};  // --shared-chain-writer: persist SN state frequently for readers
 
     // Recently seen proof filter for uptime proofs so that we can drop repeated proofs without
     // processing them.

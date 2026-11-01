@@ -235,6 +235,11 @@ static const command_line::arg_descriptor<std::string> arg_block_notify = {
         "Run a program for each new block, '%s' will be replaced by the block hash",
         ""};
 static const command_line::arg_flag arg_prune_blockchain = {"prune-blockchain", "Prune blockchain"};
+static const command_line::arg_flag arg_shared_chain_writer = {
+        "shared-chain-writer",
+        "Mark this daemon as the writer for a shared per-host chain: it persists service node state "
+        "frequently so that read-only readers (--db-readonly) on the same host stay close to the tip. "
+        "Has no effect on daemons without shared-chain readers."};
 static const command_line::arg_descriptor<std::string> arg_reorg_notify = {
         "reorg-notify",
         "Run a program for each reorg, '%s' will be replaced by the split height, "
@@ -405,6 +410,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_history);
     command_line::add_arg(desc, arg_omq_quorumnet_public);
     command_line::add_arg(desc, arg_disable_ip_check);
+    command_line::add_arg(desc, arg_shared_chain_writer);
 
     mocknet_add_cli_arg(desc);
     miner::init_options(desc);
@@ -431,6 +437,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_pad_transactions = get_arg(vm, arg_pad_transactions);
     m_offline = get_arg(vm, arg_offline);
     m_has_ip_check_disabled = get_arg(vm, arg_disable_ip_check);
+    m_shared_chain_writer = get_arg(vm, arg_shared_chain_writer);
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
 
@@ -3018,12 +3025,20 @@ Use "help <command>" to see a command's documentation.
     // A shared per-host chain reader opens the DB read-only. store() persists derived SNL state and
     // must only run on the writer; the reader keeps its state current via refresh-to-tip instead.
     const bool db_read_only = blockchain.has_db() && blockchain.db().is_read_only();
-    if (!db_read_only)
+    if (!db_read_only) {
         m_sn_archive_state_interval.do_call([&snl = service_node_list] {
             snl.store();
             return true;
         });
-    else
+        // Shared per-host chain writer: persist the recent SN state often so a read-only reader on
+        // this host always loads from a recent blob and only replays a small gap to the tip. This
+        // runs only on a flagged writer, so ordinary daemons keep their 6-day store cadence.
+        if (m_shared_chain_writer)
+            m_sn_writer_store_interval.do_call([&snl = service_node_list] {
+                snl.store();
+                return true;
+            });
+    } else
         // Shared per-host chain reader: follow the writer by replaying its newly committed blocks
         // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse
         // reads current instead of frozen at the last persisted blob.
