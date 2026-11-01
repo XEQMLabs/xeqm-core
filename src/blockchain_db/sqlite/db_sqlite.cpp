@@ -88,14 +88,24 @@ using namespace fmt::literals;
 using db::bind_guts;
 using db::blob_guts;
 
-BlockchainSQLite::BlockchainSQLite(network_type nettype, std::filesystem::path db_path) :
-        db::Database{db_path, ""}, nettype{nettype} {
+BlockchainSQLite::BlockchainSQLite(network_type nettype, std::filesystem::path db_path, bool read_only) :
+        db::Database{
+                db_path,
+                "",
+                read_only ? db::Database::open_mode::read_only
+                          : db::Database::open_mode::read_write},
+        nettype{nettype} {
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
     height = 0;
 
-    if (!table_exists("batched_payments_accrued"))
-        create_schema();
-    upgrade_schema();
+    // A shared per-host chain reader opens this read-only (query_only) and shares the writer's WAL; the
+    // writer owns the schema, so a reader neither creates nor upgrades it (either would attempt a write
+    // on the read-only connection). The reader just loads the writer's current reward state below.
+    if (!read_only) {
+        if (!table_exists("batched_payments_accrued"))
+            create_schema();
+        upgrade_schema();
+    }
 
     height = prepared_get<int64_t>("SELECT height FROM batch_db_info");
 
