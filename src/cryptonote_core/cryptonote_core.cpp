@@ -3015,16 +3015,20 @@ Use "help <command>" to see a command's documentation.
         m_starter_message_showed = true;
     }
 
-    m_txpool_auto_relayer.do_call([this] { return relay_txpool_transactions(); });
+    // A shared per-host chain reader opens the DB read-only. The mempool lives in that shared DB and
+    // is owned by the writer, so a reader neither relays it (relay updates each tx's last_relayed
+    // bookkeeping, a write) nor runs its on_idle maintenance.
+    const bool db_read_only = blockchain.has_db() && blockchain.db().is_read_only();
+    if (!db_read_only)
+        m_txpool_auto_relayer.do_call([this] { return relay_txpool_transactions(); });
     m_service_node_vote_relayer.do_call([this] { return relay_service_node_votes(); });
     m_check_disk_space_interval.do_call([this] { return check_disk_space(); });
     m_sn_proof_cleanup_interval.do_call([&snl = service_node_list] {
         snl.cleanup_proofs();
         return true;
     });
-    // A shared per-host chain reader opens the DB read-only. store() persists derived SNL state and
-    // must only run on the writer; the reader keeps its state current via refresh-to-tip instead.
-    const bool db_read_only = blockchain.has_db() && blockchain.db().is_read_only();
+    // store() persists derived SNL state and must only run on the writer; the reader keeps its
+    // state current via refresh-to-tip instead.
     if (!db_read_only) {
         m_sn_archive_state_interval.do_call([&snl = service_node_list] {
             snl.store();
