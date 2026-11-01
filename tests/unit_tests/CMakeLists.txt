@@ -63,6 +63,7 @@ add_executable(unit_tests
   net.cpp
   node_server.cpp
   notify.cpp
+  shared_chain_lock.cpp
   output_distribution.cpp
   parse_amount.cpp
   parse_address.cpp
