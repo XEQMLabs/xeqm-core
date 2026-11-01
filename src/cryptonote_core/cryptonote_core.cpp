@@ -655,6 +655,43 @@ bool core::init(
     if (m_nettype == network_type::FAKECHAIN)
         folder /= "fake";
 
+    // Shared per-host chain writer: take the host-local writer lock before opening the chain
+    // read-write, so exactly one daemon on the host ever writes it. The lock lives in the shared data
+    // directory, so every node on the host contends for the same one. The kernel frees it when the
+    // writer dies, and the self-fence watchdog exits a stalled writer, so either way the lock frees
+    // for a reader to promote.
+    if (m_shared_chain_writer) {
+        if (command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0) {
+            log::error(
+                    globallogcat, "--shared-chain-writer and --db-readonly cannot be used together");
+            return false;
+        }
+        auto lock_path = folder / "writer.lock";
+        m_writer_lock = std::make_unique<shared_chain::writer_lock>(lock_path);
+        if (!m_writer_lock->try_acquire()) {
+            log::error(
+                    globallogcat,
+                    "Another daemon already holds the shared per-host chain writer lock ({}); this "
+                    "daemon cannot be the writer. Run it as a reader with --db-readonly instead.",
+                    lock_path);
+            return false;
+        }
+        log::info(
+                globallogcat, "Shared per-host chain: this daemon holds the writer lock ({})", lock_path);
+        // Self-fence: a dedicated thread exits the process if the writer stops making progress for
+        // longer than the fence timeout, which releases the lock (and the LMDB write mutex) so a
+        // reader can promote. Exit hard, skipping any write-bearing clean shutdown.
+        using namespace std::chrono_literals;
+        m_fence_watchdog = std::make_unique<shared_chain::fence_watchdog>(
+                15s, 2s, [] {
+                    log::error(
+                            globallogcat,
+                            "Shared per-host chain writer self-fencing (stalled); exiting now");
+                    std::_Exit(70);
+                });
+        m_fence_watchdog->start();
+    }
+
     auto db = init_blockchain_db(folder, vm);
     if (!db)
         return false;
@@ -1431,6 +1468,10 @@ void core::deinit() {
 #ifdef ENABLE_SYSTEMD
     sd_notify(0, "STOPPING=1\nSTATUS=Shutting down");
 #endif
+    // Stop the self-fence watchdog first: a clean shutdown may take longer than the fence timeout
+    // (it flushes state), and we must not let the watchdog fence a deliberate shutdown.
+    if (m_fence_watchdog)
+        m_fence_watchdog->stop();
     if (m_quorumnet_state)
         quorumnet_delete(m_quorumnet_state);
     m_omq.reset();
@@ -1438,6 +1479,10 @@ void core::deinit() {
     miner.stop();
     mempool.deinit();
     blockchain.deinit();
+    // Release the writer lock last, after the final writes are flushed and the chain is closed, so a
+    // reader only promotes once this writer is truly done writing.
+    if (m_writer_lock)
+        m_writer_lock->release();
 }
 //-----------------------------------------------------------------------------------------------
 void core::test_drop_download() {
@@ -3037,11 +3082,23 @@ Use "help <command>" to see a command's documentation.
         // Shared per-host chain writer: persist the recent SN state often so a read-only reader on
         // this host always loads from a recent blob and only replays a small gap to the tip. This
         // runs only on a flagged writer, so ordinary daemons keep their 6-day store cadence.
-        if (m_shared_chain_writer)
+        if (m_shared_chain_writer) {
             m_sn_writer_store_interval.do_call([&snl = service_node_list] {
                 snl.store();
                 return true;
             });
+            // Renew the writer lease and heartbeat the self-fence watchdog. Because this runs on the
+            // core idle loop, a stalled main loop stops heartbeating and the watchdog fences the
+            // writer; a healthy loop keeps the lease fresh for readers to observe.
+            if (m_writer_lock || m_fence_watchdog)
+                m_writer_lease_interval.do_call([this] {
+                    if (m_writer_lock)
+                        m_writer_lock->renew();
+                    if (m_fence_watchdog)
+                        m_fence_watchdog->heartbeat();
+                    return true;
+                });
+        }
     } else
         // Shared per-host chain reader: follow the writer by replaying its newly committed blocks
         // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse

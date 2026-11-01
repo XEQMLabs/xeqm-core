@@ -44,6 +44,7 @@
 #include "service_node_list.h"
 #include "service_node_quorum_cop.h"
 #include "service_node_voting.h"
+#include "shared_chain_lock.h"
 #include "tx_pool.h"
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
@@ -925,6 +926,9 @@ class core final {
     /// small gap to replay. Distinct from the long-term archive guard above; only active on a
     /// flagged writer.
     tools::periodic_task m_sn_writer_store_interval{"sn writer store", 1min};
+    /// interval at which a shared per-host chain writer renews its lease and heartbeats the
+    /// self-fence watchdog. Must be shorter than the fence timeout below.
+    tools::periodic_task m_writer_lease_interval{"shared-chain lease", 2s};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 
@@ -978,7 +982,11 @@ class core final {
     bool m_offline;
     bool m_pad_transactions;
     bool m_has_ip_check_disabled;
-    bool m_shared_chain_writer{false};  // --shared-chain-writer: persist SN state frequently for readers
+    bool m_shared_chain_writer{false};  // --shared-chain-writer: this daemon is the shared-chain writer
+    // Shared per-host chain writer leadership (held only when m_shared_chain_writer and the lock was
+    // acquired). The watchdog exits the process if the writer stalls, so the lock frees for a reader.
+    std::unique_ptr<shared_chain::writer_lock> m_writer_lock;
+    std::unique_ptr<shared_chain::fence_watchdog> m_fence_watchdog;
 
     // Recently seen proof filter for uptime proofs so that we can drop repeated proofs without
     // processing them.
