@@ -79,6 +79,10 @@ int main(int argc, char const* argv[]) {
 
         tools::on_startup();
 
+        // Capture the original command line so a shared per-host chain reader can rebuild it to
+        // re-exec itself as the writer on promotion (see cryptonote::core::try_promote).
+        cryptonote::core::set_process_argv(argc, argv);
+
         epee::string_tools::set_module_name_and_folder(argv[0]);
 
         auto opt_size = command_line::boost_option_sizes();

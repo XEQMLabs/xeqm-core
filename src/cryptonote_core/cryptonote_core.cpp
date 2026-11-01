@@ -45,7 +45,15 @@ extern "C" {
 #include <algorithm>
 #include <cctype>
 #include <csignal>
+#include <cstdlib>
+#include <cstring>
 #include <unordered_set>
+#include <vector>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "blockchain_db/blockchain_db.h"
 #include "blockchain_db/sqlite/db_sqlite.h"
@@ -240,6 +248,21 @@ static const command_line::arg_flag arg_shared_chain_writer = {
         "Mark this daemon as the writer for a shared per-host chain: it persists service node state "
         "frequently so that read-only readers (--db-readonly) on the same host stay close to the tip. "
         "Has no effect on daemons without shared-chain readers."};
+static const command_line::arg_flag arg_shared_chain_promote = {
+        "shared-chain-promote",
+        "For a read-only shared per-host chain reader (--db-readonly): poll the host-local writer "
+        "lock and, when the writer is gone and the lock can be taken, re-exec this daemon in writer "
+        "mode to take over the chain. Has no effect without --db-readonly."};
+static const command_line::arg_descriptor<uint64_t> arg_shared_chain_promote_grace = {
+        "shared-chain-promote-grace",
+        "Seconds a promotable reader waits after startup before first attempting the writer lock, so "
+        "an eagerly-started keyless writer wins a cold-start race and service nodes defer to it. "
+        "Only meaningful with --shared-chain-promote.",
+        30};
+// Internal: set by the promotion re-exec so the new writer process adopts the inherited (already
+// held) lock descriptor instead of opening and acquiring a fresh one. Not for direct use.
+static const command_line::arg_descriptor<int> arg_shared_chain_lock_fd = {
+        "shared-chain-lock-fd", "", -1};
 static const command_line::arg_descriptor<std::string> arg_reorg_notify = {
         "reorg-notify",
         "Run a program for each reorg, '%s' will be replaced by the split height, "
@@ -411,6 +434,9 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_omq_quorumnet_public);
     command_line::add_arg(desc, arg_disable_ip_check);
     command_line::add_arg(desc, arg_shared_chain_writer);
+    command_line::add_arg(desc, arg_shared_chain_promote);
+    command_line::add_arg(desc, arg_shared_chain_promote_grace);
+    command_line::add_arg(desc, arg_shared_chain_lock_fd);
 
     mocknet_add_cli_arg(desc);
     miner::init_options(desc);
@@ -438,6 +464,7 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_offline = get_arg(vm, arg_offline);
     m_has_ip_check_disabled = get_arg(vm, arg_disable_ip_check);
     m_shared_chain_writer = get_arg(vm, arg_shared_chain_writer);
+    m_shared_chain_promote = get_arg(vm, arg_shared_chain_promote);
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
 
@@ -655,29 +682,55 @@ bool core::init(
     if (m_nettype == network_type::FAKECHAIN)
         folder /= "fake";
 
+    // The host-local writer lock path; shared by the writer block and the reader promotion monitor.
+    m_writer_lock_path = folder / "writer.lock";
+
     // Shared per-host chain writer: take the host-local writer lock before opening the chain
     // read-write, so exactly one daemon on the host ever writes it. The lock lives in the shared data
     // directory, so every node on the host contends for the same one. The kernel frees it when the
     // writer dies, and the self-fence watchdog exits a stalled writer, so either way the lock frees
     // for a reader to promote.
     if (m_shared_chain_writer) {
-        if (command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0) {
+        // A promotion re-exec passes the inherited, already-held lock fd (>= 0); the new writer
+        // adopts it instead of acquiring, so leadership is continuous across the execv. A normal
+        // writer start has no inherited fd and acquires the lock here.
+        const int inherited_lock_fd = command_line::get_arg(vm, arg_shared_chain_lock_fd);
+        if (inherited_lock_fd < 0 && command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0) {
             log::error(
                     globallogcat, "--shared-chain-writer and --db-readonly cannot be used together");
             return false;
         }
-        auto lock_path = folder / "writer.lock";
-        m_writer_lock = std::make_unique<shared_chain::writer_lock>(lock_path);
-        if (!m_writer_lock->try_acquire()) {
-            log::error(
+        const auto& lock_path = m_writer_lock_path;
+        if (inherited_lock_fd >= 0) {
+            m_writer_lock = shared_chain::writer_lock::adopt(lock_path, inherited_lock_fd);
+            if (!m_writer_lock) {
+                log::error(
+                        globallogcat,
+                        "Shared per-host chain promotion re-exec did not inherit the writer lock on "
+                        "fd {}; cannot become the writer.",
+                        inherited_lock_fd);
+                return false;
+            }
+            log::info(
                     globallogcat,
-                    "Another daemon already holds the shared per-host chain writer lock ({}); this "
-                    "daemon cannot be the writer. Run it as a reader with --db-readonly instead.",
+                    "Shared per-host chain: promoted to writer, adopted the inherited lock ({})",
                     lock_path);
-            return false;
+        } else {
+            m_writer_lock = std::make_unique<shared_chain::writer_lock>(lock_path);
+            if (!m_writer_lock->try_acquire()) {
+                log::error(
+                        globallogcat,
+                        "Another daemon already holds the shared per-host chain writer lock ({}); "
+                        "this daemon cannot be the writer. Run it as a reader with --db-readonly "
+                        "instead.",
+                        lock_path);
+                return false;
+            }
+            log::info(
+                    globallogcat,
+                    "Shared per-host chain: this daemon holds the writer lock ({})",
+                    lock_path);
         }
-        log::info(
-                globallogcat, "Shared per-host chain: this daemon holds the writer lock ({})", lock_path);
         // Self-fence: a dedicated thread exits the process if the writer stops making progress for
         // longer than the fence timeout, which releases the lock (and the LMDB write mutex) so a
         // reader can promote. Exit hard, skipping any write-bearing clean shutdown.
@@ -690,6 +743,14 @@ bool core::init(
                     std::_Exit(70);
                 });
         m_fence_watchdog->start();
+    }
+
+    // A promotable reader (--db-readonly --shared-chain-promote) defers its first lock attempt by a
+    // startup grace so a keyless writer that starts eagerly wins the lock on a simultaneous host
+    // start; the service nodes then promote only if that writer is later lost (lock-preference).
+    if (m_shared_chain_promote) {
+        const uint64_t grace_s = command_line::get_arg(vm, arg_shared_chain_promote_grace);
+        m_promote_grace_until = std::chrono::steady_clock::now() + std::chrono::seconds{grace_s};
     }
 
     auto db = init_blockchain_db(folder, vm);
@@ -1061,6 +1122,10 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
     uint64_t blocks_threads = command_line::get_arg(vm, arg_prep_blocks_threads);
     bool db_salvage = command_line::get_arg(vm, cryptonote::arg_db_salvage) != 0;
     bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
+    // A shared per-host chain promotion re-exec opens the chain read-write even if --db-readonly
+    // still lingers (for example from a config file); the inherited lock fd marks it as the writer.
+    if (command_line::get_arg(vm, arg_shared_chain_lock_fd) >= 0)
+        db_readonly = false;
 
     // make sure the data directory exists, and try to lock it
     if (std::error_code ec;
@@ -1174,6 +1239,131 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
             blocks_threads, sync_on_blocks, sync_threshold, sync_mode, fast_sync);
 
     return db;
+}
+
+// Process argv captured at startup, used only to rebuild the command line for a shared per-host
+// chain promotion re-exec (try_promote -> reexec_as_writer). A function-local static sidesteps any
+// static-initialisation-order concern; it is written once from main() before init.
+static std::vector<std::string>& saved_process_argv() {
+    static std::vector<std::string> argv;
+    return argv;
+}
+
+void core::set_process_argv(int argc, char const* const* argv) {
+    auto& store = saved_process_argv();
+    store.clear();
+    store.reserve(argc > 0 ? static_cast<size_t>(argc) : 0);
+    for (int i = 0; i < argc; i++)
+        store.emplace_back(argv[i] ? argv[i] : "");
+}
+
+bool core::try_promote() {
+#ifdef _WIN32
+    return true;  // the shared per-host chain is a Linux-fleet feature
+#else
+    if (!m_promote_lock)
+        m_promote_lock = std::make_unique<shared_chain::writer_lock>(m_writer_lock_path);
+
+    if (!m_promote_lock->try_acquire())
+        return true;  // a live writer still holds the lock; stay a reader (no preemption)
+
+    // The lock was free and is now held by this reader: the writer is gone. Promote by re-execing
+    // into writer mode, carrying the still-held, non-close-on-exec lock fd across the execv so
+    // leadership is continuous with no window for a second acquirer.
+    const int lock_fd = m_promote_lock->fd();
+    log::warning(
+            globallogcat,
+            "Shared per-host chain: writer lock is free and now held by this reader; promoting to "
+            "writer via re-exec (lock fd {})",
+            lock_fd);
+    reexec_as_writer(lock_fd);  // does not return on success
+
+    // Only here if the re-exec failed (could not resolve the binary or execv errored). We hold the
+    // lock but cannot become the writer. Release it so another daemon can take over, and stop
+    // trying to promote so we do not hot-loop re-acquiring the lock every poll; we keep running as
+    // a correct read-only reader.
+    log::error(
+            globallogcat,
+            "Shared per-host chain promotion re-exec failed; releasing the writer lock and "
+            "continuing as a read-only reader");
+    m_promote_lock->release();
+    m_shared_chain_promote = false;
+    return true;
+#endif
+}
+
+void core::reexec_as_writer(int lock_fd) {
+#ifndef _WIN32
+    // Make sure the lock fd survives the execv (it is opened without O_CLOEXEC; clear the flag
+    // defensively in case that ever changes).
+    if (int flags = ::fcntl(lock_fd, F_GETFD); flags != -1)
+        ::fcntl(lock_fd, F_SETFD, flags & ~FD_CLOEXEC);
+
+    const auto& saved = saved_process_argv();
+    if (saved.empty()) {
+        log::error(
+                globallogcat,
+                "Shared per-host chain promotion: no saved argv (set_process_argv was not called); "
+                "cannot re-exec safely");
+        return;
+    }
+
+    // Resolve our own binary: prefer the real running image via /proc/self/exe, fall back to
+    // argv[0].
+    std::string exe;
+    {
+        char buf[4096];
+        ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n > 0) {
+            buf[n] = '\0';
+            exe = buf;
+        }
+    }
+    if (exe.empty())
+        exe = saved[0];
+
+    // Rebuild the command line: drop the reader-only options and add the writer ones plus the
+    // inherited lock fd. Skip --db-readonly, --shared-chain-promote, --shared-chain-promote-grace
+    // (and its separate value token), and any prior --shared-chain-lock-fd (and its value).
+    std::vector<std::string> args;
+    args.reserve(saved.size() + 2);
+    args.push_back(saved[0]);
+    for (size_t i = 1; i < saved.size(); i++) {
+        const std::string& a = saved[i];
+        if (a == "--db-readonly" || a == "--shared-chain-promote")
+            continue;
+        if (a == "--shared-chain-promote-grace" || a == "--shared-chain-lock-fd") {
+            i++;  // also skip the following value token
+            continue;
+        }
+        if (a.rfind("--shared-chain-promote-grace=", 0) == 0 ||
+            a.rfind("--shared-chain-lock-fd=", 0) == 0)
+            continue;
+        args.push_back(a);
+    }
+    args.push_back("--shared-chain-writer");
+    args.push_back("--shared-chain-lock-fd=" + std::to_string(lock_fd));
+
+    log::warning(
+            globallogcat, "Shared per-host chain: re-execing {} as the shared-chain writer", exe);
+    oxen::log::flush();
+
+    std::vector<char*> cargv;
+    cargv.reserve(args.size() + 1);
+    for (auto& s : args)
+        cargv.push_back(const_cast<char*>(s.c_str()));
+    cargv.push_back(nullptr);
+
+    ::execv(exe.c_str(), cargv.data());
+    // execv only returns on failure.
+    log::error(
+            globallogcat,
+            "Shared per-host chain promotion execv({}) failed: {}",
+            exe,
+            std::strerror(errno));
+#else
+    (void)lock_fd;
+#endif
 }
 
 /// Loads a key from disk, if it exists, otherwise generates a new key pair and saves it to disk.
@@ -3099,11 +3289,19 @@ Use "help <command>" to see a command's documentation.
                     return true;
                 });
         }
-    } else
+    } else {
         // Shared per-host chain reader: follow the writer by replaying its newly committed blocks
         // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse
         // reads current instead of frozen at the last persisted blob.
         m_sn_reader_refresh_interval.do_call([this] { return blockchain.refresh_sn_list_readonly(); });
+
+        // Promotion: once the startup grace has elapsed, poll the writer lock and re-exec into
+        // writer mode if the writer is gone and the lock can be taken (step 3 of the failover
+        // design). try_promote never returns on a successful promotion.
+        if (m_shared_chain_promote &&
+            std::chrono::steady_clock::now() >= m_promote_grace_until)
+            m_promote_poll_interval.do_call([this] { return try_promote(); });
+    }
 
     std::chrono::seconds lifetime{time(nullptr) - get_start_time()};
     if (m_service_node &&

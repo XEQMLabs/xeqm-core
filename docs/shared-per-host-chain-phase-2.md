@@ -181,8 +181,21 @@ if ever.
    fences the writer and exits), refuses to start if the lock is held, and releases the lock on clean
    shutdown after the final writes. Validated on the testnet across a second-writer refusal, a reader
    attaching alongside, and the lock freeing on both clean shutdown and crash.
-3. Reader promotion: the monitor plus the re-exec helper that restarts the daemon in writer mode with
-   the lock descriptor held across the `execv`.
+3. Reader promotion. Done: a read-only reader started with `--shared-chain-promote` runs a promotion
+   monitor on the idle loop (`T_poll` 3s) that, after a startup grace, attempts a non-blocking
+   acquire of the writer lock. While a healthy writer holds it the attempt fails and the daemon stays
+   a reader (no preemption). When it succeeds, the daemon re-execs its own binary (resolved from
+   `/proc/self/exe`) in writer mode: it clears close-on-exec on the held lock fd, rebuilds the command
+   line (dropping `--db-readonly`, `--shared-chain-promote` and its grace, adding
+   `--shared-chain-writer --shared-chain-lock-fd=<fd>`), and `execv`s, so the still-held lock
+   descriptor is inherited and leadership is continuous with no second-acquirer window. The new image
+   adopts the inherited fd (`writer_lock::adopt`) instead of acquiring a fresh one, which avoids the
+   fcntl gotcha where opening or closing a second descriptor to the file would drop the lock, and it
+   opens the chain read-write even if `--db-readonly` lingers from a config file. The startup grace
+   (`--shared-chain-promote-grace`, default 30s) is the lock-preference: an eagerly started keyless
+   writer wins a cold-start race while service node readers defer and promote only if it is later
+   lost. If the re-exec itself fails (binary unresolved or `execv` error) the daemon releases the lock
+   and continues as a correct read-only reader so another daemon can take over rather than hot-looping.
 4. A single-host soak on the testnet: one writer, several readers, kill and stall the writer, and
    confirm exactly-one-writer holds across clean exit, crash, and stall, with bounded failover time
    and no two-writer window.
@@ -190,15 +203,18 @@ if ever.
 
 ## Open questions
 
-- Lock preference. On a mixed host the keyless public node or seed should hold the lock in steady
-  state and the service nodes should defer to it, promoting only if it is lost. This needs a
-  preference, so a service node does not win the lock ahead of the keyless daemon on a normal start.
-  Options: the keyless daemon takes the lock eagerly while service nodes wait a short grace period
-  before trying; or an explicit per-node preference flag. To be decided at implementation.
-- Startup policy when the lock is already held. Implemented for now as refuse-and-exit: a daemon
-  started with `--shared-chain-writer` that cannot take the lock logs that another writer holds it and
-  fails to start, telling the operator to run it with `--db-readonly` instead. Falling back to reader
-  is friendlier but only useful once reader promotion exists (step 3), so a fallen-back daemon can
-  actively promote rather than sit as a permanent reader; revisit then.
+- Lock preference. Resolved for now as the startup grace: the keyless public node or seed runs with
+  `--shared-chain-writer` and takes the lock eagerly, while service node readers run with
+  `--shared-chain-promote --shared-chain-promote-grace=<seconds>` and defer their first lock attempt
+  by that grace, so on a simultaneous host start the keyless daemon wins and the service nodes promote
+  only if it is later lost. An explicit per-node preference flag was considered and not needed: the
+  grace is enough while the keyless daemon starts eagerly. The grace only affects a cold-start race;
+  real failover (the writer dies later) is unaffected because the grace has long since elapsed.
+- Startup policy when the lock is already held. A daemon started with `--shared-chain-writer` that
+  cannot take the lock still refuses and exits, telling the operator to run it with `--db-readonly`
+  instead. Now that reader promotion exists (step 3), the friendlier path is to run would-be writers
+  as `--db-readonly --shared-chain-promote` so a daemon that cannot take the lock actively promotes
+  when the writer is lost rather than failing to start; the refuse-and-exit remains for a daemon
+  explicitly told to be the writer.
 - Exact values for `T_renew`, `T_fence`, the reader staleness threshold and `T_poll`, set during the
   soak.
