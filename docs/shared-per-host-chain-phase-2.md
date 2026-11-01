@@ -176,8 +176,11 @@ if ever.
 1. The lock and lease module: acquire, renew, read, and the self-fence watchdog, with the file format
    and the host-local path, built on `tools::file_locker` (`src/common/file.h`). Standalone and
    unit-testable without the daemon.
-2. The writer: a normal daemon that takes the lock at startup, runs the lease and watchdog, and
-   refuses to write (falls back to reader, or exits, per the startup policy) if it cannot take it.
+2. The writer. Done: `--shared-chain-writer` takes the lock before opening the chain read-write,
+   renews the lease and heartbeats the self-fence watchdog from the idle loop (so a stalled loop
+   fences the writer and exits), refuses to start if the lock is held, and releases the lock on clean
+   shutdown after the final writes. Validated on the testnet across a second-writer refusal, a reader
+   attaching alongside, and the lock freeing on both clean shutdown and crash.
 3. Reader promotion: the monitor plus the re-exec helper that restarts the daemon in writer mode with
    the lock descriptor held across the `execv`.
 4. A single-host soak on the testnet: one writer, several readers, kill and stall the writer, and
@@ -192,8 +195,10 @@ if ever.
   preference, so a service node does not win the lock ahead of the keyless daemon on a normal start.
   Options: the keyless daemon takes the lock eagerly while service nodes wait a short grace period
   before trying; or an explicit per-node preference flag. To be decided at implementation.
-- Startup policy when the lock is already held: should a daemon started as a writer but finding the
-  lock taken exit, or fall back to running as a reader. Falling back is friendlier for a host where
-  the operator starts several daemons without designating the writer.
+- Startup policy when the lock is already held. Implemented for now as refuse-and-exit: a daemon
+  started with `--shared-chain-writer` that cannot take the lock logs that another writer holds it and
+  fails to start, telling the operator to run it with `--db-readonly` instead. Falling back to reader
+  is friendlier but only useful once reader promotion exists (step 3), so a fallen-back daemon can
+  actively promote rather than sit as a permanent reader; revisit then.
 - Exact values for `T_renew`, `T_fence`, the reader staleness threshold and `T_poll`, set during the
   soak.
