@@ -2025,7 +2025,9 @@ bool tx_memory_pool::fill_block_template(
             log::error(logcat, "Failed to check transaction readiness: {}", e.what());
             // continue, not fatal
         }
-        if (memcmp(&original_meta, &meta, sizeof(meta))) {
+        // A read-only reader (shared per-host chain) must not write the shared txpool; the meta
+        // update is only a caching optimisation owned by the writer, so skip it here.
+        if (memcmp(&original_meta, &meta, sizeof(meta)) && !m_blockchain.db().is_read_only()) {
             try {
                 m_blockchain.db().update_txpool_tx(txid, meta);
             } catch (const std::exception& e) {
