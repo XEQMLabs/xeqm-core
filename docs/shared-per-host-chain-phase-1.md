@@ -110,6 +110,14 @@ On `feat/shared-chain-reader` (off `main`):
   `tx_memory_pool::init` loads the pool read-only without removing corrupt entries. The tx-acceptance
   and block-add/removal write paths are not reached by a reader that neither ingests txs over P2P nor
   adds blocks.
+- Writer map growth (`MDB_MAP_RESIZED`). No new code is needed: when the writer grows the LMDB map,
+  the reader's read-transaction paths (`block_rtxn_start` begin and renew) already route through the
+  `lmdb_txn_begin` / `lmdb_txn_renew` wrappers that catch `MDB_MAP_RESIZED`, adopt the new size
+  (`mdb_env_set_mapsize(env, 0)`), and retry. Validated on a build with an artificially tiny map: a
+  read-only reader stayed correct and crash-free across eighty-plus writer map resizes over about
+  thirteen minutes, tracking the writer's tip exactly and returning identical block hashes and an
+  identical reported database size for data that had grown past the reader's initial map, with no
+  read errors.
 
 Runtime-validated on the signer-bootstrap testnet against a chain with three registered service nodes.
 A read-only, network-isolated reader attached to the live writer's data directory and its service node
@@ -132,7 +140,6 @@ even a from-genesis replay stays write-free.
 
 ## Remaining in Phase 1
 
-- `MDB_MAP_RESIZED`. Exercise a reader across a writer mapsize growth and handle the resize.
 - A reader acting as a Pulse leader. The reader's in-memory sorted pool is loaded at init and does not
   advance as the writer changes the pool, which is irrelevant to a pure reader but matters once a reader
   assembles block templates. That belongs with the reader-as-service-node work, alongside quorumnet and
