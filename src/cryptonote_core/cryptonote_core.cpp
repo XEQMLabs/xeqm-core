@@ -683,7 +683,16 @@ bool core::init(
         folder /= "fake";
 
     // The host-local writer lock path; shared by the writer block and the reader promotion monitor.
+    // The data folder may not exist yet on a fresh start, and the lock is taken before the chain DB
+    // (which would otherwise create it), so make sure it exists first.
     m_writer_lock_path = folder / "writer.lock";
+    if (m_shared_chain_writer) {
+        if (std::error_code ec;
+            !fs::is_directory(folder, ec) && !fs::create_directories(folder, ec) && ec) {
+            log::error(globallogcat, "Failed to create data directory {}: {}", folder, ec.message());
+            return false;
+        }
+    }
 
     // Shared per-host chain writer: take the host-local writer lock before opening the chain
     // read-write, so exactly one daemon on the host ever writes it. The lock lives in the shared data
