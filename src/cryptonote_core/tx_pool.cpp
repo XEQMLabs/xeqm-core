@@ -317,6 +317,13 @@ bool tx_memory_pool::add_tx(
     // find_transactions et al. (every other tx_pool method uses tools::unique_locks).
     // ABBA observed on seed-2 + seed-5 under inbound P2P NOTIFY_NEW_TRANSACTIONS traffic.
     auto locks = tools::unique_locks(m_transactions_lock, m_blockchain);
+    // A shared per-host chain reader must not write the shared txpool (the host writer owns it, and
+    // this daemon reads the pool from the shared database). Refuse to add on a read-only database,
+    // which covers every add path (p2p, blink, and any other caller) at the write chokepoint.
+    if (m_blockchain.db().is_read_only()) {
+        tvc.m_verifivation_failed = false;
+        return false;
+    }
     if (blob.size() == 0) {
         oxen::log::error(logcat, "Could not add to txpool, blob is empty of tx: {}", id);
         throw oxen::traced<std::runtime_error>("Could not add to txpool, blob empty");

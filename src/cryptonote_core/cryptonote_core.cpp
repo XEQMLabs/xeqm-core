@@ -1991,7 +1991,11 @@ std::vector<cryptonote::tx_verification_batch_info> core::handle_incoming_txs(
         const std::vector<std::string>& tx_blobs, const tx_pool_options& opts) {
     auto lock = incoming_tx_lock();
     auto parsed = parse_incoming_txs(tx_blobs, opts);
-    handle_parsed_txs(parsed, opts);
+    // A shared per-host chain reader must not add transactions to the shared txpool: the host writer
+    // accepts and stores them, and this daemon reads the pool from the shared database. Parsing is
+    // read-only (it returns a well-formed result); only the pool insert is skipped.
+    if (!blockchain.db().is_read_only())
+        handle_parsed_txs(parsed, opts);
     return parsed;
 }
 //-----------------------------------------------------------------------------------------------
