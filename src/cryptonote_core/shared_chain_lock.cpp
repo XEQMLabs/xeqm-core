@@ -6,6 +6,8 @@
 #include <cstring>
 #include <random>
 
+#include <fmt/std.h>
+
 #include "logging/oxen_logger.h"
 
 #ifndef _WIN32
