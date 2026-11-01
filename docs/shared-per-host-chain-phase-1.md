@@ -86,27 +86,32 @@ On `feat/shared-chain-reader` (off `main`):
   periodic tasks.
 - `service_node_list::process_block_readonly()` and `Blockchain::refresh_sn_list_readonly()`, wired for
   both the initial catch-up and the one-second follow.
+- A `--shared-chain-writer` flag. A daemon started with it persists the recent service-node-list state
+  once a minute (the cheap short-term store, separate from the long-term archive guard), so a reader on
+  the host always loads from a recent blob. It is gated behind the flag, so ordinary fleet daemons keep
+  their existing store cadence unchanged.
 
 Runtime-validated on the signer-bootstrap testnet against a chain with three registered service nodes.
 A read-only, network-isolated reader attached to the live writer's data directory and its service node
 list tracked the writer exactly: at a shared tip the reader and writer reported identical per-node
 reward heights, and after the tip advanced they stayed identical with the same top block hash. No write
-errors occurred, confirming the guards. This is the state that Phase 0 had shown frozen.
+errors occurred, confirming the guards. This is the state that Phase 0 had shown frozen. With
+`--shared-chain-writer` on the writer, a reader attaching to a writer that had been running for minutes
+without a restart loaded from a blob only about one cadence interval behind the tip and then caught the
+small remainder, rather than loading an old blob or an empty state.
 
-## Known limitation of the first cut
+## Known limitation
 
-If a reader's `load()` finds no persisted service-node-list blob, the list resets to just below the
-first service-node hard fork, and refresh-to-tip would then try to replay from near genesis, crossing
-the hf21 and hf22-fixup boundary heights where `process_block()` writes the reward SQLite. On a
-read-only reward database that write fails. On a live chain past those forks the writer always holds a
-post-fork blob, so a reader always starts above the boundaries and never replays across them. Making the
-from-empty case robust is part of closing the writer-cadence item below (ensure a recent blob exists),
-optionally with the reader passing a null reward-SQLite handle at exactly those two heights.
+If a reader's `load()` finds no persisted service-node-list blob at all, the list resets to just below
+the first service-node hard fork, and refresh-to-tip would then try to replay from near genesis,
+crossing the hf21 and hf22-fixup boundary heights where `process_block()` writes the reward SQLite; on a
+read-only reward database that write fails. `--shared-chain-writer` makes this case not arise in
+practice, since the writer always holds a recent post-fork blob for the reader to start from. A belt-and
+-braces follow-up is to have the reader pass a null reward-SQLite handle at exactly those two heights so
+even a from-genesis replay stays write-free.
 
 ## Remaining in Phase 1
 
-- Writer-side cadence. Have the writer persist a recent service-node-list blob frequently, so a reader
-  always starts from a recent point and the from-empty replay above is never needed.
 - ONS read-only refresh. The ONS database already supports a read-only mode; give the reader the same
   replay-to-tip for ONS state that it now has for the service node list.
 - Mempool read-only. The mempool lives in the chain database's txpool tables and is writer-owned. Confirm
