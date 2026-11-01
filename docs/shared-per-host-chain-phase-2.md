@@ -314,16 +314,23 @@ keyless, p2p-isolated readers of the earlier soak):
 - Rollback was exercised: a reader reverted to its own unit and data directory came back up read-write
   on its own independent chain and resynced to the tip with no errors.
 
-### Known limitation: a reader does not lead a Pulse round
+### A reader can lead a Pulse round
 
-A reader service node cannot generate a Pulse block template, because template generation opens a
-write transaction on the chain database, which fails on a read-only reader. This is caught: the round
-is abandoned and retried with the next leader, so it is a bounded liveness cost, not a crash or a
-decommission, and the reader keeps doing every validator duty. The cost is proportional to the readers'
-share of the global quorum: negligible for the two or three readers of the missoula pilot, but it must
-be fixed before a broad rollout converts most of the fleet's service nodes to readers. The fix is the
-reader-as-leader work (a write-free template path plus keeping the reader's in-memory sorted mempool
-current), scoped separately from this read-only pass.
+A reader service node can now be the Pulse block producer. Block-template assembly used to open a
+write batch (`LockedTXN`'s constructor calls `batch_start`), which throws on a read-only reader, so the
+round was abandoned and retried with the next leader. `LockedTXN` now runs batch-free on a read-only
+database (a reader never writes the txpool and the batch has nothing to write), the one caching
+meta-update in template assembly is skipped on a reader, and the read-only producer relays the block it
+assembles rather than committing it locally. Writers are unchanged. Verified on the fernando rig: with
+three of fifteen service nodes running as readers, each was drawn as producer several times with no
+template failures and no write errors, and the blocks they produced were accepted by the full quorum
+(the block at a reader-produced height carried a full validator bitset).
+
+One optimisation remains, and it is not a correctness or liveness problem. A reader's in-memory sorted
+mempool is loaded at startup and does not yet advance as the writer accepts new transactions, so a
+reader-led block is assembled from that stale view and can under-include recent transactions (they are
+simply included in the next block). Keeping the reader's sorted mempool current, by refreshing it from
+the shared txpool the way the service node list is refreshed to the tip, is the follow-on.
 
 ### Interval starting values and the mainnet margin
 
