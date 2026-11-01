@@ -863,7 +863,10 @@ bool core::init(
         }
     }
 
-    auto sqliteDB = std::make_unique<cryptonote::BlockchainSQLite>(m_nettype, sqlite_db_file_path);
+    // A shared per-host chain reader opens the reward database read-only (query_only, sharing the
+    // writer's WAL) and does not create or upgrade its schema; the host writer owns it.
+    auto sqliteDB = std::make_unique<cryptonote::BlockchainSQLite>(
+            m_nettype, sqlite_db_file_path, db->is_read_only());
 
     // We need this hook to get added before the block hook below, so that it fires first and
     // catches the start of a reorg before the block hook fires for the block in the reorg.
