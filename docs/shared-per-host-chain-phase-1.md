@@ -103,6 +103,13 @@ On `feat/shared-chain-reader` (off `main`):
   so a reader sees the writer's committed mappings as they land. `name_system_db` records a read-only
   flag at init and skips the two writes it would otherwise do on a reader: the destructor's settings
   save, and the init rebuild (DROP/recreate) path, which it refuses rather than attempts.
+- Mempool read-only. The mempool lives in the shared chain DB's txpool tables and is owned by the
+  writer. A reader reads it (its pool queries go to the shared DB and track the writer) but does not
+  write it: the reader does not run the txpool relay (which updates each tx's relay bookkeeping),
+  `remove_stuck_transactions` and `set_relayed`/`set_relayable` return early on a read-only DB, and
+  `tx_memory_pool::init` loads the pool read-only without removing corrupt entries. The tx-acceptance
+  and block-add/removal write paths are not reached by a reader that neither ingests txs over P2P nor
+  adds blocks.
 
 Runtime-validated on the signer-bootstrap testnet against a chain with three registered service nodes.
 A read-only, network-isolated reader attached to the live writer's data directory and its service node
@@ -125,9 +132,11 @@ even a from-genesis replay stays write-free.
 
 ## Remaining in Phase 1
 
-- Mempool read-only. The mempool lives in the chain database's txpool tables and is writer-owned. Confirm
-  a reader reads it without writing.
 - `MDB_MAP_RESIZED`. Exercise a reader across a writer mapsize growth and handle the resize.
+- A reader acting as a Pulse leader. The reader's in-memory sorted pool is loaded at init and does not
+  advance as the writer changes the pool, which is irrelevant to a pure reader but matters once a reader
+  assembles block templates. That belongs with the reader-as-service-node work, alongside quorumnet and
+  signing, not this read-only pass.
 
 ## After Phase 1
 
