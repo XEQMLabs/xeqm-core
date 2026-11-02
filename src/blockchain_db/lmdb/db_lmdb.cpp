@@ -1325,8 +1325,18 @@ void BlockchainLMDB::open(
         throw0(DB_ERROR("Failed to set max number of dbs: {}"_format(mdb_strerror(result))));
 
     int threads = tools::get_max_concurrency();
-    if (threads > 110 && /* maxreaders default is 126, leave some slots for other read processes */
-        (result = mdb_env_set_maxreaders(m_env, threads + 16)))
+    // The reader-slot table lives in lock.mdb and its size is fixed when the environment is first
+    // created (default 126). With the shared-per-host chain (one writer plus N read-only readers all
+    // opening the SAME environment), every process's read threads draw from this one table, so a few
+    // reader daemons exhaust the default and go read-blind (MDB_READERS_FULL). The writer creates the
+    // environment, so its value governs the shared table; size it generously for many attached readers
+    // plus headroom (each slot is tiny, and a single daemon simply never fills a larger table). NOTE:
+    // an existing lock.mdb keeps its old size, so resizing an already-created env requires deleting
+    // lock.mdb while the environment is closed, then reopening with this build.
+    unsigned int want_readers = (unsigned int)(threads + 16) * 16u;
+    if (want_readers < 1024u)
+        want_readers = 1024u;
+    if ((result = mdb_env_set_maxreaders(m_env, want_readers)))
         throw0(DB_ERROR("Failed to set max number of readers: {}"_format(mdb_strerror(result))));
 
     if (db_flags & DBF_FAST)
