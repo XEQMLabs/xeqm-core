@@ -51,6 +51,7 @@ extern "C" {
 #include <vector>
 
 #ifndef _WIN32
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -1408,6 +1409,29 @@ void core::reexec_as_writer(int lock_fd) {
     for (auto& s : args)
         cargv.push_back(const_cast<char*>(s.c_str()));
     cargv.push_back(nullptr);
+
+    // Mark every inherited file descriptor close-on-exec except the writer-lock fd (which the new
+    // writer adopts) and std{in,out,err}. The p2p, RPC, quorumnet and OxenMQ listening sockets are
+    // not created with SOCK_CLOEXEC, so without this they survive the execv and keep their ports
+    // bound; the re-exec'd writer then fails to bind its own ports ("Failed to bind IPv4") and
+    // exits, which frees the lock and makes the next reader promote and crash too, cascading the
+    // whole shared group down from a single writer stop. Marking them close-on-exec frees the ports
+    // for the new image. The lock fd is deliberately kept (its CLOEXEC is cleared above) and stdio
+    // is kept so logging to the redirected log file survives the exec.
+    if (DIR* d = ::opendir("/proc/self/fd")) {
+        const int dir_fd = ::dirfd(d);
+        for (struct dirent* e; (e = ::readdir(d)) != nullptr;) {
+            char* end = nullptr;
+            long fd = ::strtol(e->d_name, &end, 10);
+            if (end == e->d_name || *end != '\0')
+                continue;  // "." and ".."
+            if (fd <= 2 || fd == lock_fd || fd == dir_fd)
+                continue;
+            if (int flags = ::fcntl(static_cast<int>(fd), F_GETFD); flags != -1)
+                ::fcntl(static_cast<int>(fd), F_SETFD, flags | FD_CLOEXEC);
+        }
+        ::closedir(d);
+    }
 
     ::execv(exe.c_str(), cargv.data());
     // execv only returns on failure.
