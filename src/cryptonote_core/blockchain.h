@@ -1288,6 +1288,16 @@ class Blockchain {
     bool load_missing_blocks_into_oxen_subsystems(
             const std::atomic<bool>* abort = nullptr, bool use_threaded_load = false);
 
+    /** Shared per-host chain reader: when this daemon opened the chain read-only, another (writer)
+     *  process extends it. This replays the blocks the writer has committed, from the service node
+     *  list's current height up to the chain tip, advancing the in-memory SN set and quorums
+     *  without writing anything (no reward-SQLite add_block, no SNL store, no verify). It is a
+     *  no-op on a writer daemon. Called once after init and then periodically from core::on_idle so
+     *  the reader's SN view follows the writer. Returns false if a block or its txs could not be
+     *  read (e.g. a concurrent prune); the caller simply retries on the next tick.
+     */
+    bool refresh_sn_list_readonly();
+
     /** DEBUG.  Sets a max sync height; the blockchain object will reject any incoming blocks with a
      *   sync height above the given value.  0 disables.
      */

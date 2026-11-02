@@ -36,6 +36,7 @@ oxen_add_library(cryptonote_core
   service_node_rules.cpp
   service_node_list.cpp
   service_node_fixes.cpp
+  shared_chain_lock.cpp
   service_node_voting.cpp
   service_node_quorum_cop.cpp
   service_node_swarm.cpp

@@ -39,7 +39,13 @@ namespace cryptonote {
 // the whole prepare/handle/cleanup incoming block sequence.
 class LockedTXN {
   public:
-    LockedTXN(Blockchain& b) : m_db{b.db()} { m_batch = m_db.batch_start(); }
+    // On a read-only database (a shared per-host chain reader) a write batch cannot be started, and a
+    // reader never writes the txpool anyway, so run batch-free; commit() and abort() then no-op. This
+    // lets a reader assemble a block template (as a Pulse producer) without trying to open a write
+    // transaction on the read-only chain.
+    LockedTXN(Blockchain& b) : m_db{b.db()} {
+        m_batch = m_db.is_read_only() ? false : m_db.batch_start();
+    }
     LockedTXN(const LockedTXN&) = delete;
     LockedTXN& operator=(const LockedTXN&) = delete;
     LockedTXN(LockedTXN&& o) : m_db{o.m_db}, m_batch{o.m_batch} { o.m_batch = false; }

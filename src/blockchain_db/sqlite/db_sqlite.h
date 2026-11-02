@@ -52,7 +52,12 @@ using block_payments = std::
 
 class BlockchainSQLite : public db::Database {
   public:
-    explicit BlockchainSQLite(cryptonote::network_type nettype, std::filesystem::path db_path);
+    // read_only: a shared per-host chain reader opens the reward database read-only (query_only via
+    // db::Database) and does not create or upgrade the schema; the host writer owns it.
+    explicit BlockchainSQLite(
+            cryptonote::network_type nettype,
+            std::filesystem::path db_path,
+            bool read_only = false);
     BlockchainSQLite(const BlockchainSQLite&) = delete;
 
     ~BlockchainSQLite() { rescan_stop(); }

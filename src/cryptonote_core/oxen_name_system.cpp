@@ -2098,6 +2098,9 @@ bool name_system_db::init(
         return false;
     this->db = db;
     this->nettype = nettype;
+    // Shared per-host chain reader: the ons.db was opened read-only (SQLITE_OPEN_READONLY) because
+    // the chain DB was. Record it so we skip the rebuild path and the destructor's settings write.
+    this->read_only = blockchain && blockchain->db().is_read_only();
 
     std::string const GET_MAPPINGS_BY_OWNER_STR = sql_select_mappings_and_owners_prefix +
                                                   "WHERE ? IN (o1.address, o2.address)" +
@@ -2272,6 +2275,16 @@ AND NOT EXISTS   (SELECT * FROM mappings WHERE owner.id = mappings.backup_owner_
             this->last_processed_height = settings.top_height;
             this->last_processed_hash = settings.top_hash;
             assert(settings.version == static_cast<int>(DB_VERSION));
+        } else if (read_only) {
+            // A shared per-host chain reader cannot rebuild the shared ons.db (it is opened
+            // read-only and owned by the writer). A mismatch here means the reader's chain view and
+            // the writer's ons.db disagree, which should not happen when both come from the same
+            // writer; refuse to start rather than attempt a write that would fail anyway.
+            log::error(
+                    logcat,
+                    "ONS db is out of sync with the chain and the DB is read-only; the shared-chain "
+                    "writer must reconcile it. Not starting the reader's ONS subsystem.");
+            return false;
         } else {
             // Otherwise we've got something unrecoverable: a top_hash + top_height that are
             // different from what we have in the blockchain, which means the ons db and blockchain
@@ -2300,7 +2313,9 @@ name_system_db::~name_system_db() {
     if (!db)
         return;
 
-    {
+    // A read-only shared-chain reader must not write the shared ons.db; the writer owns the
+    // settings row. Skip the save (it would fail on a SQLITE_OPEN_READONLY handle anyway).
+    if (!read_only) {
         scoped_db_transaction db_transaction(*this);
         save_settings(last_processed_height, last_processed_hash, static_cast<int>(DB_VERSION));
         db_transaction.commit = true;
