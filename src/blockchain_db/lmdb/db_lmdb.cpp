@@ -1326,16 +1326,26 @@ void BlockchainLMDB::open(
 
     int threads = tools::get_max_concurrency();
     // The reader-slot table lives in lock.mdb and its size is fixed when the environment is first
-    // created (default 126). With the shared-per-host chain (one writer plus N read-only readers all
-    // opening the SAME environment), every process's read threads draw from this one table, so a few
-    // reader daemons exhaust the default and go read-blind (MDB_READERS_FULL). The writer creates the
-    // environment, so its value governs the shared table; size it generously for many attached readers
-    // plus headroom (each slot is tiny, and a single daemon simply never fills a larger table). NOTE:
-    // an existing lock.mdb keeps its old size, so resizing an already-created env requires deleting
-    // lock.mdb while the environment is closed, then reopening with this build.
+    // created (LMDB default 126). With the shared-per-host chain (one writer plus N read-only readers
+    // all opening the SAME environment), every process's read threads draw from this one table, so a
+    // few reader daemons exhaust the default and go read-blind (MDB_READERS_FULL). The writer creates
+    // the environment, so its value governs the shared table.
+    //
+    // Size it with a large fixed floor so an operator can run many service nodes on one host without
+    // ever tuning this or risking the ceiling. The headroom is close to free: each slot is only 64
+    // bytes (a 16384-slot table is a ~1 MB lock.mdb, memory-mapped), and unused slots cost nothing at
+    // runtime because LMDB's reader scans (page reclaim, stale-reader checks) are bounded by the
+    // high-water mark of slots actually in use, not by the table's capacity. 16384 covers dozens of
+    // daemons each with hundreds of concurrent read threads; the concurrency term lets very large
+    // hosts go higher still. If a deployment somehow needed more, raise this floor: the only cost is a
+    // slightly larger lock.mdb.
+    //
+    // NOTE: an existing lock.mdb keeps its old size, so raising the ceiling on an already-created
+    // environment requires deleting lock.mdb while the environment is closed, then reopening with this
+    // build. A fresh deployment gets the new size automatically.
     unsigned int want_readers = (unsigned int)(threads + 16) * 16u;
-    if (want_readers < 1024u)
-        want_readers = 1024u;
+    if (want_readers < 16384u)
+        want_readers = 16384u;
     if ((result = mdb_env_set_maxreaders(m_env, want_readers)))
         throw0(DB_ERROR("Failed to set max number of readers: {}"_format(mdb_strerror(result))));
 
