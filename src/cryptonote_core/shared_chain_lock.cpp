@@ -245,11 +245,13 @@ void fence_watchdog::start() {
         return;  // already running
     m_last_beat_ms.store(now_ms(), std::memory_order_relaxed);
     m_fenced.store(false, std::memory_order_relaxed);
+    m_beaten.store(false, std::memory_order_relaxed);
     m_thread = std::thread([this] { loop(); });
 }
 
 void fence_watchdog::heartbeat() {
     m_last_beat_ms.store(now_ms(), std::memory_order_relaxed);
+    m_beaten.store(true, std::memory_order_relaxed);
 }
 
 void fence_watchdog::stop() {
@@ -266,7 +268,7 @@ void fence_watchdog::loop() {
         if (!m_run.load(std::memory_order_relaxed))
             break;
         int64_t idle = now_ms() - m_last_beat_ms.load(std::memory_order_relaxed);
-        if (idle > timeout_ms) {
+        if (m_beaten.load(std::memory_order_relaxed) && idle > timeout_ms) {
             // The writer has not made progress within the fence timeout: it is stalled. Fire once.
             if (!m_fenced.exchange(true)) {
                 oxen::log::error(
