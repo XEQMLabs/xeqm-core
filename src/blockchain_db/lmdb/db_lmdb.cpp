@@ -34,6 +34,7 @@
 
 #include <boost/circular_buffer.hpp>
 #include <chrono>
+#include <thread>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -493,7 +494,7 @@ mdb_threadinfo::~mdb_threadinfo() {
 mdb_txn_safe::mdb_txn_safe(const bool check) : m_tinfo(NULL), m_txn(NULL), m_check(check) {
     if (check) {
         while (creation_gate.test_and_set())
-            ;
+            std::this_thread::yield();
         num_active_txns++;
         creation_gate.clear();
     }
@@ -561,12 +562,12 @@ uint64_t mdb_txn_safe::num_active_tx() const {
 
 void mdb_txn_safe::prevent_new_txns() {
     while (creation_gate.test_and_set())
-        ;
+        std::this_thread::yield();
 }
 
 void mdb_txn_safe::wait_no_active_txns() {
     while (num_active_txns > 0)
-        ;
+        std::this_thread::yield();
 }
 
 void mdb_txn_safe::allow_new_txns() {
