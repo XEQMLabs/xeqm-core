@@ -3048,6 +3048,14 @@ bool core::add_new_block(
 
     bool result = blockchain.add_new_block(b, bvc, checkpoint);
     if (result) {
+        // Shared per-host chain writer: a committed block is forward progress, so refresh the
+        // self-fence heartbeat here, per block, rather than only on the core idle loop. During a
+        // bulk-sync batch the idle loop can be starved for longer than the fence timeout while the
+        // writer is in fact steadily committing blocks; ticking here keeps a slow-but-progressing
+        // writer (notably the SQLite backend, whose batch commits are slower) from false-fencing,
+        // while a writer truly hung on a single block still trips the watchdog.
+        if (m_shared_chain_writer && m_fence_watchdog)
+            m_fence_watchdog->heartbeat();
         relay_service_node_votes();  // NOTE: nop if synchronising due to not accepting votes whilst
                                      // syncing
     }
