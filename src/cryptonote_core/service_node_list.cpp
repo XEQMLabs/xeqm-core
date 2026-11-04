@@ -6029,13 +6029,13 @@ bool service_node_list::handle_uptime_proof(
                         vers.second);
                 return false;
             }
-            if (netconf.HAVE_SESSION_ROUTER && proof->storage_server_version < min.session_router) {
+            if (netconf.HAVE_SESSION_ROUTER && proof->session_router_version < min.session_router) {
                 log::debug(
                         logcat,
-                        "Rejecting uptime proof from {}: v{}+ storage server version is "
+                        "Rejecting uptime proof from {}: v{}+ session router version is "
                         "required for v{}.{}+ network proofs",
                         proof->pubkey_ed25519,
-                        tools::join(".", min.storage_server),
+                        tools::join(".", min.session_router),
                         static_cast<int>(vers.first),
                         vers.second);
                 return false;
