@@ -126,6 +126,9 @@ class fence_watchdog {
     std::chrono::milliseconds m_interval;
     std::function<void()> m_on_fence;
     std::atomic<int64_t> m_last_beat_ms{0};
+    // No self-fence until the first heartbeat: a bootstrap-started writer may spend minutes in the
+    // one-time service-node-list rescan before reaching the idle loop; that is startup, not a stall.
+    std::atomic<bool> m_beaten{false};
     std::atomic<bool> m_run{false};
     std::atomic<bool> m_fenced{false};
     std::thread m_thread;
