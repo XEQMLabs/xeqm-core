@@ -688,6 +688,11 @@ class core final {
      */
     bool relay_service_node_votes();
 
+    /// Drive the quorum cop over a read-only reader's newly committed blocks so it generates and
+    /// pools this node's checkpoint/obligation votes (mirrors the writer's block_add hook path).
+    /// No-op on a writer or an independent node.
+    void drive_reader_quorum_cop();
+
     /**
      * @brief sets the given votes to relayed; generally called automatically when
      * relay_service_node_votes() is called.
@@ -953,6 +958,9 @@ class core final {
     /// committed blocks to keep its in-memory service node list current with the tip. Only active
     /// when the chain DB was opened read-only (--db-readonly); a no-op otherwise.
     tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 200ms};
+    /// Height up to which a read-only shared-chain reader has driven the quorum cop (checkpoint and
+    /// obligation vote generation). Advances with the SN list; 0 means not yet initialised.
+    uint64_t m_quorum_cop_readonly_height{0};
     /// interval at which a read-only shared per-host chain reader reloads its in-memory sorted
     /// mempool from the shared txpool, so that if the reader is drawn as the Pulse block producer it
     /// assembles the template from the writer's current pool instead of the snapshot taken at startup.
