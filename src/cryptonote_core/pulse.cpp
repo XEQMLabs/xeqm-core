@@ -1357,6 +1357,12 @@ namespace {
             return round_state::wait_for_next_block;
         }
 
+        // Shared-chain reader: the new top block is already visible in the shared DB, but our
+        // in-memory SN list only advances on the lazy periodic reader refresh, so the Pulse quorum
+        // below would be generated from stale membership and reject peers' valid signatures. Advance
+        // it to the tip now (no-op on a writer / independent node).
+        core.blockchain.refresh_sn_list_readonly();
+
         auto times = get_round_timings(core.blockchain, chain_height, top_block.timestamp);
         if (!times) {
             if (last_timing_log_hash != top_hash) {

@@ -953,7 +953,7 @@ class core final {
     /// interval at which a read-only shared per-host chain reader replays the writer's newly
     /// committed blocks to keep its in-memory service node list current with the tip. Only active
     /// when the chain DB was opened read-only (--db-readonly); a no-op otherwise.
-    tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 1s};
+    tools::periodic_task m_sn_reader_refresh_interval{"sn reader refresh", 200ms};
     /// interval at which a read-only shared per-host chain reader reloads its in-memory sorted
     /// mempool from the shared txpool, so that if the reader is drawn as the Pulse block producer it
     /// assembles the template from the writer's current pool instead of the snapshot taken at startup.
