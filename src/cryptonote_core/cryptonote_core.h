@@ -833,6 +833,19 @@ class core final {
     void reexec_as_writer(int lock_fd);
 
     /**
+     * @brief a returning DESIGNATED shared-chain writer tries to reclaim the lock from a PROMOTED
+     * (failover) writer. Only used on init when a fresh --shared-chain-writer acquire fails because
+     * the lock is held. If reclaim is enabled and the current holder's lease says it is a promoted
+     * writer, this writes a reclaim request (asking the promoted writer to step down) and retries the
+     * acquire until it succeeds or the reclaim timeout elapses. Leaves the lock held on success.
+     *
+     * @param chain_folder the shared chain directory (where the reclaim marker lives)
+     * @param lock_path    the writer lock path (for logging)
+     * @return true if the lock was reclaimed and is now held; false otherwise (caller should fail).
+     */
+    bool reclaim_writer_lock_from_promoted(const fs::path& chain_folder, const fs::path& lock_path);
+
+    /**
      * @brief Initializes service keys by loading or creating.  An Ed25519 key (from which we also
      * get an x25519 key) is always created; the Monero SN keypair is only created when running in
      * Service Node mode (as it is only used to sign registrations and uptime proofs); otherwise
@@ -971,6 +984,10 @@ class core final {
     /// the writer lock and, on acquiring it, re-execs into writer mode. Only active on a promotable
     /// reader and after the startup grace has elapsed.
     tools::periodic_task m_promote_poll_interval{"shared-chain promote poll", 3s};
+    /// interval at which a PROMOTED (failover) shared-chain writer checks for a reclaim request from a
+    /// returning designated writer and, on finding a live one, steps down. Only active on a promoted
+    /// writer.
+    tools::periodic_task m_reclaim_check_interval{"shared-chain reclaim check", 1s};
     /// interval for systemd watchdog pings & updating the service Status line
     tools::periodic_task m_systemd_notify_interval{"systemd notifier", 10s};
 
@@ -1038,6 +1055,15 @@ class core final {
     // lock from the winning acquire through the execv (its fd is deliberately not close-on-exec).
     bool m_shared_chain_promote{false};
     std::unique_ptr<shared_chain::writer_lock> m_promote_lock;
+    // True when this writer took leadership over via reader promotion (failover), i.e. init adopted an
+    // inherited lock fd rather than acquiring fresh. A promoted writer steps down when a returning
+    // designated writer asks for the lock back (see m_reclaim_check_interval); a designated writer
+    // does not. Set during init alongside the writer-lock acquisition.
+    bool m_is_promoted_writer{false};
+    // --shared-chain-reclaim-timeout: how long a returning DESIGNATED writer waits for a promoted
+    // writer to step down so it can reclaim the lock, instead of failing because the lock is held.
+    // Zero disables reclaim (the writer fails as before).
+    std::chrono::seconds m_shared_chain_reclaim_timeout{0};
     // Resolved path of the host-local writer lock file (folder/"writer.lock"), set during init so
     // both the writer block and the reader promotion monitor use the same one.
     fs::path m_writer_lock_path;
