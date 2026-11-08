@@ -691,8 +691,10 @@ class core final {
 
     /// Drive the quorum cop over a read-only reader's newly committed blocks so it generates and
     /// pools this node's checkpoint/obligation votes (mirrors the writer's block_add hook path).
-    /// No-op on a writer or an independent node.
-    void drive_reader_quorum_cop();
+    /// No-op on a writer or an independent node. Returns true if it advanced over at least one new
+    /// block (so the caller should relay the freshly pooled votes without waiting for the periodic
+    /// relayer); false if there was nothing new or this is not a reader.
+    bool drive_reader_quorum_cop();
 
     /**
      * @brief sets the given votes to relayed; generally called automatically when
