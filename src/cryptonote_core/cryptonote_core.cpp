@@ -44,9 +44,11 @@ extern "C" {
 #include <boost/algorithm/string.hpp>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -281,6 +283,14 @@ static const command_line::arg_descriptor<uint64_t> arg_shared_chain_promote_gra
 // held) lock descriptor instead of opening and acquiring a fresh one. Not for direct use.
 static const command_line::arg_descriptor<int> arg_shared_chain_lock_fd = {
         "shared-chain-lock-fd", "", -1};
+static const command_line::arg_descriptor<uint64_t> arg_shared_chain_reclaim_timeout = {
+        "shared-chain-reclaim-timeout",
+        "Seconds a designated shared per-host chain writer (--shared-chain-writer started fresh, e.g. "
+        "the dedicated host writer) waits, when it restarts and finds the lock held by a PROMOTED "
+        "failover writer, to reclaim leadership: it asks the promoted writer to step down and takes "
+        "the freed lock, instead of failing because the lock is held. 0 disables this (the writer "
+        "fails as it did before). Only meaningful with --shared-chain-writer.",
+        45};
 // Test-only fault injection: a shared-chain writer stops heartbeating its self-fence watchdog after
 // this many seconds of uptime, so the watchdog fences and exits the process. Hidden; 0 = off.
 static const command_line::arg_descriptor<uint64_t> arg_shared_chain_debug_stall = {
@@ -461,6 +471,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_shared_chain_dir);
     command_line::add_arg(desc, arg_shared_chain_promote);
     command_line::add_arg(desc, arg_shared_chain_promote_grace);
+    command_line::add_arg(desc, arg_shared_chain_reclaim_timeout);
     command_line::add_arg(desc, arg_shared_chain_lock_fd);
     command_line::add_arg(desc, arg_shared_chain_debug_stall);
 
@@ -493,6 +504,8 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     if (auto scd = command_line::get_arg(vm, arg_shared_chain_dir); !scd.empty())
         m_shared_chain_folder = tools::utf8_path(scd);
     m_shared_chain_promote = get_arg(vm, arg_shared_chain_promote);
+    m_shared_chain_reclaim_timeout =
+            std::chrono::seconds{command_line::get_arg(vm, arg_shared_chain_reclaim_timeout)};
     m_shared_chain_debug_stall_secs = command_line::get_arg(vm, arg_shared_chain_debug_stall);
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
@@ -779,6 +792,9 @@ bool core::init(
         // adopts it instead of acquiring, so leadership is continuous across the execv. A normal
         // writer start has no inherited fd and acquires the lock here.
         const int inherited_lock_fd = command_line::get_arg(vm, arg_shared_chain_lock_fd);
+        // A writer that adopted an inherited lock fd is a promoted (failover) writer; one that
+        // acquires fresh is the designated writer. The distinction drives reclaim/step-down below.
+        m_is_promoted_writer = inherited_lock_fd >= 0;
         if (inherited_lock_fd < 0 && command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0) {
             log::error(
                     globallogcat, "--shared-chain-writer and --db-readonly cannot be used together");
@@ -786,7 +802,8 @@ bool core::init(
         }
         const auto& lock_path = m_writer_lock_path;
         if (inherited_lock_fd >= 0) {
-            m_writer_lock = shared_chain::writer_lock::adopt(lock_path, inherited_lock_fd);
+            m_writer_lock = shared_chain::writer_lock::adopt(
+                    lock_path, inherited_lock_fd, shared_chain::WRITER_ROLE_PROMOTED);
             if (!m_writer_lock) {
                 log::error(
                         globallogcat,
@@ -800,8 +817,13 @@ bool core::init(
                     "Shared per-host chain: promoted to writer, adopted the inherited lock ({})",
                     lock_path);
         } else {
-            m_writer_lock = std::make_unique<shared_chain::writer_lock>(lock_path);
-            if (!m_writer_lock->try_acquire()) {
+            m_writer_lock = std::make_unique<shared_chain::writer_lock>(
+                    lock_path, shared_chain::WRITER_ROLE_PRIMARY);
+            // If the lock is held by a promoted (failover) writer, reclaim leadership from it rather
+            // than failing to start; otherwise (held by another designated writer, or reclaim
+            // disabled) fail as before.
+            if (!m_writer_lock->try_acquire() &&
+                !reclaim_writer_lock_from_promoted(chain_folder, lock_path)) {
                 log::error(
                         globallogcat,
                         "Another daemon already holds the shared per-host chain writer lock ({}); "
@@ -1344,12 +1366,77 @@ void core::set_process_argv(int argc, char const* const* argv) {
         store.emplace_back(argv[i] ? argv[i] : "");
 }
 
+bool core::reclaim_writer_lock_from_promoted(
+        const fs::path& chain_folder, const fs::path& lock_path) {
+#ifdef _WIN32
+    (void)chain_folder;
+    (void)lock_path;
+    return false;
+#else
+    if (m_shared_chain_reclaim_timeout.count() <= 0)
+        return false;  // reclaim disabled: fail as before
+
+    // The fresh acquire just failed, so this process does NOT hold the lock; reading the holder's
+    // lease here is safe (it would not be if we held the lock -- see the fcntl note in the lock).
+    auto lease = shared_chain::writer_lock::read(lock_path);
+    if (!lease || lease->role != shared_chain::WRITER_ROLE_PROMOTED)
+        // Held by another designated writer, or an unknown/old-format holder: do not reclaim.
+        return false;
+
+    log::warning(
+            globallogcat,
+            "Shared per-host chain: writer lock held by a PROMOTED failover writer (pid {}); this "
+            "designated writer is requesting a handoff for up to {}s instead of failing to start.",
+            lease->pid,
+            m_shared_chain_reclaim_timeout.count());
+
+    const auto deadline = std::chrono::steady_clock::now() + m_shared_chain_reclaim_timeout;
+    bool acquired = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        // Refresh the request so the promoted writer (and any promotable reader) keep honouring it,
+        // then retry the acquire. The 100 ms poll beats the promoted writer's ~1 s step-down check
+        // and the readers' 3 s promote poll, so the freed lock comes to us.
+        shared_chain::write_reclaim_request(chain_folder, static_cast<int64_t>(::getpid()));
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        if (m_writer_lock->try_acquire()) {
+            acquired = true;
+            break;
+        }
+    }
+    shared_chain::clear_reclaim_request(chain_folder);
+
+    if (acquired)
+        log::warning(
+                globallogcat,
+                "Shared per-host chain: reclaimed the writer lock from the promoted writer; taking "
+                "over as the designated writer ({}).",
+                lock_path);
+    else
+        log::error(
+                globallogcat,
+                "Shared per-host chain: the promoted writer did not step down within {}s; not taking "
+                "the lock ({}).",
+                m_shared_chain_reclaim_timeout.count(),
+                lock_path);
+    return acquired;
+#endif
+}
+
 bool core::try_promote() {
 #ifdef _WIN32
     return true;  // the shared per-host chain is a Linux-fleet feature
 #else
+    // Do not steal the lock while a returning designated writer is reclaiming leadership from a
+    // promoted writer: the freed lock must go to the designated writer, not to another reader
+    // promoting. The request goes stale within seconds if that writer dies mid-handoff, so normal
+    // failover resumes on its own.
+    if (auto req = shared_chain::read_reclaim_request(m_writer_lock_path.parent_path());
+        req && shared_chain::reclaim_request_live(*req))
+        return true;
+
     if (!m_promote_lock)
-        m_promote_lock = std::make_unique<shared_chain::writer_lock>(m_writer_lock_path);
+        m_promote_lock = std::make_unique<shared_chain::writer_lock>(
+                m_writer_lock_path, shared_chain::WRITER_ROLE_PROMOTED);
 
     if (!m_promote_lock->try_acquire())
         return true;  // a live writer still holds the lock; stay a reader (no preemption)
@@ -3493,6 +3580,27 @@ Use "help <command>" to see a command's documentation.
                         m_writer_lock->renew();
                     if (m_fence_watchdog)
                         m_fence_watchdog->heartbeat();
+                    return true;
+                });
+            // A PROMOTED (failover) writer steps down when the designated writer returns and asks for
+            // the lock back: release the lock and exit now, so this node's own (reader) service unit
+            // restarts it read-only and leadership passes to the designated writer with no manual
+            // step. A designated writer never does this (m_is_promoted_writer is false for it).
+            if (m_is_promoted_writer)
+                m_reclaim_check_interval.do_call([this] {
+                    auto req = shared_chain::read_reclaim_request(m_writer_lock_path.parent_path());
+                    if (req && shared_chain::reclaim_request_live(*req)) {
+                        log::warning(
+                                globallogcat,
+                                "Shared per-host chain: designated writer (pid {}) is reclaiming "
+                                "leadership; this promoted writer is stepping down to a read-only "
+                                "reader now.",
+                                req->pid);
+                        if (m_writer_lock)
+                            m_writer_lock->release();
+                        oxen::log::flush();
+                        std::_Exit(71);
+                    }
                     return true;
                 });
         }

@@ -177,6 +177,103 @@ TEST(shared_chain_lock, adopt_rejects_invalid_fd) {
     fs::remove(path, ec);
 }
 
+// The lease records the writer role, read() reports it, and an older four-field lease (no role) reads
+// back as unknown.
+TEST(shared_chain_lock, lease_role) {
+    auto path = temp_lock_path("role");
+
+    {
+        sc::writer_lock lock{path, sc::WRITER_ROLE_PROMOTED};
+        ASSERT_TRUE(lock.try_acquire());
+        lock.release();
+    }
+    auto info = sc::writer_lock::read(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->role, sc::WRITER_ROLE_PROMOTED);
+
+    {
+        sc::writer_lock lock{path, sc::WRITER_ROLE_PRIMARY};
+        ASSERT_TRUE(lock.try_acquire());
+        lock.release();
+    }
+    info = sc::writer_lock::read(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->role, sc::WRITER_ROLE_PRIMARY);
+
+    // Default role is primary.
+    {
+        sc::writer_lock lock{path};
+        ASSERT_TRUE(lock.try_acquire());
+        lock.release();
+    }
+    info = sc::writer_lock::read(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->role, sc::WRITER_ROLE_PRIMARY);
+
+    // An older-format lease (four fields, no role) parses with role unknown.
+    {
+        std::ofstream f{path, std::ios::trunc};
+        f << "XWL1 0123456789abcdef 4242 "
+          << std::chrono::duration_cast<std::chrono::seconds>(
+                     std::chrono::system_clock::now().time_since_epoch())
+                     .count()
+          << "\n";
+    }
+    info = sc::writer_lock::read(path);
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->pid, 4242);
+    EXPECT_EQ(info->role, sc::WRITER_ROLE_UNKNOWN);
+
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
+// Reclaim request: write/read round-trips, is live for a fresh request from a live pid, is not live
+// for a stale timestamp or a dead pid, and clear removes it.
+TEST(shared_chain_lock, reclaim_request_roundtrip) {
+    auto dir = fs::temp_directory_path() /
+               ("xeqm-rq-" + std::to_string(::getpid()) + "-" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+
+    auto now_s = [] {
+        return std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                .count();
+    };
+
+    // Absent initially.
+    EXPECT_FALSE(sc::read_reclaim_request(dir).has_value());
+
+    // Write ours; read it back; it is live (fresh + our pid alive).
+    sc::write_reclaim_request(dir, static_cast<int64_t>(::getpid()));
+    auto req = sc::read_reclaim_request(dir);
+    ASSERT_TRUE(req.has_value());
+    EXPECT_EQ(req->pid, static_cast<int64_t>(::getpid()));
+    EXPECT_TRUE(sc::reclaim_request_live(*req));
+
+    // A stale timestamp (older than the freshness window) is not live, even for a live pid.
+    sc::reclaim_request old_ts{static_cast<int64_t>(::getpid()),
+                               now_s() - (sc::RECLAIM_REQUEST_FRESH_SECS + 2)};
+    EXPECT_FALSE(sc::reclaim_request_live(old_ts));
+
+    // A dead pid is not live: fork a child that exits immediately, reap it, then probe its pid.
+    pid_t dead = ::fork();
+    if (dead == 0)
+        _exit(0);
+    int status = 0;
+    ::waitpid(dead, &status, 0);
+    sc::reclaim_request dead_pid{static_cast<int64_t>(dead), now_s()};
+    EXPECT_FALSE(sc::reclaim_request_live(dead_pid));
+
+    // Clear removes it.
+    sc::clear_reclaim_request(dir);
+    EXPECT_FALSE(sc::read_reclaim_request(dir).has_value());
+
+    fs::remove_all(dir, ec);
+}
+
 #endif  // !_WIN32
 
 // Watchdog fires on_fence exactly once when heartbeats stop.
