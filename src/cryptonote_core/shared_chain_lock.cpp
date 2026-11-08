@@ -12,6 +12,7 @@
 
 #ifndef _WIN32
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 #endif
 
@@ -21,10 +22,16 @@ static auto logcat = oxen::log::Cat("sharedchain");
 
 namespace {
     // Lease record wire format: a single short line. "XWL1" magic, then the instance id (16 hex), the
-    // writer pid, and the last-renew wall-clock seconds. A reader that cannot parse it treats the
-    // lease as absent, which also guards against a torn read of a partial write.
+    // writer pid, the last-renew wall-clock seconds, and the writer role ('P' designated, 'S'
+    // promoted). A reader that cannot parse it treats the lease as absent, which also guards against a
+    // torn read of a partial write. The role is a trailing field so an older lease (four fields, no
+    // role) still parses, with the role reported as unknown.
     constexpr std::string_view LEASE_MAGIC = "XWL1";
     constexpr size_t LEASE_MAX = 128;
+
+    // Reclaim-request wire format: "XRQ1 <pid> <unix_ts>\n" in "<chain-dir>/writer.reclaim".
+    constexpr std::string_view RECLAIM_MAGIC = "XRQ1";
+    constexpr const char* RECLAIM_FILE = "writer.reclaim";
 
     int64_t now_unix() {
         return std::chrono::duration_cast<std::chrono::seconds>(
@@ -39,8 +46,8 @@ namespace {
     }
 }  // namespace
 
-writer_lock::writer_lock(fs::path lock_file) :
-        m_file{std::move(lock_file)}, m_instance_id{make_instance_id()} {}
+writer_lock::writer_lock(fs::path lock_file, char role) :
+        m_file{std::move(lock_file)}, m_instance_id{make_instance_id()}, m_role{role} {}
 
 writer_lock::~writer_lock() {
     release();
@@ -98,12 +105,13 @@ void writer_lock::write_record() {
     int n = std::snprintf(
             buf.data(),
             buf.size(),
-            "%.*s %016" PRIx64 " %" PRId64 " %" PRId64 "\n",
+            "%.*s %016" PRIx64 " %" PRId64 " %" PRId64 " %c\n",
             static_cast<int>(LEASE_MAGIC.size()),
             LEASE_MAGIC.data(),
             m_instance_id,
             static_cast<int64_t>(::getpid()),
-            now_unix());
+            now_unix(),
+            m_role);
     if (n <= 0)
         return;
     // One pwrite at offset 0 plus a truncate: the record is small enough that a reader's single read
@@ -140,22 +148,27 @@ std::optional<lease_info> writer_lock::read(const fs::path& lock_file) {
     buf[static_cast<size_t>(n)] = '\0';
 
     char magic[8] = {};
+    char role = WRITER_ROLE_UNKNOWN;
     lease_info info{};
-    // Expect: "<magic> <instance:hex> <pid> <renew>"
-    if (std::sscanf(
-                buf.data(),
-                "%7s %" SCNx64 " %" SCNd64 " %" SCNd64,
-                magic,
-                &info.instance_id,
-                &info.pid,
-                &info.renew_unix) != 4)
+    // Expect: "<magic> <instance:hex> <pid> <renew> [<role>]". The role is optional so an older
+    // four-field lease still parses (with role reported as unknown).
+    int matched = std::sscanf(
+            buf.data(),
+            "%7s %" SCNx64 " %" SCNd64 " %" SCNd64 " %c",
+            magic,
+            &info.instance_id,
+            &info.pid,
+            &info.renew_unix,
+            &role);
+    if (matched < 4)
         return std::nullopt;
     if (LEASE_MAGIC != magic)
         return std::nullopt;
+    info.role = (matched >= 5) ? role : WRITER_ROLE_UNKNOWN;
     return info;
 }
 
-std::unique_ptr<writer_lock> writer_lock::adopt(fs::path lock_file, int fd) {
+std::unique_ptr<writer_lock> writer_lock::adopt(fs::path lock_file, int fd, char role) {
     if (fd < 0) {
         oxen::log::error(logcat, "shared-chain writer lock adopt: invalid fd {}", fd);
         return nullptr;
@@ -186,7 +199,7 @@ std::unique_ptr<writer_lock> writer_lock::adopt(fs::path lock_file, int fd) {
         return nullptr;
     }
 
-    std::unique_ptr<writer_lock> lock{new writer_lock{std::move(lock_file)}};
+    std::unique_ptr<writer_lock> lock{new writer_lock{std::move(lock_file), role}};
     lock->m_fd = fd;  // take ownership of the inherited descriptor as-is (do not reopen)
     lock->m_held = true;
     lock->write_record();  // stamp a fresh lease for this new writer process (new instance id)
@@ -219,6 +232,81 @@ std::unique_ptr<writer_lock> writer_lock::adopt(fs::path, int) {
 }
 
 #endif
+
+// ---- reclaim request --------------------------------------------------------------------------
+// A small marker file, separate from writer.lock (so it never perturbs the fcntl lock). It is
+// cross-platform; only the pid-liveness check is POSIX-guarded.
+
+namespace {
+    fs::path reclaim_file_path(const fs::path& chain_dir) { return chain_dir / RECLAIM_FILE; }
+}  // namespace
+
+void write_reclaim_request(const fs::path& chain_dir, int64_t pid) {
+    std::array<char, 64> buf{};
+    int n = std::snprintf(
+            buf.data(),
+            buf.size(),
+            "%.*s %" PRId64 " %" PRId64 "\n",
+            static_cast<int>(RECLAIM_MAGIC.size()),
+            RECLAIM_MAGIC.data(),
+            pid,
+            now_unix());
+    if (n <= 0)
+        return;
+    // Write a temp file then rename, so a reader never observes a torn record.
+    auto final_path = reclaim_file_path(chain_dir);
+    auto tmp_path = final_path;
+    tmp_path += ".tmp";
+    if (FILE* f = ::fopen(tmp_path.string().c_str(), "wb")) {
+        bool ok = std::fwrite(buf.data(), 1, static_cast<size_t>(n), f) == static_cast<size_t>(n);
+        std::fclose(f);
+        std::error_code ec;
+        if (ok)
+            fs::rename(tmp_path, final_path, ec);
+        if (!ok || ec)
+            fs::remove(tmp_path, ec);
+    } else {
+        oxen::log::warning(
+                logcat,
+                "shared-chain reclaim request: cannot write {}: {}",
+                tmp_path,
+                std::strerror(errno));
+    }
+}
+
+std::optional<reclaim_request> read_reclaim_request(const fs::path& chain_dir) {
+    FILE* f = ::fopen(reclaim_file_path(chain_dir).string().c_str(), "rb");
+    if (!f)
+        return std::nullopt;
+    std::array<char, 64> buf{};
+    size_t n = std::fread(buf.data(), 1, buf.size() - 1, f);
+    std::fclose(f);
+    if (n == 0)
+        return std::nullopt;
+    buf[n] = '\0';
+    char magic[8] = {};
+    reclaim_request req{};
+    if (std::sscanf(buf.data(), "%7s %" SCNd64 " %" SCNd64, magic, &req.pid, &req.ts_unix) != 3)
+        return std::nullopt;
+    if (RECLAIM_MAGIC != magic)
+        return std::nullopt;
+    return req;
+}
+
+void clear_reclaim_request(const fs::path& chain_dir) {
+    std::error_code ec;
+    fs::remove(reclaim_file_path(chain_dir), ec);
+}
+
+bool reclaim_request_live(const reclaim_request& req) {
+    if (now_unix() - req.ts_unix > RECLAIM_REQUEST_FRESH_SECS)
+        return false;  // stale: the requester stopped refreshing (likely died)
+#ifndef _WIN32
+    if (req.pid > 0 && ::kill(static_cast<pid_t>(req.pid), 0) == -1 && errno == ESRCH)
+        return false;  // requester process is gone
+#endif
+    return true;
+}
 
 // ---- fence_watchdog ---------------------------------------------------------------------------
 
