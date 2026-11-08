@@ -844,7 +844,7 @@ jobs:
         run: |
           cmake --build build-macos-x86_64 \
             --target daemon simplewallet wallet_rpc_server mdb_copy mdb_stat \
-            --parallel "$(sysctl -n hw.ncpu)"
+            --parallel "${BUILD_JOBS:-$(sysctl -n hw.ncpu)}"
 
       - name: Bundle Homebrew dylibs into binaries
         shell: bash
