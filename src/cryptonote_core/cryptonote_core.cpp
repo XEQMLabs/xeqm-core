@@ -3334,12 +3334,12 @@ void core::do_uptime_proof_call() {
     }
 }
 //-----------------------------------------------------------------------------------------------
-void core::drive_reader_quorum_cop() {
+bool core::drive_reader_quorum_cop() {
     // Shared per-host chain reader only (opposite of the writer, which drives the cop through the
     // normal block_add hook). Feed the cop each newly committed block so it pools this node's
-    // checkpoint/obligation votes; the periodic vote relayer then broadcasts them.
+    // checkpoint/obligation votes; the caller then broadcasts them immediately.
     if (!(blockchain.has_db() && blockchain.db().is_read_only()))
-        return;
+        return false;
 
     // Only advance as far as the service node list has already been folded forward by
     // refresh_sn_list_readonly, so every quorum the cop looks up for these blocks is available.
@@ -3348,9 +3348,10 @@ void core::drive_reader_quorum_cop() {
         // First call: start at the current tip so we only drive blocks arriving from now on; the cop
         // self-bounds its own vote window, so replaying the whole chain would be wasted work.
         m_quorum_cop_readonly_height = sn_height;
-        return;
+        return false;
     }
 
+    bool advanced = false;
     for (uint64_t h = m_quorum_cop_readonly_height + 1; h <= sn_height; h++) {
         block blk;
         try {
@@ -3361,15 +3362,17 @@ void core::drive_reader_quorum_cop() {
                     "Shared-chain reader: could not read block {} to drive the quorum cop: {}",
                     h,
                     e.what());
-            return;  // retry on the next idle pass
+            return advanced;  // relay what we pooled; retry the rest on the next idle pass
         }
         std::vector<transaction> txs;
         std::unordered_set<crypto::hash> missed;
         if (!blockchain.get_transactions(blk.tx_hashes, txs, &missed) || !missed.empty())
-            return;  // transactions not available yet; retry next idle pass
+            return advanced;  // transactions not available yet; retry next idle pass
         m_quorum_cop.block_add(blk, txs);
         m_quorum_cop_readonly_height = h;
+        advanced = true;
     }
+    return advanced;
 }
 //-----------------------------------------------------------------------------------------------
 bool core::on_idle() {
@@ -3467,9 +3470,17 @@ Use "help <command>" to see a command's documentation.
         // Drive the quorum cop over the reader's newly committed blocks so it generates this node's
         // checkpoint and obligation votes. A reader never runs the block_add hook that drives the cop
         // on a writer, so without this it never votes and is temporarily decommissioned for Missed
-        // Checkpoints once it is drawn into a checkpointing quorum. The periodic vote relayer below
-        // broadcasts the pooled votes. No-op until a new block has been folded into the SN list.
-        drive_reader_quorum_cop();
+        // Checkpoints once it is drawn into a checkpointing quorum. No-op until a new block has been
+        // folded into the SN list.
+        //
+        // Relay the freshly pooled votes right away, mirroring the writer's add_new_block() path
+        // (which relays on every committed block). A reader ingests no blocks over p2p, so it has no
+        // add_new_block relay trigger; without this immediate relay its checkpoint vote waits for the
+        // 2-minute periodic relayer (m_service_node_vote_relayer), which can fall outside the
+        // checkpoint's collection window (checkpoints form every CHECKPOINT_INTERVAL blocks) and leave
+        // the reader decommissioned for Missed Checkpoints even though it voted on time.
+        if (drive_reader_quorum_cop())
+            relay_service_node_votes();
 
         // Reload the in-memory sorted mempool from the shared txpool so that if this reader is drawn
         // as the Pulse block producer it assembles the template from the writer's current pool rather
