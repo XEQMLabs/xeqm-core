@@ -3625,8 +3625,12 @@ Use "help <command>" to see a command's documentation.
         // 2-minute periodic relayer (m_service_node_vote_relayer), which can fall outside the
         // checkpoint's collection window (checkpoints form every CHECKPOINT_INTERVAL blocks) and leave
         // the reader decommissioned for Missed Checkpoints even though it voted on time.
-        if (drive_reader_quorum_cop())
-            relay_service_node_votes();
+        drive_reader_quorum_cop();
+        // Relay every idle tick, not only when the cop advanced over a new block. relay_service_node_votes
+        // is a no-op when nothing is relayable (all votes sent within TIME_BETWEEN_RELAY), so this is cheap;
+        // its purpose is to retry a vote that a previous relay could not deliver (no synced peer at that
+        // instant) on the next ~1s idle pass, instead of waiting for the next block or the 2-min relayer.
+        relay_service_node_votes();
 
         // Reload the in-memory sorted mempool from the shared txpool so that if this reader is drawn
         // as the Pulse block producer it assembles the template from the writer's current pool rather
