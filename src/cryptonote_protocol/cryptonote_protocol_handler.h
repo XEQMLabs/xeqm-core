@@ -199,7 +199,11 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol {
                     T::ID, epee::strspan<uint8_t>(arg_buff), std::move(connections));
         }
 
-        return true;
+        // No synchronized peers to send to: report NOT relayed so the caller does not mark the
+        // payload as sent. For checkpoint votes this keeps the vote in the relayable set to be
+        // retried on the next attempt instead of being suppressed for TIME_BETWEEN_RELAY (120s),
+        // which is what let a shared-chain reader miss checkpoints under a flapping/dead hub.
+        return false;
     }
 
     virtual bool relay_block(
