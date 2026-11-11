@@ -741,6 +741,10 @@ bool Blockchain::load_missing_blocks_into_oxen_subsystems(
 }
 
 bool Blockchain::refresh_sn_list_readonly() {
+    // Serialize refreshes: the periodic reader task and the Pulse round setup can both call this;
+    // without this they could race and double-feed a block to the SN list.
+    static std::mutex sn_readonly_refresh_mtx;
+    std::lock_guard<std::mutex> sn_readonly_refresh_lock{sn_readonly_refresh_mtx};
     // Only meaningful on a read-only shared-chain reader; a writer keeps its SN list current
     // through the normal block-add path.
     if (!m_db->is_read_only())
