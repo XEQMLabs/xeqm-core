@@ -227,7 +227,7 @@ void writer_lock::release() {
 std::optional<lease_info> writer_lock::read(const fs::path&) {
     return std::nullopt;
 }
-std::unique_ptr<writer_lock> writer_lock::adopt(fs::path, int) {
+std::unique_ptr<writer_lock> writer_lock::adopt(fs::path, int, char) {
     return nullptr;
 }
 
