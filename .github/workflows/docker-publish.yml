@@ -1,9 +1,14 @@
 name: Build and Publish Docker Image
 
 on:
-  push:
-    branches:
-      - main
+  # Auto-publish from `main` is PAUSED while 1.1.4 is assembled, so an in-progress
+  # version (main currently carries VERSION 1.1.4 but lacks the shared-chain reader
+  # fixes, session-router readiness, etc.) is not shipped as the public :latest /
+  # :vX.Y.Z image. Publish deliberately via the manual dispatch below, and restore
+  # the push trigger (or split main -> :edge, tags -> :latest) at release time.
+  # push:
+  #   branches:
+  #     - main
   workflow_dispatch:
 
 env:
