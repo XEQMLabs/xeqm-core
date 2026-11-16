@@ -722,12 +722,22 @@ jobs:
           echo "/usr/local/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        # macOS Intel x86_64 is a Homebrew Tier 3 platform (no bottles) and this is a
+        # persistent self-hosted runner where these formulae are already installed. A plain
+        # "brew update && brew install" makes brew auto-upgrade installed dependents (ccache,
+        # hidapi, ...), and two parallel brew processes then collide on the Cellar lock
+        # ("process has already locked /usr/local/Cellar/ccache"), failing the step. Disable
+        # auto-update and the dependents/upgrade behaviour, and install only what is missing.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
         run: |
-          brew update
-          brew install \
-            cmake ninja pkg-config ccache \
-            zeromq openssl@3 libsodium hidapi \
-            sqlite3 curl gmp zstd doxygen
+          for pkg in cmake ninja pkg-config ccache \
+                     zeromq openssl@3 libsodium hidapi \
+                     sqlite3 curl gmp zstd doxygen; do
+            brew list --versions "$pkg" >/dev/null 2>&1 || brew install "$pkg"
+          done
 
       - name: Build pinned Boost 1.85 for macOS
         shell: bash
