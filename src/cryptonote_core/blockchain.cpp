@@ -38,10 +38,13 @@
 #include <sodium.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <stdexcept>
 
@@ -749,6 +752,45 @@ bool Blockchain::refresh_sn_list_readonly() {
     // through the normal block-add path.
     if (!m_db->is_read_only())
         return true;
+
+    // The writer may have reorganised since the last refresh: put the in-memory state back on its
+    // chain before replaying, and record the rewind for the quorum cop driver.
+    std::optional<uint64_t> rewound;
+    bool on_chain = false;
+    try {
+        on_chain = service_node_list.rewind_readonly(rewound);
+    } catch (const std::exception& e) {
+        log::warning(
+                logcat,
+                "Shared-chain reader: could not check the service node list against the shared "
+                "chain: {}; will retry",
+                e.what());
+        return false;
+    }
+    if (!on_chain) {
+        // Reorg deeper than the in-memory history: stop cleanly so the service restarts and
+        // reloads from the writer's stored state.
+        static std::atomic<bool> stop_requested{false};
+        if (!stop_requested.exchange(true)) {
+            log::error(
+                    logcat,
+                    "Shared-chain reader: service node state is not on the writer's chain and no "
+                    "recent state is; stopping so the service restarts and reloads it");
+            std::raise(SIGTERM);
+        }
+        return false;
+    }
+    if (rewound) {
+        log::warning(
+                logcat,
+                "Shared-chain reader: the writer reorganised the chain; service node list "
+                "rewound to height {}",
+                *rewound);
+        uint64_t prev = m_readonly_rewind_height.load();
+        while (*rewound < prev &&
+               !m_readonly_rewind_height.compare_exchange_weak(prev, *rewound)) {
+        }
+    }
 
     // Each top-level DB read renews this thread's LMDB read snapshot (as long as we are not nested
     // in a batch or an outer read guard), so m_db->height() observes the writer's latest commit and

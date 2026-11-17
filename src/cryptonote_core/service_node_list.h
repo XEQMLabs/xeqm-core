@@ -34,6 +34,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string_view>
 #include <type_traits>
@@ -562,6 +563,10 @@ class service_node_list {
     // strict height order from m_state.height + 1.
     void process_block_readonly(
             const cryptonote::block& block, const std::vector<cryptonote::transaction>& txs);
+    // Shared per-host chain reader: after a writer reorg, rewind to the newest recent state still
+    // on the writer's chain (its height goes in `rewound`). Returns false if the state is off
+    // the chain and no recent state is on it.
+    bool rewind_readonly(std::optional<uint64_t>& rewound);
     void blockchain_detached(uint64_t height);
     void init();
     void validate_miner_tx(const cryptonote::miner_tx_info& info) const;

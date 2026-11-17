@@ -45,6 +45,8 @@ using io_service = io_context;
 }
 
 #include <atomic>
+#include <limits>
+#include <optional>
 #include <boost/serialization/list.hpp>
 #include <functional>
 #include <set>
@@ -1298,6 +1300,16 @@ class Blockchain {
      */
     bool refresh_sn_list_readonly();
 
+    /** Shared per-host chain reader: the lowest height the service node list was rewound to
+     *  (writer reorg) since the last call, if any. */
+    std::optional<uint64_t> take_readonly_rewind_height() {
+        const uint64_t none = std::numeric_limits<uint64_t>::max();
+        const uint64_t h = m_readonly_rewind_height.exchange(none);
+        if (h == none)
+            return std::nullopt;
+        return h;
+    }
+
     /** DEBUG.  Sets a max sync height; the blockchain object will reject any incoming blocks with a
      *   sync height above the given value.  0 disables.
      */
@@ -1430,6 +1442,8 @@ class Blockchain {
     difficulty_type m_fixed_difficulty;
 
     std::atomic<bool> m_cancel;
+    // Shared-chain reader: lowest SN list rewind height not yet taken by the quorum cop driver.
+    std::atomic<uint64_t> m_readonly_rewind_height{std::numeric_limits<uint64_t>::max()};
 
     // block template cache
     block m_btc;

@@ -3467,6 +3467,14 @@ bool core::drive_reader_quorum_cop() {
     if (!(blockchain.has_db() && blockchain.db().is_read_only()))
         return false;
 
+    // The service node list was rewound after a writer reorg: detach the cop to the same height so
+    // it is fed the replacement blocks.
+    if (auto rewound = blockchain.take_readonly_rewind_height()) {
+        m_quorum_cop.blockchain_detached(*rewound + 1, true);
+        if (m_quorum_cop_readonly_height > *rewound)
+            m_quorum_cop_readonly_height = *rewound;
+    }
+
     // Only advance as far as the service node list has already been folded forward by
     // refresh_sn_list_readonly, so every quorum the cop looks up for these blocks is available.
     uint64_t sn_height = service_node_list.height();
