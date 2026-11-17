@@ -22,7 +22,15 @@ inline constexpr uint64_t PEER_HISTORY_MARGIN = 100;
 // `height` at all: it is also what a peerlist entry, whose height we don't know, is judged by
 // against the height of the chain.
 constexpr bool history_covers(uint64_t height, uint64_t peer_height, uint64_t history) {
-    return history == 0 || height + history >= peer_height + PEER_HISTORY_MARGIN;
+    if (history == 0)
+        return true;
+    // height + history >= peer_height + PEER_HISTORY_MARGIN, without overflow.
+    if (peer_height >= height) {
+        const uint64_t gap = peer_height - height;
+        return history >= gap && history - gap >= PEER_HISTORY_MARGIN;
+    }
+    return history >= PEER_HISTORY_MARGIN ||
+           height - peer_height >= PEER_HISTORY_MARGIN - history;
 }
 
 // Whether a connected peer at chain height `peer_height` keeping `history` blocks can give us
