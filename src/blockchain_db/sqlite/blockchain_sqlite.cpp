@@ -28,7 +28,7 @@
 
 // =====================================================================================
 // Combined SQLite BlockchainDB backend -- M2a (data-access foundation + core chain path).
-// See blockchain_sqlite.h and docs/sqlite-port-M2-notes.md for scope.  Methods tied to
+// See blockchain_sqlite.h for scope.  Methods tied to
 // xeqm's diverged rewards / service-node / consensus state throw TODO(M2b).
 // =====================================================================================
 
@@ -100,8 +100,8 @@ namespace {
     }
 
     // Core chain tables only.  The diverged rewards / service-node tables (and the quorum-signed
-    // checkpoint tables, and the light-node history/trimmed-tx tables) are NOT created here: see
-    // docs/sqlite-port-M2-notes.md.  Foreign keys from the per-block tables to `blocks` are
+    // checkpoint tables, and the light-node history/trimmed-tx tables) are NOT created here.
+    // Foreign keys from the per-block tables to `blocks` are
     // deferred because BlockchainDB::add_block writes a block's transactions, outputs and key
     // images before the block's own row, all in one write transaction; the ON DELETE CASCADE still
     // fires immediately, so popping a block is a single delete of its `blocks` row.

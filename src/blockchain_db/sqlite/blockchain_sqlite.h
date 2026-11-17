@@ -31,7 +31,7 @@
 // =====================================================================================
 // Combined SQLite BlockchainDB backend (ported from oxen-core PR #1895).
 //
-// Milestone state (see docs/sqlite-port-M2-notes.md):
+// Milestone state:
 //   * M2a (this file): the data-access FOUNDATION + the CORE chain-storage path are real.
 //     Lifecycle (open/close/sync/reset), transaction management, the write path
 //     (add_block / add_transaction_data / add_output / add_spent_key / pop_block and the

@@ -1,7 +1,7 @@
 #pragma once
 
 // Shared per-host chain storage (issue #62), Phase 2: the writer lock, lease, and self-fence
-// watchdog. See docs/shared-per-host-chain-phase-2.md.
+// watchdog.
 //
 // Exactly one daemon on a host maintains the shared chain read-write (the writer); the rest open it
 // read-only (Phase 1). Leadership is a host-local exclusive lock: whoever holds it is the writer, so

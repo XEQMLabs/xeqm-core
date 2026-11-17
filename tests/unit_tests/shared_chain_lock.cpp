@@ -1,5 +1,5 @@
 // Tests for the shared per-host chain writer lock, lease, and self-fence watchdog
-// (src/cryptonote_core/shared_chain_lock.*). See docs/shared-per-host-chain-phase-2.md.
+// (src/cryptonote_core/shared_chain_lock.*).
 
 #include "gtest/gtest.h"
 
