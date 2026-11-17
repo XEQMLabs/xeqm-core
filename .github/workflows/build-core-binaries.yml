@@ -466,7 +466,9 @@ jobs:
 
   macos-arm64:
     name: Build macOS ARM64 binaries
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 120
 
     steps:
       - name: Checkout core repo
@@ -474,13 +476,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies
+      # Self-hosted runner services start with a minimal PATH; make Homebrew visible to every later step.
+      - name: Put Homebrew on PATH
+        shell: bash
         run: |
-          brew update
-          brew install \
-            cmake ninja pkg-config ccache \
-            zeromq openssl@3 libsodium hidapi \
-            sqlite3 curl gmp zstd doxygen
+          for p in /usr/local/bin /opt/homebrew/bin; do [ -x "$p/brew" ] && echo "$p" >> "$GITHUB_PATH"; done
+
+      - name: Install dependencies
+        # macOS arm64 now builds on a persistent self-hosted Apple Silicon runner because
+        # GitHub-hosted macos-latest arm64 stopped being provisioned for this repo. These
+        # formulae are already installed, so install only what is missing and disable
+        # auto-update / dependent auto-upgrade to avoid Cellar lock races (same as Intel).
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
+        run: |
+          for pkg in cmake ninja pkg-config ccache \
+                     zeromq openssl@3 libsodium hidapi \
+                     sqlite3 curl gmp zstd doxygen; do
+            brew list --versions "$pkg" >/dev/null 2>&1 || brew install "$pkg"
+          done
 
       - name: Build pinned Boost 1.85 for macOS
         shell: bash
