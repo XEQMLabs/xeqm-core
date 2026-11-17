@@ -4,7 +4,7 @@ Pre-mine distribution script.
 Opens testnet-gov wallet, waits until enough XEQM is unlocked,
 then sends to all 20 op wallets.
 
-Run BEFORE launching orchestrator-multihost.py
+Run BEFORE launching the test orchestrator
 """
 import json, urllib.request, time, sys
 from datetime import datetime

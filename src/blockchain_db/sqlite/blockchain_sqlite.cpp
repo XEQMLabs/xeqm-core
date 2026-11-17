@@ -27,9 +27,7 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // =====================================================================================
-// Combined SQLite BlockchainDB backend -- M2a (data-access foundation + core chain path).
-// See blockchain_sqlite.h for scope.  Methods tied to
-// xeqm's diverged rewards / service-node / consensus state throw TODO(M2b).
+// Combined SQLite BlockchainDB backend.  See blockchain_sqlite.h for scope.
 // =====================================================================================
 
 #include "blockchain_sqlite.h"
@@ -542,10 +540,6 @@ CREATE INDEX trimmed_txes_height ON trimmed_txes(height);
 
 }  // namespace
 
-void BlockchainSQLiteDB::m2_stub(const char* method) {
-    throw std::runtime_error(std::string{"BlockchainSQLite: not implemented (M2b): "} + method);
-}
-
 BlockchainSQLiteDB::BlockchainSQLiteDB(bool batch_transactions) :
         m_batch_transactions{batch_transactions} {}
 
@@ -558,8 +552,6 @@ BlockchainSQLiteDB::~BlockchainSQLiteDB() {
         }
     }
 }
-
-#define M2_STUB(method) m2_stub(method)
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
@@ -2403,7 +2395,5 @@ bool BlockchainSQLiteDB::remove_service_node_proof(const crypto::public_key& pub
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
-
-#undef M2_STUB
 
 }  // namespace cryptonote

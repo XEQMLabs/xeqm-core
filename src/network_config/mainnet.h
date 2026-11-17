@@ -17,9 +17,9 @@ inline constexpr std::array seeds = {
 // HF22 authorized fallback signers: one dedicated key per host, secret loaded on that host via
 // --fallback-signer-key-file, staggered with --fallback-signer-delay-rounds 0 / 2 / 4.
 inline constexpr std::array fallback_miner_pubkeys = {
-        "69c287255899a3633906b4c3e358f42748c0894987672a28730e9bb7b31b27c9"sv,  // maple, delay 0
-        "bdffb531a652ce95e7ba62c4589d7f7138cbbfe10927cc1f2708c7ea4603aab1"sv,  // surf, delay 2
-        "e1a49dc9488e43e4099028e8c7209b062cbdf1f48ff6467ad4dd6ba71c6ab46b"sv,  // oci-seed-2, delay 4
+        "69c287255899a3633906b4c3e358f42748c0894987672a28730e9bb7b31b27c9"sv,  // delay 0
+        "bdffb531a652ce95e7ba62c4589d7f7138cbbfe10927cc1f2708c7ea4603aab1"sv,  // delay 2
+        "e1a49dc9488e43e4099028e8c7209b062cbdf1f48ff6467ad4dd6ba71c6ab46b"sv,  // delay 4
 };
 
 inline constexpr auto TARGET_BLOCK_TIME = 1min;
