@@ -22,7 +22,14 @@ PKG="XEQM-core-${VERSION}-macos-${ARCH}-${SHORT}.pkg"
 WORK="${RUNNER_TEMP:-/tmp}/hf22-sign.$$"
 KEYCHAIN="${WORK}/signing.keychain-db"
 mkdir -p "$WORK"
-cleanup() { security delete-keychain "$KEYCHAIN" 2>/dev/null || true; rm -rf "$WORK"; }
+ORIG_KEYCHAINS=""
+cleanup() {
+  # Restore the original keychain search list. A self-hosted runner persists it across jobs,
+  # so we must not leave it pointing at a deleted temp keychain.
+  [ -n "$ORIG_KEYCHAINS" ] && security list-keychains -d user -s $ORIG_KEYCHAINS 2>/dev/null || true
+  security delete-keychain "$KEYCHAIN" 2>/dev/null || true
+  rm -rf "$WORK"
+}
 trap cleanup EXIT
 
 echo "==> Creating temp keychain + importing Developer ID certs"
@@ -44,8 +51,13 @@ done
 security import "$WORK/app.p12"       -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
 security import "$WORK/installer.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/productsign
 security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-# put our keychain first in the search list so codesign/productsign find the identities
-security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+# Make our temp keychain the ONLY keychain in the search list during signing. On a persistent
+# self-hosted runner the user's login keychain may already hold the same Developer ID cert, and
+# then `codesign --sign "<name>"` fails with: ambiguous (matches ... in login.keychain ...). A
+# GitHub-hosted runner has no such duplicate, so temp-keychain-only reproduces that working
+# state. Save the original list first; cleanup() restores it.
+ORIG_KEYCHAINS="$(security list-keychains -d user | sed 's/"//g')"
+security list-keychains -d user -s "$KEYCHAIN"
 
 echo "==> Codesigning bundled dylibs then binaries (hardened runtime)"
 if compgen -G "$BINDIR/libs/*.dylib" > /dev/null; then
