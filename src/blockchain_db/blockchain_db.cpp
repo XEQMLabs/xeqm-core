@@ -69,9 +69,9 @@ std::unique_ptr<BlockchainDB> new_db() {
     // replace this env var later.
     if (const char* backend = std::getenv("XEQM_DB_BACKEND");
         backend && std::string_view{backend} == "sqlite") {
-        log::info(
+        log::warning(
                 logcat,
-                "Selecting the SQLite blockchain backend (XEQM_DB_BACKEND=sqlite)");
+                "XEQM_DB_BACKEND=sqlite: selecting the experimental SQLite blockchain backend");
         return std::make_unique<BlockchainSQLiteDB>();
     }
     return std::make_unique<BlockchainLMDB>();

@@ -8,7 +8,7 @@
 
 namespace cryptonote {
 
-// The smallest history a node can be set to keep: one day of 2-minute blocks.  It covers every
+// The smallest history a node can be set to keep: 12 hours of 1-minute blocks.  It covers every
 // lookback of block processing from HF15 on (none goes back more than 65 blocks; see
 // history_minimum), and leaves room for the service node and rewards restore points a rewind
 // needs: those are stored every 60 blocks, each with the quorums of the 65 heights before it, so
@@ -23,19 +23,20 @@ inline constexpr uint64_t HISTORY_LOCK_MARGIN = 360;
 /// needs while the chain has `height` blocks (that is, while adding the block at `height`): the
 /// blocks at heights [height - result, height).
 ///
-/// Before HF15 (mainnet height 496,969) that is the staking lock period plus HISTORY_LOCK_MARGIN,
+/// Before HF15 that is the staking lock period plus HISTORY_LOCK_MARGIN,
 /// and from HF15 on it is HISTORY_MIN_BLOCKS.  Together these cover every read that adding a
-/// block makes of an older block body or transaction:
+/// block makes of an older block body or transaction (as listed for the upstream
+/// implementation, oxen-core #1895):
 ///
-/// - HF9 (mainnet 101,250-161,848): service node expiry re-reads the registration txs in the
-///   block one staking lock period back (`staking_num_lock_blocks`, 21,600 blocks on mainnet).
+/// - HF9: service node expiry re-reads the registration txs in the block one staking lock
+///   period back (`staking_num_lock_blocks`).
 ///   That cannot be computed from service node state (a node can have more than one
 ///   registration tx, and expires on the anniversary of the one in that block).  For the first
 ///   lock period of HF9 the block it reads is from before HF9, which is why the longer minimum
 ///   starts at genesis rather than at HF9.
 /// - HF10-HF14: batched governance payouts, at multiples of the governance interval, sum the
 ///   governance share of every block of the previous interval, which takes those blocks' miner
-///   txs: the 5,040 blocks before the payout on mainnet.
+///   txs: the blocks of one governance interval before the payout.
 /// - Every other read is within 65 blocks: pulse quorum entropy (up to 36 blocks back, HF16+),
 ///   L2 event confirmations (the tx and its block, up to 30 back, HF21+), the L2 reward
 ///   consensus (15 back, HF21+), quorums (65 back, from stored service node state rather than

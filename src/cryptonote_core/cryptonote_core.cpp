@@ -507,6 +507,11 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_shared_chain_reclaim_timeout =
             std::chrono::seconds{command_line::get_arg(vm, arg_shared_chain_reclaim_timeout)};
     m_shared_chain_debug_stall_secs = command_line::get_arg(vm, arg_shared_chain_debug_stall);
+    // Fault injection is for test networks only.
+    if (m_nettype == network_type::MAINNET && m_shared_chain_debug_stall_secs) {
+        log::warning(logcat, "--shared-chain-debug-stall-secs is ignored on mainnet");
+        m_shared_chain_debug_stall_secs = 0;
+    }
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
 
@@ -846,6 +851,7 @@ bool core::init(
                     log::error(
                             globallogcat,
                             "Shared per-host chain writer self-fencing (stalled); exiting now");
+                    oxen::log::flush();
                     std::_Exit(70);
                 });
         m_fence_watchdog->start();
@@ -1233,7 +1239,7 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
     bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
     // A shared per-host chain promotion re-exec opens the chain read-write even if --db-readonly
     // still lingers (for example from a config file); the inherited lock fd marks it as the writer.
-    if (command_line::get_arg(vm, arg_shared_chain_lock_fd) >= 0)
+    if (m_shared_chain_writer && command_line::get_arg(vm, arg_shared_chain_lock_fd) >= 0)
         db_readonly = false;
 
     // make sure the data directory exists, and try to lock it
@@ -1552,12 +1558,15 @@ void core::reexec_as_writer(int lock_fd) {
     }
 
     ::execv(exe.c_str(), cargv.data());
-    // execv only returns on failure.
+    // execv only returns on failure. After an in-place upgrade the resolved path is gone (it reads
+    // back as "<path> (deleted)"); the running image is still reachable through /proc/self/exe.
+    const int exec_errno = errno;
+    ::execv("/proc/self/exe", cargv.data());
     log::error(
             globallogcat,
             "Shared per-host chain promotion execv({}) failed: {}",
             exe,
-            std::strerror(errno));
+            std::strerror(exec_errno));
 #else
     (void)lock_fd;
 #endif
@@ -3467,6 +3476,14 @@ bool core::drive_reader_quorum_cop() {
     if (!(blockchain.has_db() && blockchain.db().is_read_only()))
         return false;
 
+    // The service node list was rewound after a writer reorg: detach the cop to the same height so
+    // it is fed the replacement blocks.
+    if (auto rewound = blockchain.take_readonly_rewind_height()) {
+        m_quorum_cop.blockchain_detached(*rewound + 1, true);
+        if (m_quorum_cop_readonly_height > *rewound)
+            m_quorum_cop_readonly_height = *rewound;
+    }
+
     // Only advance as far as the service node list has already been folded forward by
     // refresh_sn_list_readonly, so every quorum the cop looks up for these blocks is available.
     uint64_t sn_height = service_node_list.height();
@@ -3600,8 +3617,8 @@ Use "help <command>" to see a command's documentation.
                                 "leadership; this promoted writer is stepping down to a read-only "
                                 "reader now.",
                                 req->pid);
-                        if (m_writer_lock)
-                            m_writer_lock->release();
+                        // The kernel frees the lock once the process is gone; releasing it
+                        // first would let the next writer start while this one still runs.
                         oxen::log::flush();
                         std::_Exit(71);
                     }
@@ -3613,6 +3630,14 @@ Use "help <command>" to see a command's documentation.
         // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse
         // reads current instead of frozen at the last persisted blob.
         m_sn_reader_refresh_interval.do_call([this] { return blockchain.refresh_sn_list_readonly(); });
+        if (blockchain.readonly_state_lost()) {
+            log::error(
+                    globallogcat,
+                    "Shared per-host chain reader: service node state is not on the writer's chain "
+                    "and cannot be rewound; exiting so the service restarts and reloads it");
+            oxen::log::flush();
+            std::_Exit(72);
+        }
 
         // Drive the quorum cop over the reader's newly committed blocks so it generates this node's
         // checkpoint and obligation votes. A reader never runs the block_add hook that drives the cop

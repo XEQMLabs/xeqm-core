@@ -3381,8 +3381,41 @@ void service_node_list::process_block_readonly(
         m_state.height = block.get_height();
         return;
     }
+    // A block read after a writer reorg does not extend the state we hold; refuse it.
+    if (m_state.block_hash && block.prev_id != m_state.block_hash)
+        throw std::runtime_error{"block does not extend the reader's service node state"};
     process_block(block, txs);
     rebuild_key_image_cache();
+}
+
+bool service_node_list::rewind_readonly(std::optional<uint64_t>& rewound) {
+    rewound.reset();
+    std::lock_guard lock(m_sn_mutex);
+    const auto& db = blockchain.db();
+    const uint64_t chain_height = db.height();
+    // A state is on the writer's chain while the block it was built from is still at its height.
+    auto on_chain = [&db, chain_height](const state_t& s) {
+        return s.height < chain_height && db.get_block_hash_from_height(s.height) == s.block_hash;
+    };
+    // No hash to compare until the first block is processed after a reset.
+    if (!m_state.block_hash || on_chain(m_state))
+        return true;
+
+    // Same restore as the recent-history case of blockchain_detached, minus the reward DB.
+    state_set& set = m_transient->state_history;
+    for (auto rit = set.rbegin(); rit != set.rend(); ++rit) {
+        if (rit->only_loaded_quorums || rit->height >= m_state.height || !rit->block_hash ||
+            !on_chain(*rit))
+            continue;
+        auto it = set.find(rit->height);
+        m_state = *it;
+        cleanup_zombies_from_state();
+        rebuild_key_image_cache();
+        set.erase(std::next(it), set.end());
+        rewound = m_state.height;
+        return true;
+    }
+    return false;
 }
 
 static boost::random::mt19937_64 quorum_rng(

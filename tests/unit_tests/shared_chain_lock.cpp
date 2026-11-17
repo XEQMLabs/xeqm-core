@@ -1,5 +1,5 @@
 // Tests for the shared per-host chain writer lock, lease, and self-fence watchdog
-// (src/cryptonote_core/shared_chain_lock.*). See docs/shared-per-host-chain-phase-2.md.
+// (src/cryptonote_core/shared_chain_lock.*).
 
 #include "gtest/gtest.h"
 
@@ -177,6 +177,23 @@ TEST(shared_chain_lock, adopt_rejects_invalid_fd) {
     fs::remove(path, ec);
 }
 
+// adopt() rejects an open, lockable descriptor that is not the lock file.
+TEST(shared_chain_lock, adopt_rejects_other_file) {
+    auto path = temp_lock_path("adopt-other");
+    auto other = temp_lock_path("adopt-other-file");
+    int lock_fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(lock_fd, -1);
+    int fd = ::open(other.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(fd, -1);
+    EXPECT_FALSE(sc::writer_lock::adopt(path, fd));
+    ::close(fd);
+    ::close(lock_fd);
+
+    std::error_code ec;
+    fs::remove(path, ec);
+    fs::remove(other, ec);
+}
+
 // The lease records the writer role, read() reports it, and an older four-field lease (no role) reads
 // back as unknown.
 TEST(shared_chain_lock, lease_role) {
@@ -281,10 +298,22 @@ TEST(shared_chain_lock, watchdog_fences_on_stall) {
     std::atomic<int> fired{0};
     sc::fence_watchdog wd{80ms, 20ms, [&fired] { fired++; }};
     wd.start();
-    // No heartbeats: it should fence within a few check intervals.
+    wd.heartbeat();  // the watchdog arms on the first heartbeat
+    // No further heartbeats: it should fence within a few check intervals.
     std::this_thread::sleep_for(400ms);
     EXPECT_TRUE(wd.fenced());
     EXPECT_EQ(fired.load(), 1);  // fires once only
+    wd.stop();
+}
+
+// Watchdog does not fence before the first heartbeat arms it.
+TEST(shared_chain_lock, watchdog_unarmed_before_first_heartbeat) {
+    std::atomic<int> fired{0};
+    sc::fence_watchdog wd{80ms, 20ms, [&fired] { fired++; }};
+    wd.start();
+    std::this_thread::sleep_for(300ms);
+    EXPECT_FALSE(wd.fenced());
+    EXPECT_EQ(fired.load(), 0);
     wd.stop();
 }
 

@@ -2082,6 +2082,8 @@ bool node_server<t_payload_net_handler>::sanitize_peerlist(
             continue;
         }
         local_peerlist[i].last_seen = 0;
+        // Served history is only taken from a peer's own handshake, never from gossip.
+        local_peerlist[i].history = 0;
 
         if constexpr (cryptonote::PRUNING_DEBUG_SPOOF_SEED)
             be.pruning_seed = tools::make_pruning_seed(

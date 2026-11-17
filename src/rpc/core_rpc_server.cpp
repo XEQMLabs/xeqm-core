@@ -1185,6 +1185,15 @@ void core_rpc_server::invoke(SUBMIT_TRANSACTION& tx, rpc_context) {
         return;
     }
 
+    // A shared per-host chain reader has no writable pool; say so instead of failing blank.
+    if (m_core.blockchain.db().is_read_only()) {
+        tx.response["status"] = STATUS_FAILED;
+        tx.response["reason"] =
+                "This node is a read-only shared-chain reader and cannot accept transactions; "
+                "submit to another node";
+        return;
+    }
+
     if (tx.request.blink) {
         auto future = m_core.handle_blink_tx(tx.request.tx);
         // FIXME: blocking here for 10s is nasty; we need to stash this request and come back to it

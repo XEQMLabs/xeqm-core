@@ -31,18 +31,8 @@
 // =====================================================================================
 // Combined SQLite BlockchainDB backend (ported from oxen-core PR #1895).
 //
-// Milestone state (see docs/sqlite-port-M2-notes.md):
-//   * M2a (this file): the data-access FOUNDATION + the CORE chain-storage path are real.
-//     Lifecycle (open/close/sync/reset), transaction management, the write path
-//     (add_block / add_transaction_data / add_output / add_spent_key / pop_block and the
-//     remove_* seams), the read path (blocks, transactions, outputs, key images), txpool
-//     and alt blocks are implemented against xeqm's `db::Database` (SQLiteCpp) wrapper.
-//   * M2b (still TODO -- throws): anything tied to where xeqm diverged from oxen on
-//     consensus/rewards -- rewards / batching-v2 / accrued-history, service-node data +
-//     proofs + archive, fallback-miner / rev1 signed fallback, quorum-signed checkpoints,
-//     plus pruning and histogram / output-distribution.  These deliberately throw
-//     ("BlockchainSQLite: not implemented (M2b): <method>") rather than guess at the
-//     diverged schema.
+// Implements the BlockchainDB interface on SQLite.  Opt-in and experimental; LMDB is the
+// default backend.
 //
 // NAMING: the upstream class is `cryptonote::BlockchainSQLite`, but that fully-qualified
 // name is already taken in xeqm-core by the rewards/batching database in
@@ -51,11 +41,9 @@
 // rewards_db) is a later task.
 //
 // ACCESS LAYER: upstream #1895 uses a `session::sqlite` connection pool that xeqm-core does
-// not have.  This port is rebuilt on xeqm's existing `db::Database` wrapper (src/sqlitedb,
-// built on SQLiteCpp).  `db::Database` is a SINGLE shared connection (OPEN_FULLMUTEX, WAL,
-// foreign_keys=ON) with a per-thread prepared-statement cache, so this backend uses one
-// connection for both reads and writes rather than a pool.  See the M2 notes for the
-// concurrency implications (and the connection-pool work left for a later milestone).
+// not have.  This port is built on xeqm's `db::Database` wrapper (src/sqlitedb, on SQLiteCpp):
+// the writer uses one read-write connection, and every other thread reads through its own
+// read-only WAL connection (see read_conn()).
 // =====================================================================================
 
 #include <SQLiteCpp/SQLiteCpp.h>
@@ -214,10 +202,6 @@ class BlockchainSQLiteDB : public BlockchainDB {
     bool remove_service_node_proof(const crypto::public_key& pubkey) override;
 
   private:
-    // Throws std::runtime_error("BlockchainSQLite: not implemented (M2b): <method>").  Used for the
-    // diverged rewards / service-node / consensus seams that this milestone does not implement.
-    [[noreturn]] static void m2_stub(const char* method);
-
     void check_open() const;
 
     // The shared connection for a write.  Throws unless the calling thread holds the write
