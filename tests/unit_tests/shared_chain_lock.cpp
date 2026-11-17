@@ -281,10 +281,22 @@ TEST(shared_chain_lock, watchdog_fences_on_stall) {
     std::atomic<int> fired{0};
     sc::fence_watchdog wd{80ms, 20ms, [&fired] { fired++; }};
     wd.start();
-    // No heartbeats: it should fence within a few check intervals.
+    wd.heartbeat();  // the watchdog arms on the first heartbeat
+    // No further heartbeats: it should fence within a few check intervals.
     std::this_thread::sleep_for(400ms);
     EXPECT_TRUE(wd.fenced());
     EXPECT_EQ(fired.load(), 1);  // fires once only
+    wd.stop();
+}
+
+// Watchdog does not fence before the first heartbeat arms it.
+TEST(shared_chain_lock, watchdog_unarmed_before_first_heartbeat) {
+    std::atomic<int> fired{0};
+    sc::fence_watchdog wd{80ms, 20ms, [&fired] { fired++; }};
+    wd.start();
+    std::this_thread::sleep_for(300ms);
+    EXPECT_FALSE(wd.fenced());
+    EXPECT_EQ(fired.load(), 0);
     wd.stop();
 }
 
