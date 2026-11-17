@@ -1310,6 +1310,10 @@ class Blockchain {
         return h;
     }
 
+    /** Shared per-host chain reader: true once the service node list could not be put back on
+     *  the writer's chain, so the reader has to restart to reload it. */
+    bool readonly_state_lost() const { return m_readonly_state_lost; }
+
     /** DEBUG.  Sets a max sync height; the blockchain object will reject any incoming blocks with a
      *   sync height above the given value.  0 disables.
      */
@@ -1444,6 +1448,7 @@ class Blockchain {
     std::atomic<bool> m_cancel;
     // Shared-chain reader: lowest SN list rewind height not yet taken by the quorum cop driver.
     std::atomic<uint64_t> m_readonly_rewind_height{std::numeric_limits<uint64_t>::max()};
+    std::atomic<bool> m_readonly_state_lost{false};
 
     // block template cache
     block m_btc;

@@ -851,6 +851,7 @@ bool core::init(
                     log::error(
                             globallogcat,
                             "Shared per-host chain writer self-fencing (stalled); exiting now");
+                    oxen::log::flush();
                     std::_Exit(70);
                 });
         m_fence_watchdog->start();
@@ -1238,7 +1239,7 @@ std::unique_ptr<BlockchainDB> core::init_blockchain_db(
     bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
     // A shared per-host chain promotion re-exec opens the chain read-write even if --db-readonly
     // still lingers (for example from a config file); the inherited lock fd marks it as the writer.
-    if (command_line::get_arg(vm, arg_shared_chain_lock_fd) >= 0)
+    if (m_shared_chain_writer && command_line::get_arg(vm, arg_shared_chain_lock_fd) >= 0)
         db_readonly = false;
 
     // make sure the data directory exists, and try to lock it
@@ -3616,8 +3617,8 @@ Use "help <command>" to see a command's documentation.
                                 "leadership; this promoted writer is stepping down to a read-only "
                                 "reader now.",
                                 req->pid);
-                        if (m_writer_lock)
-                            m_writer_lock->release();
+                        // The kernel frees the lock once the process is gone; releasing it
+                        // first would let the next writer start while this one still runs.
                         oxen::log::flush();
                         std::_Exit(71);
                     }
@@ -3629,6 +3630,14 @@ Use "help <command>" to see a command's documentation.
         // into the in-memory service node list, read-only. Keeps get_service_nodes and quorum/Pulse
         // reads current instead of frozen at the last persisted blob.
         m_sn_reader_refresh_interval.do_call([this] { return blockchain.refresh_sn_list_readonly(); });
+        if (blockchain.readonly_state_lost()) {
+            log::error(
+                    globallogcat,
+                    "Shared per-host chain reader: service node state is not on the writer's chain "
+                    "and cannot be rewound; exiting so the service restarts and reloads it");
+            oxen::log::flush();
+            std::_Exit(72);
+        }
 
         // Drive the quorum cop over the reader's newly committed blocks so it generates this node's
         // checkpoint and obligation votes. A reader never runs the block_add hook that drives the cop

@@ -13,6 +13,7 @@
 #ifndef _WIN32
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -181,6 +182,18 @@ std::unique_ptr<writer_lock> writer_lock::adopt(fs::path lock_file, int fd, char
                 "shared-chain writer lock adopt: fd {} is not open ({}); lock not inherited",
                 fd,
                 std::strerror(errno));
+        return nullptr;
+    }
+    // The fd must be the lock file itself, not just any open descriptor.
+    struct stat fd_st {};
+    struct stat path_st {};
+    if (::fstat(fd, &fd_st) == -1 || ::stat(lock_file.c_str(), &path_st) == -1 ||
+        fd_st.st_dev != path_st.st_dev || fd_st.st_ino != path_st.st_ino) {
+        oxen::log::error(
+                logcat,
+                "shared-chain writer lock adopt: fd {} is not {}; lock not inherited",
+                fd,
+                lock_file);
         return nullptr;
     }
     // Re-assert the write lock on the inherited fd. We already hold it (fcntl locks survive execve),

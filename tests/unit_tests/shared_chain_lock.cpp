@@ -177,6 +177,23 @@ TEST(shared_chain_lock, adopt_rejects_invalid_fd) {
     fs::remove(path, ec);
 }
 
+// adopt() rejects an open, lockable descriptor that is not the lock file.
+TEST(shared_chain_lock, adopt_rejects_other_file) {
+    auto path = temp_lock_path("adopt-other");
+    auto other = temp_lock_path("adopt-other-file");
+    int lock_fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(lock_fd, -1);
+    int fd = ::open(other.c_str(), O_RDWR | O_CREAT, 0644);
+    ASSERT_NE(fd, -1);
+    EXPECT_FALSE(sc::writer_lock::adopt(path, fd));
+    ::close(fd);
+    ::close(lock_fd);
+
+    std::error_code ec;
+    fs::remove(path, ec);
+    fs::remove(other, ec);
+}
+
 // The lease records the writer role, read() reports it, and an older four-field lease (no role) reads
 // back as unknown.
 TEST(shared_chain_lock, lease_role) {

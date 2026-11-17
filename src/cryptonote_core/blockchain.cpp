@@ -40,7 +40,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <csignal>
 #include <cstdio>
 #include <limits>
 #include <mutex>
@@ -768,16 +767,9 @@ bool Blockchain::refresh_sn_list_readonly() {
         return false;
     }
     if (!on_chain) {
-        // Reorg deeper than the in-memory history: stop cleanly so the service restarts and
+        // Reorg deeper than the in-memory history: core exits so the service restarts and
         // reloads from the writer's stored state.
-        static std::atomic<bool> stop_requested{false};
-        if (!stop_requested.exchange(true)) {
-            log::error(
-                    logcat,
-                    "Shared-chain reader: service node state is not on the writer's chain and no "
-                    "recent state is; stopping so the service restarts and reloads it");
-            std::raise(SIGTERM);
-        }
+        m_readonly_state_lost = true;
         return false;
     }
     if (rewound) {
