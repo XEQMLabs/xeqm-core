@@ -507,6 +507,11 @@ bool core::handle_command_line(const boost::program_options::variables_map& vm) 
     m_shared_chain_reclaim_timeout =
             std::chrono::seconds{command_line::get_arg(vm, arg_shared_chain_reclaim_timeout)};
     m_shared_chain_debug_stall_secs = command_line::get_arg(vm, arg_shared_chain_debug_stall);
+    // Fault injection is for test networks only.
+    if (m_nettype == network_type::MAINNET && m_shared_chain_debug_stall_secs) {
+        log::warning(logcat, "--shared-chain-debug-stall-secs is ignored on mainnet");
+        m_shared_chain_debug_stall_secs = 0;
+    }
     if (command_line::get_arg(vm, arg_test_drop_download) == true)
         test_drop_download();
 
@@ -1552,12 +1557,15 @@ void core::reexec_as_writer(int lock_fd) {
     }
 
     ::execv(exe.c_str(), cargv.data());
-    // execv only returns on failure.
+    // execv only returns on failure. After an in-place upgrade the resolved path is gone (it reads
+    // back as "<path> (deleted)"); the running image is still reachable through /proc/self/exe.
+    const int exec_errno = errno;
+    ::execv("/proc/self/exe", cargv.data());
     log::error(
             globallogcat,
             "Shared per-host chain promotion execv({}) failed: {}",
             exe,
-            std::strerror(errno));
+            std::strerror(exec_errno));
 #else
     (void)lock_fd;
 #endif
