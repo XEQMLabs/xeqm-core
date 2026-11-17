@@ -43,7 +43,11 @@ jobs:
               echo "Tag ${GITHUB_REF_NAME} does not match CMake VERSION ${VERSION}" >&2
               exit 1
             fi
-            echo "tags=${IMAGE}:v${VERSION},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "tags=${IMAGE}:v${VERSION},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "tags=${IMAGE}:v${VERSION}" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "tags=${IMAGE}:edge" >> "$GITHUB_OUTPUT"
           fi
