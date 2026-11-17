@@ -46,7 +46,10 @@ Database::Database(
         // Reader connection: never writes (query_only guards it) and must NOT set journal_mode (the
         // writer owns WAL).  Opening READWRITE (not READONLY) gives reliable WAL read access without
         // the read-only-WAL shared-memory pitfalls.
-        db.tryExec("PRAGMA query_only = ON");
+        if (int rc = db.tryExec("PRAGMA query_only = ON"); rc != SQLITE_OK)
+            throw std::runtime_error{
+                    std::string{"Failed to make the reader connection query-only: "} +
+                    sqlite3_errstr(rc)};
         db.tryExec("PRAGMA foreign_keys = ON");
         if (not db_password.empty())
             db.key(std::string{db_password});
