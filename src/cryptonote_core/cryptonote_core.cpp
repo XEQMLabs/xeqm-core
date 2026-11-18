@@ -780,6 +780,23 @@ bool core::init(
         }
     }
 
+    // A daemon pointed at a shared per-host chain must declare its role, so it never opens the shared
+    // chain read-write without taking the host-local writer lock. --shared-chain-writer is the writer;
+    // --db-readonly is a reader (optionally promotable with --shared-chain-promote). Refuse the
+    // ambiguous middle case rather than silently opening the shared chain read-write with no lock,
+    // which two such daemons on one host could do at once and corrupt the chain.
+    if (!m_shared_chain_folder.empty()) {
+        const bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
+        if (!m_shared_chain_writer && !db_readonly) {
+            log::error(
+                    globallogcat,
+                    "--shared-chain-dir requires a role: pass --shared-chain-writer to run as the "
+                    "writer, or --db-readonly (optionally with --shared-chain-promote) to run as a "
+                    "reader. Refusing to open the shared chain read-write without the writer lock.");
+            return false;
+        }
+    }
+
     // The host-local writer lock path; shared by the writer block and the reader promotion monitor.
     // It lives with the shared chain so every daemon on the host contends for the same one. The chain
     // folder may not exist yet on a fresh start, and the lock is taken before the chain DB (which
