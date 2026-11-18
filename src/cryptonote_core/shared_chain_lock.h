@@ -140,10 +140,15 @@ class writer_lock {
 // a wall-clock jump never trips or masks it.
 class fence_watchdog {
   public:
+    // startup_timeout bounds the pre-first-heartbeat window: a writer that hangs before it ever
+    // heartbeats is fenced once this elapses (0, the default, disables it and keeps the old
+    // behaviour of never fencing before the first heartbeat). Make it generous: a legitimate startup
+    // (the one-time service-node-list rescan) must finish well within it.
     fence_watchdog(
             std::chrono::milliseconds fence_timeout,
             std::chrono::milliseconds check_interval,
-            std::function<void()> on_fence);
+            std::function<void()> on_fence,
+            std::chrono::milliseconds startup_timeout = std::chrono::milliseconds::zero());
     ~fence_watchdog();
     fence_watchdog(const fence_watchdog&) = delete;
     fence_watchdog& operator=(const fence_watchdog&) = delete;
@@ -160,10 +165,13 @@ class fence_watchdog {
 
     std::chrono::milliseconds m_timeout;
     std::chrono::milliseconds m_interval;
+    std::chrono::milliseconds m_startup_timeout;
     std::function<void()> m_on_fence;
     std::atomic<int64_t> m_last_beat_ms{0};
-    // No self-fence until the first heartbeat: a bootstrap-started writer may spend minutes in the
-    // one-time service-node-list rescan before reaching the idle loop; that is startup, not a stall.
+    // Before the first heartbeat the progress fence is suppressed: a bootstrap-started writer may
+    // spend minutes in the one-time service-node-list rescan before reaching the idle loop, and that
+    // is startup, not a stall. The separate m_startup_timeout (when set) still fences a writer that
+    // hangs in that window and never heartbeats at all, so an early hang cannot hold the lock forever.
     std::atomic<bool> m_beaten{false};
     std::atomic<bool> m_run{false};
     std::atomic<bool> m_fenced{false};

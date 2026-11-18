@@ -330,3 +330,33 @@ TEST(shared_chain_lock, watchdog_held_off_by_heartbeats) {
     EXPECT_EQ(fired.load(), 0);
     wd.stop();
 }
+
+// Startup fence: a writer that hangs before it ever heartbeats is fenced once the (generous) startup
+// grace elapses, even though the first-heartbeat arming never happened. The progress timeout here is
+// long, so only the startup grace can fire within the window.
+TEST(shared_chain_lock, watchdog_startup_fence_fires_when_never_armed) {
+    std::atomic<int> fired{0};
+    sc::fence_watchdog wd{500ms, 20ms, [&fired] { fired++; }, 80ms};
+    wd.start();
+    // No heartbeat ever: the startup grace must still fence it.
+    std::this_thread::sleep_for(400ms);
+    EXPECT_TRUE(wd.fenced());
+    EXPECT_EQ(fired.load(), 1);  // fires once only
+    wd.stop();
+}
+
+// Once the first heartbeat arms the watchdog, the startup grace no longer applies: continued
+// heartbeats hold off the (longer) progress fence and it never fires, even though they arrive well
+// past the short startup grace.
+TEST(shared_chain_lock, watchdog_startup_grace_not_used_after_arming) {
+    std::atomic<int> fired{0};
+    sc::fence_watchdog wd{200ms, 20ms, [&fired] { fired++; }, 60ms};
+    wd.start();
+    for (int i = 0; i < 10; i++) {  // first beat at ~40ms (< 60ms grace), then ~400ms of beats
+        std::this_thread::sleep_for(40ms);
+        wd.heartbeat();
+    }
+    EXPECT_FALSE(wd.fenced());
+    EXPECT_EQ(fired.load(), 0);
+    wd.stop();
+}
