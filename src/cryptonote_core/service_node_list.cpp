@@ -3370,9 +3370,11 @@ void service_node_list::process_block_readonly(
     // Shared per-host chain reader: advance the in-memory SN set and quorums by exactly one block
     // WITHOUT any write. Unlike block_add(), this never calls sql_db->add_block() or store() and
     // never runs the SNL-vs-SQL height invariant check (the reader deliberately does not advance
-    // the reward SQLite, so that invariant does not apply). process_block() itself reads the chain
-    // DB through const references only and touches the reward SQLite solely at the hf21/hf22
-    // boundary heights, which a live chain is long past, so replaying forward here is write-free.
+    // the reward SQLite, so that invariant does not apply). process_block() reads the chain DB
+    // through const references, and the reward-SQLite write it can reach while replaying forward
+    // (recording a delayed payment on a confirmed service-node exit) is a no-op on the reader's
+    // read-only reward DB, since the writer already recorded it, so replaying forward here is
+    // write-free.
     //
     // The caller must feed blocks in strict height order starting at m_state.height + 1 (the chain
     // the reader shares with the writer), which update_from_block() asserts.

@@ -71,6 +71,10 @@ class BlockchainSQLite : public db::Database {
     // synchronised to in.
     void update_height(uint64_t new_height);
 
+    // True when this reward DB was opened read-only (a shared per-host chain reader). The host writer
+    // owns the schema and every write; a reader must not write it.
+    bool is_read_only() const { return m_read_only; }
+
     enum class PaymentTableType {
         Nil,      // Table containing current state
         Archive,  // Table containing state stored periodically at HISTORY_ARCHIVE_INTERVAL
@@ -283,6 +287,10 @@ class BlockchainSQLite : public db::Database {
 
     uint64_t height;
     const cryptonote::network_type nettype;
+
+  private:
+    // Set at construction from the open mode; true for a shared per-host chain reader.
+    const bool m_read_only = false;
 };
 
 }  // namespace cryptonote

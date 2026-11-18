@@ -85,6 +85,36 @@ TEST(SQLITE, AddSNRewards)
   EXPECT_EQ(sqliteDB.batching_count(cryptonote::hf::hf19_reward_batching), 0);
 }
 
+TEST(SQLITE, ReaderSkipsDelayedPaymentWrite)
+{
+  // A shared per-host chain reader opens the reward DB read-only (query_only) and shares the writer's
+  // WAL. A confirmed service-node exit reaches add_delayed_payments; on the reader that write must be
+  // a no-op (the host writer already recorded the row), not an INSERT. Without the guard the INSERT
+  // throws on the query-only connection and the reader stalls, unable to advance its service-node
+  // list past the exit block.
+  auto path = fs::temp_directory_path() / "xeqm-sqlite-ro-guard-test.db";
+  auto rm_all = [&] {
+    std::error_code ec;
+    fs::remove(path, ec);
+    fs::remove(fs::path{path} += "-wal", ec);
+    fs::remove(fs::path{path} += "-shm", ec);
+  };
+  rm_all();
+
+  // Writer kept open (owns the schema and the WAL), exactly as on a live shared-chain host.
+  test::BlockchainSQLiteTest writer(cryptonote::network_type::FAKECHAIN, path);
+  writer.update_height(10);
+
+  // Reader opens the same file read-only, sharing the writer's WAL.
+  cryptonote::BlockchainSQLite reader(cryptonote::network_type::FAKECHAIN, path, /*read_only=*/true);
+  EXPECT_TRUE(reader.is_read_only());
+
+  // The exit-time delayed-payment write no-ops on the reader instead of throwing.
+  EXPECT_NO_THROW({ EXPECT_TRUE(reader.add_delayed_payments({}, reader.height + 1, 1)); });
+
+  rm_all();
+}
+
 TEST(SQLITE, CalculateRewards)
 {
   test::BlockchainSQLiteTest sqliteDB(cryptonote::network_type::TESTNET, ":memory:");

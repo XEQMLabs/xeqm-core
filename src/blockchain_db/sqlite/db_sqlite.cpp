@@ -94,7 +94,8 @@ BlockchainSQLite::BlockchainSQLite(network_type nettype, std::filesystem::path d
                 "",
                 read_only ? db::Database::open_mode::read_only
                           : db::Database::open_mode::read_write},
-        nettype{nettype} {
+        nettype{nettype},
+        m_read_only{read_only} {
     log::trace(logcat, "BlockchainDB_SQLITE::{}", __func__);
     height = 0;
 
@@ -1562,6 +1563,13 @@ bool BlockchainSQLite::add_delayed_payments(
         uint64_t delay_blocks) {
     ZoneScoped;
     log::trace(logcat, "BlockchainSQLite::{} called", __func__);
+    // A shared per-host chain reader shares the writer's reward DB read-only. The writer already
+    // recorded this delayed payment when it folded the same block, and the row is visible to the
+    // reader through the shared WAL, so a reader must not (and cannot) write it again. Skipping keeps
+    // the reader's block fold write-free; without this the INSERT throws on the query-only connection
+    // and the reader stalls, unable to advance its service-node list past a service-node exit.
+    if (m_read_only)
+        return true;
     try {
         auto transaction = begin_tx();
 
