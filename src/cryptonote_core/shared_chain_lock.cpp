@@ -385,10 +385,14 @@ void fence_watchdog::loop() {
             if (!m_fenced.exchange(true)) {
                 oxen::log::error(
                         logcat,
-                        "shared-chain writer self-fence: {} ({} ms, limit {} ms); stopping writes",
+                        "shared-chain writer self-fence: {} ({} ms, limit {} ms); stopping writes{}",
                         beaten ? "no progress since arming" : "no first heartbeat within startup grace",
                         idle,
-                        limit_ms);
+                        limit_ms,
+                        beaten ? ""
+                               : "; the service-node-list rescan did not finish within the startup "
+                                 "grace. Raise --shared-chain-startup-fence-secs on this host if its "
+                                 "rescan legitimately needs longer (0 disables the startup fence).");
                 if (m_on_fence)
                     m_on_fence();
             }
