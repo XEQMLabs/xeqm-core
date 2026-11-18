@@ -234,6 +234,36 @@ daemon::daemon(boost::program_options::variables_map vm_) :
         }
     }
 
+    // An admin listener off loopback with no login is open to anyone who can reach the port.
+    if (!rpc_config.login) {
+        for (const auto& listen : rpc_listen_admin) {
+            const std::string& ip = std::get<0>(listen);
+            const uint16_t port = std::get<1>(listen);
+            boost::system::error_code ec;
+            const auto addr =
+#if BOOST_VERSION >= 106600
+                    boost::asio::ip::make_address
+#else
+                    boost::asio::ip::address::from_string
+#endif
+                    (ip, ec);
+            if (!ec && addr.is_loopback())
+                continue;
+            log::warning(
+                    logcat,
+                    fg(fmt::terminal_color::red) | fmt::emphasis::bold,
+                    "Admin RPC listens on {} port {}, which is not a local address, and no "
+                    "--rpc-login is set: anyone who can reach this port can control this node. "
+                    "Use --rpc-admin=127.0.0.1:{} or make sure the port cannot be reached from "
+                    "other machines (in Docker, publish it as 127.0.0.1:{}:{}).",
+                    ip,
+                    port,
+                    port,
+                    port,
+                    port);
+        }
+    }
+
     if (!rpc_listen_admin.empty()) {
         log::info(logcat, "- admin HTTP RPC server");
         http_rpc_admin.emplace(

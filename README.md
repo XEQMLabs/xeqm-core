@@ -43,7 +43,7 @@ The three binaries shipped in every release are:
 The fastest way to run a full node is the published Docker image, pushed to GitHub Container Registry on every release. Pin the release tag you intend to run; `latest` also tracks the current release.
 
 ```bash
-docker pull ghcr.io/xeqmlabs/xeqm-node:v1.1.3
+docker pull ghcr.io/xeqmlabs/xeqm-node:v1.1.4
 ```
 
 A minimal `docker-compose.yml` for a non-service-node full node:
@@ -51,23 +51,24 @@ A minimal `docker-compose.yml` for a non-service-node full node:
 ```yaml
 services:
   xeqm:
-    image: ghcr.io/xeqmlabs/xeqm-node:v1.1.3
+    image: ghcr.io/xeqmlabs/xeqm-node:v1.1.4
     container_name: xeqm
     restart: unless-stopped
     ports:
-      - "9230:9230"   # P2P
-      - "9231:9231"   # RPC
+      - "9230:9230"             # P2P
+      - "127.0.0.1:9231:9231"   # admin RPC, reachable from this host only
     volumes:
       - ./data:/data
     command:
       - --data-dir=/data
       - --p2p-bind-port=9230
-      - --rpc-bind-port=9231
-      - --confirm-external-bind
+      - --rpc-admin=0.0.0.0:9231
       - --log-level=*:warn
 ```
 
 Bring it up with `docker compose up -d`. Tail logs with `docker logs -f xeqm`.
+
+The admin RPC has no authentication and includes commands that stop the daemon. `--rpc-admin=0.0.0.0:9231` makes the daemon listen on every interface inside the container so Docker can forward to it, and the `127.0.0.1:` prefix on the port mapping keeps it off the network. Never publish it as `9231:9231`. With `--network host` there is no port mapping to protect it, so use `--rpc-admin=127.0.0.1:9231` instead.
 
 For a service node, add a `--service-node` flag, set `--service-node-public-ip`, and pick a `--quorumnet-port`. See [Running a service node](#running-a-service-node) below.
 
@@ -115,7 +116,7 @@ sudo apt update && sudo apt install -y \
   libreadline-dev libhidapi-dev libusb-1.0-0-dev \
   libpgm-dev libsystemd-dev
 
-git clone --recursive --branch core-v1.1.3 https://github.com/XEQMLabs/xeqm-core.git
+git clone --recursive --branch core-v1.1.4 https://github.com/XEQMLabs/xeqm-core.git
 cd xeqm-core
 
 mkdir build && cd build
@@ -134,7 +135,7 @@ sudo apt update && sudo apt install -y \
   libboost-all-dev libgmp-dev libzstd-dev libreadline-dev libhidapi-dev \
   libusb-1.0-0-dev libpgm-dev libsystemd-dev libunbound-dev
 
-git clone --recursive --branch core-v1.1.3 https://github.com/XEQMLabs/xeqm-core.git
+git clone --recursive --branch core-v1.1.4 https://github.com/XEQMLabs/xeqm-core.git
 cd xeqm-core
 
 mkdir build && cd build
@@ -164,11 +165,10 @@ Common configuration goes in `xeqm.conf` next to your data directory, or as comm
 data-dir=/var/lib/xeqm
 p2p-bind-ip=0.0.0.0
 p2p-bind-port=9230
-rpc-bind-ip=0.0.0.0
-rpc-bind-port=9231
-confirm-external-bind=1
 log-level=*:warn
 ```
+
+The admin RPC listens on `127.0.0.1:9231` by default and needs no setting. It has no authentication and includes commands that stop the daemon, so do not bind it to a public address. To serve RPC to wallets or other machines, add a public listener with `rpc-public=IP:PORT`, which serves the public methods only.
 
 Run with:
 
@@ -198,13 +198,13 @@ WantedBy=multi-user.target
 
 ### Default network ports
 
-| Network | P2P | RPC | Quorumnet |
-| ------- | --- | --- | --------- |
+| Network | P2P | Admin RPC (local only) | Quorumnet |
+| ------- | --- | ---------------------- | --------- |
 | Mainnet | 9230 | 9231 | 9232 |
 
 ### Useful runtime commands
 
-The daemon listens on a local OMQ admin socket and responds to JSON-RPC. A few commonly useful queries from outside the container:
+The admin RPC answers JSON-RPC on `127.0.0.1:9231`. A few commonly useful queries, run on the machine the node is on:
 
 ```bash
 # Daemon status and current chain height
@@ -232,11 +232,12 @@ A modest VPS (2 vCPU, 4GB RAM, 80GB SSD, 1Gbps egress) is comfortable. CPU usage
 
 ### Network requirements
 
-Three ports must be reachable from the public internet:
+Two ports must be reachable from the public internet:
 
 - P2P (default `9230`) — block / transaction propagation
-- RPC (default `9231`) — daemon administration and JSON-RPC; restrict to localhost in production unless you know what you're doing
 - Quorumnet (default `9232`) — service node ↔ service node messaging (Pulse, votes, timestamp tests)
+
+The admin RPC (default `9231`) must not be reachable from the internet. It has no authentication and includes commands that stop the daemon. Leave it on `127.0.0.1` and keep the port closed in your firewall.
 
 A typical multi-node operator binds each daemon's quorumnet port to a unique value (9232, 9242, 9252, ...) so multiple SNs can share a single host.
 
