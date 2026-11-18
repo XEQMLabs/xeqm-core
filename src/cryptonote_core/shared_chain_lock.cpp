@@ -326,9 +326,11 @@ bool reclaim_request_live(const reclaim_request& req) {
 fence_watchdog::fence_watchdog(
         std::chrono::milliseconds fence_timeout,
         std::chrono::milliseconds check_interval,
-        std::function<void()> on_fence) :
+        std::function<void()> on_fence,
+        std::chrono::milliseconds startup_timeout) :
         m_timeout{fence_timeout},
         m_interval{check_interval},
+        m_startup_timeout{startup_timeout},
         m_on_fence{std::move(on_fence)} {}
 
 fence_watchdog::~fence_watchdog() {
@@ -364,20 +366,29 @@ void fence_watchdog::stop() {
 
 void fence_watchdog::loop() {
     const int64_t timeout_ms = m_timeout.count();
+    const int64_t startup_ms = m_startup_timeout.count();
     while (m_run.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(m_interval);
         if (!m_run.load(std::memory_order_relaxed))
             break;
         int64_t idle = now_ms() - m_last_beat_ms.load(std::memory_order_relaxed);
-        if (m_beaten.load(std::memory_order_relaxed) && idle > timeout_ms) {
-            // The writer has not made progress within the fence timeout: it is stalled. Fire once.
+        const bool beaten = m_beaten.load(std::memory_order_relaxed);
+        // Once armed by the first heartbeat, fence on a progress stall. Before that, the progress
+        // fence is suppressed for a legitimately long startup, but a set startup grace still fences
+        // a writer that hangs before it ever heartbeats, so an early hang cannot hold the lock
+        // (and the LMDB write mutex) forever.
+        const int64_t limit_ms = beaten ? timeout_ms : startup_ms;
+        const bool stalled = beaten ? (idle > timeout_ms) : (startup_ms > 0 && idle > startup_ms);
+        if (stalled) {
+            // The writer has stalled: no progress since arming, or no first heartbeat within the
+            // startup grace. Fire once.
             if (!m_fenced.exchange(true)) {
                 oxen::log::error(
                         logcat,
-                        "shared-chain writer self-fence: no progress for {} ms (limit {} ms); "
-                        "stopping writes",
+                        "shared-chain writer self-fence: {} ({} ms, limit {} ms); stopping writes",
+                        beaten ? "no progress since arming" : "no first heartbeat within startup grace",
                         idle,
-                        timeout_ms);
+                        limit_ms);
                 if (m_on_fence)
                     m_on_fence();
             }

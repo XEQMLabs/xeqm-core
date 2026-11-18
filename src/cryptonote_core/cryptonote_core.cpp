@@ -291,6 +291,15 @@ static const command_line::arg_descriptor<uint64_t> arg_shared_chain_reclaim_tim
         "the freed lock, instead of failing because the lock is held. 0 disables this (the writer "
         "fails as it did before). Only meaningful with --shared-chain-writer.",
         45};
+static const command_line::arg_descriptor<uint64_t> arg_shared_chain_startup_fence = {
+        "shared-chain-startup-fence-secs",
+        "Seconds a shared per-host chain writer (--shared-chain-writer) may spend starting up, before "
+        "its first self-fence heartbeat, until the self-fence watchdog treats it as hung and exits it. "
+        "The one-time service-node-list rescan runs in this window, so this is generous by design; an "
+        "early startup hang then frees the writer lock for a reader instead of holding it forever. "
+        "Raise it on a host whose rescan legitimately takes longer; 0 disables the startup fence. Only "
+        "meaningful with --shared-chain-writer.",
+        600};
 // Test-only fault injection: a shared-chain writer stops heartbeating its self-fence watchdog after
 // this many seconds of uptime, so the watchdog fences and exits the process. Hidden; 0 = off.
 static const command_line::arg_descriptor<uint64_t> arg_shared_chain_debug_stall = {
@@ -472,6 +481,7 @@ void core::init_options(boost::program_options::options_description& desc) {
     command_line::add_arg(desc, arg_shared_chain_promote);
     command_line::add_arg(desc, arg_shared_chain_promote_grace);
     command_line::add_arg(desc, arg_shared_chain_reclaim_timeout);
+    command_line::add_arg(desc, arg_shared_chain_startup_fence);
     command_line::add_arg(desc, arg_shared_chain_lock_fd);
     command_line::add_arg(desc, arg_shared_chain_debug_stall);
 
@@ -770,6 +780,23 @@ bool core::init(
         }
     }
 
+    // A daemon pointed at a shared per-host chain must declare its role, so it never opens the shared
+    // chain read-write without taking the host-local writer lock. --shared-chain-writer is the writer;
+    // --db-readonly is a reader (optionally promotable with --shared-chain-promote). Refuse the
+    // ambiguous middle case rather than silently opening the shared chain read-write with no lock,
+    // which two such daemons on one host could do at once and corrupt the chain.
+    if (!m_shared_chain_folder.empty()) {
+        const bool db_readonly = command_line::get_arg(vm, cryptonote::arg_db_readonly) != 0;
+        if (!m_shared_chain_writer && !db_readonly) {
+            log::error(
+                    globallogcat,
+                    "--shared-chain-dir requires a role: pass --shared-chain-writer to run as the "
+                    "writer, or --db-readonly (optionally with --shared-chain-promote) to run as a "
+                    "reader. Refusing to open the shared chain read-write without the writer lock.");
+            return false;
+        }
+    }
+
     // The host-local writer lock path; shared by the writer block and the reader promotion monitor.
     // It lives with the shared chain so every daemon on the host contends for the same one. The chain
     // folder may not exist yet on a fresh start, and the lock is taken before the chain DB (which
@@ -846,14 +873,21 @@ bool core::init(
         // longer than the fence timeout, which releases the lock (and the LMDB write mutex) so a
         // reader can promote. Exit hard, skipping any write-bearing clean shutdown.
         using namespace std::chrono_literals;
+        // A generous startup grace fences a writer that hangs before its first heartbeat (e.g. wedged
+        // in the one-time service-node-list rescan) so the lock frees for a reader; 0 disables it.
+        const auto startup_fence =
+                std::chrono::seconds{command_line::get_arg(vm, arg_shared_chain_startup_fence)};
         m_fence_watchdog = std::make_unique<shared_chain::fence_watchdog>(
-                15s, 2s, [] {
+                15s,
+                2s,
+                [] {
                     log::error(
                             globallogcat,
                             "Shared per-host chain writer self-fencing (stalled); exiting now");
                     oxen::log::flush();
                     std::_Exit(70);
-                });
+                },
+                startup_fence);
         m_fence_watchdog->start();
     }
 
