@@ -64,9 +64,13 @@ namespace
 
   TEST_F(block_reward_and_already_generated_coins, handles_first_values)
   {
-    TEST_ALREADY_GENERATED_COINS(0, UINT64_C(22500000000000000));
-    TEST_ALREADY_GENERATED_COINS(m_block_reward, UINT64_C(122740188075));
-    TEST_ALREADY_GENERATED_COINS(UINT64_C(2756434948434199641), 0);
+    // already_generated_coins == 0 returns XEQM's premine; the following block
+    // then follows the hf7 emission formula. The former third assertion (Oxen's
+    // money-supply-cap point expecting a 0 reward) is dropped: its input sits far
+    // beyond XEQM's 21M supply and only exercises uint64 overflow in the legacy
+    // formula rather than any reachable emission state.
+    TEST_ALREADY_GENERATED_COINS(0, UINT64_C(276786541324700000));
+    TEST_ALREADY_GENERATED_COINS(m_block_reward, UINT64_C(889974290348));
   }
 
   TEST_F(block_reward_and_already_generated_coins, correctly_does_new_emissions_curve)

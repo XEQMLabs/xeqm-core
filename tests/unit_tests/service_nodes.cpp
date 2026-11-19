@@ -43,91 +43,21 @@
 
 TEST(service_nodes, staking_requirement)
 {
-  // NOTE: Thanks for the values @Sonofotis
-  const uint64_t atomic_epsilon = cryptonote::DEFAULT_DUST_THRESHOLD;
+  // XEQM uses a flat staking requirement, not Oxen's historical decaying curve:
+  // 200k on mainnet and 100k on testnet, constant across the current
+  // (pre-Session/Eth) hardfork regime. Pin both the headline amounts and the
+  // flatness (same value at every hardfork in that regime).
+  EXPECT_EQ(oxen::OXEN_STAKING_REQUIREMENT, 200'000 * oxen::COIN);
+  EXPECT_EQ(oxen::OXEN_STAKING_REQUIREMENT_TESTNET, 100'000 * oxen::COIN);
 
-  // LHS of Equation
-  // Try underflow
+  for (auto version : {cryptonote::hf::hf7, cryptonote::hf::hf16_pulse, cryptonote::hf::hf19_reward_batching})
   {
-    uint64_t height = 100;
-    uint64_t mainnet_requirement   = service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-    ASSERT_EQ(mainnet_requirement,  (45000 * oxen::COIN));
-  }
-
-  // Starting height for mainnet
-  {
-    // NOTE: The maximum staking requirement is 50,000, in atomic units is 50,000,000,000,000 < int64 range (2^63-1)
-    // so casting is safe.
-    uint64_t height = 101250;
-    int64_t mainnet_requirement  = (int64_t)service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    ASSERT_EQ(mainnet_requirement,  (45000 * oxen::COIN));
-  }
-
-  // Check the requirements are decreasing
-  {
-    uint64_t height = 209250;
-    int64_t mainnet_requirement  = (int64_t)service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    int64_t  mainnet_expected = 29643'670390000;
-    int64_t  mainnet_delta    = std::abs(mainnet_requirement - mainnet_expected);
-    ASSERT_LT(mainnet_delta, atomic_epsilon);
-  }
-
-  // NOTE: Staking Requirement Algorithm Switch 2
-  // Sliftly after the boundary when the scheme switches over to a smooth emissions curve to 15k
-  {
-    uint64_t height = 235987;
-    int64_t  mainnet_requirement  = (int64_t)service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    int64_t  mainnet_expected = 27164'648610000;
-    int64_t  mainnet_delta    = std::abs(mainnet_requirement - mainnet_expected);
-    ASSERT_LT(mainnet_delta, atomic_epsilon);
-  }
-
-  // Check staking requirement on height whose value is different with different floating point rounding modes, we expect FE_TONEAREST.
-  {
-    uint64_t height = 373200;
-    int64_t  mainnet_requirement  = (int64_t)service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    int64_t  mainnet_expected = 20839'644149350;
-    ASSERT_EQ(mainnet_requirement, mainnet_expected);
-  }
-
-  // NOTE: Staking Requirement Algorithm Switch: Integer Math Variant ^____^
-  {
-    uint64_t height = 450000;
-    uint64_t mainnet_requirement  = service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    uint64_t  mainnet_expected = 18898'351896001;
-    ASSERT_EQ(mainnet_requirement, mainnet_expected);
-  }
-
-  // Just before drop to 15k
-  {
-    uint64_t height = 641110;
-    uint64_t mainnet_requirement  = service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    uint64_t mainnet_expected = 16396'730529714;
-    ASSERT_EQ(mainnet_requirement, mainnet_expected);
-  }
-
-  // 15k requirement begins
-  {
-    uint64_t height = 641111;
-    uint64_t mainnet_requirement = service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    uint64_t mainnet_expected = 15000 * oxen::COIN;
-    ASSERT_EQ(mainnet_requirement, mainnet_expected);
-  }
-
-  // into the Future
-  {
-    uint64_t height = 800'000;
-    uint64_t mainnet_requirement = service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, height);
-
-    uint64_t mainnet_expected = 15000 * oxen::COIN;
-    ASSERT_EQ(mainnet_requirement, mainnet_expected);
+    EXPECT_EQ(
+        service_nodes::get_default_staking_requirement(cryptonote::network_type::MAINNET, version),
+        oxen::OXEN_STAKING_REQUIREMENT);
+    EXPECT_EQ(
+        service_nodes::get_default_staking_requirement(cryptonote::network_type::TESTNET, version),
+        oxen::OXEN_STAKING_REQUIREMENT_TESTNET);
   }
 }
 
@@ -479,7 +409,10 @@ TEST(service_nodes, min_stake_amount)
   {
     const uint64_t reserved = 5 * stake_requirement / 6;
     const uint64_t min_stake = service_nodes::get_min_node_contribution(hf_version, stake_requirement, reserved, 1);
-    ASSERT_EQ(min_stake, stake_requirement / 6);
+    // The minimum here is the whole still-unreserved amount (less than req/4), i.e.
+    // stake_requirement - reserved. This equals req/6 only when the requirement is
+    // divisible by 6; XEQM's 200k is not, so assert the exact remaining amount.
+    ASSERT_EQ(min_stake, stake_requirement - reserved);
   }
 
   /// post v11
