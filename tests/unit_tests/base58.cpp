@@ -468,7 +468,7 @@ namespace
     "\x80\x08\xec\x7d\x8f\x78\x0d\x8a\xe0\x72\x27\x7a\xd3\x63\x7b\xea"
     "\x92\x96\x7e\x66\x66\x97\x6a\x2e\xc7\xad\x82\xa2\x53\x29\xb0\xe9");
   // DON'T ever use this as a destination for funds, as the keys are right above this comment...
-  std::string test_keys_addr_str = "L5dkQUgpdssQubjyfnkLTh9fHx2ScppAQ71Kv3jdn7rL5wBvMZ4GQWxQEH9QPcn8bLgEebMZqSeZF8pppfi2FGWbTPeQFoL";
+  std::string test_keys_addr_str = "XEQMA5j5XjTUBQ8yaWGHyxUGK63zJBwofEpm8Jpskp6RATcqDxMd7eNM5fV5GAvYAvHe7xHxxHoU1SKuxLG7dW3k2adoLtzMDC";
 }
 
 TEST(get_account_address_as_str, works_correctly)

@@ -29,8 +29,8 @@
 #include "gtest/gtest.h"
 #include "wallet/wallet2.h"
 
-#define TEST_ADDRESS "T6TfvMeoExZhjos3JPefyX238SogcuzxpHR7X2RYFEGXVkFpVMwHSEmfhTEGS1wkHbdhCzYKYqZ3YZ2z71daZy4e2iqhWewvQ"
-#define TEST_INTEGRATED_ADDRESS "TGALwAUHrE5hjos3JPefyX238SogcuzxpHR7X2RYFEGXVkFpVMwHSEmfhTEGS1wkHbdhCzYKYqZ3YZ2z71daZy4eaY3voiReY9w1fbd8e1Zj"
+#define TEST_ADDRESS "XEQT8m8sN7rcy3QUqegFJFELGa3CE61AKGJRQgyBMe6xCxcbqXfRa722ucLqFsm4hiTPfzf7JTzwxTLEp2jR4BGm1JmVbpKDu8"
+#define TEST_INTEGRATED_ADDRESS "XEQJAt1UWcgcy3QUqegFJFELGa3CE61AKGJRQgyBMe6xCxcbqXfRa722ucLqFsm4hiTPfzf7JTzwxTLEp2jR4BGm2MRPLLinQBr3pKA81E7PR"
 // included payment id: <a9a3f39de94a4d82>
 
 #define PARSE_URI(uri, expected) \
