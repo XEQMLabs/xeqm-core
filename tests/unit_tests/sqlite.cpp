@@ -35,7 +35,7 @@
 TEST(SQLITE, AddressModulus)
 {
   cryptonote::address_parse_info wallet_address;
-  cryptonote::get_account_address_from_str(wallet_address, cryptonote::network_type::TESTNET, "T6TzkJb5EiASaCkcH7idBEi1HSrpSQJE1Zq3aL65ojBMPZvqHNYPTL56i3dncGVNEYCG5QG5zrBmRiVwcg6b1cRM1SRNqbp44");
+  cryptonote::get_account_address_from_str(wallet_address, cryptonote::network_type::TESTNET, "XEQTEh9SRS9cTcybpuw9uFA7jop3ipC6zXCu1pAVp2QFAaaNXt5FtqW6xdvzYMPXo4Br3HV4s7kvV2Rsv9ZjNumQ72XRTxkVnH");
 
   EXPECT_EQ(wallet_address.address.modulus(10), 0);
   EXPECT_EQ(wallet_address.address.modulus(100), 90);
@@ -124,7 +124,7 @@ TEST(SQLITE, CalculateRewards)
   // Check that a single contributor receives 100% of the block reward
   cryptonote::block_payments rewards;
   cryptonote::address_parse_info first_address{};
-  cryptonote::get_account_address_from_str(first_address, cryptonote::network_type::TESTNET, "T6TzkJb5EiASaCkcH7idBEi1HSrpSQJE1Zq3aL65ojBMPZvqHNYPTL56i3dncGVNEYCG5QG5zrBmRiVwcg6b1cRM1SRNqbp44");
+  cryptonote::get_account_address_from_str(first_address, cryptonote::network_type::TESTNET, "XEQTEh9SRS9cTcybpuw9uFA7jop3ipC6zXCu1pAVp2QFAaaNXt5FtqW6xdvzYMPXo4Br3HV4s7kvV2Rsv9ZjNumQ72XRTxkVnH");
   {
     service_nodes::service_node_info single_contributor{};
     single_contributor.version = service_nodes::service_node_info::version_t::v7_decommission_reason;
@@ -147,13 +147,13 @@ TEST(SQLITE, CalculateRewards)
   contributor1.reserved = 0;
   contributor1.amount = 33;
   cryptonote::address_parse_info second_address{};
-  cryptonote::get_account_address_from_str(second_address, cryptonote::network_type::TESTNET, "T6SjALssDNvPZnTnV7vr459SX632c4X5qjLKfHfzvS32RPuhH3vnJmP9fyiD6ZiMu4XPk8ofH95mNRDg5bUPWkmq1LGAnyP3B");
+  cryptonote::get_account_address_from_str(second_address, cryptonote::network_type::TESTNET, "XEQTJa3U5SuLcqE99gbNVy4Bj3WAnzawVShAraLKMT2nb5fMt54RBRMQZK21htBNzZSdtcVEQM32D6fDkVC8Xw9t78nBXjUzHt");
   auto& contributor2 = multiple_contributors.contributors.emplace_back();
   contributor2.address = second_address.address;
   contributor2.reserved = 0;
   contributor2.amount = 33;
   cryptonote::address_parse_info third_address{};
-  cryptonote::get_account_address_from_str(third_address, cryptonote::network_type::TESTNET, "T6SkkovCyLWViVDMgeJoF7X4vFrHnKX5jXyktaoGmRuNTdoFEx1xXu1joXdmeH9mx2LLNPq998fKKcsAHwdRJWhk126SapptR");
+  cryptonote::get_account_address_from_str(third_address, cryptonote::network_type::TESTNET, "XEQT9Ktrw1w3JZD5KTEHqv7gL2AJv1VfCP6oMexUcYfig4ZpfpG6fdBHwwc7KQUqFAgkWh122oaMQZ1q3cY1Aebx53A5NgyzHM");
   auto& contributor3 = multiple_contributors.contributors.emplace_back();
   contributor3.address = third_address.address;
   contributor3.reserved = 0;
