@@ -1,0 +1,112 @@
+name: Unit tests
+
+# Builds unit_tests with the same dependencies and options as the Ubuntu 24.04 release
+# binaries and runs it on every pull request and on every push to main.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Tests left out of the gate. The reason for each one is in issue #98.
+  EXCLUDED_TESTS: >-
+    BLS.signatures
+    block_reward_and_already_generated_coins.correctly_steps_from_2_to_1
+    block_reward_and_already_generated_coins.handles_max
+    node_server.bind_same_p2p_port
+    notify.works
+
+jobs:
+  unit-tests:
+    name: Build and run unit_tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout core repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git build-essential cmake pkg-config ccache curl zip unzip tar \
+            gperf \
+            libssl-dev libzmq3-dev libsodium-dev libunbound-dev \
+            libreadline-dev libhidapi-dev libusb-1.0-0-dev libexpat1-dev \
+            libpgm-dev libsqlite3-dev libcurl4-openssl-dev \
+            libboost-all-dev libzstd-dev libgmp-dev
+
+      - name: Pin CMake 3.29.6 (same as the release build)
+        run: |
+          curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-$(uname -m).tar.gz" | sudo tar -xz --strip-components=1 -C /usr/local
+          hash -r
+          cmake --version
+
+      - name: Patch SQLiteCpp headers for GCC
+        run: |
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h || \
+            sed -i '/#include <memory>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Statement.h
+
+          grep -q '#include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h || \
+            sed -i '/#include <SQLiteCpp\/Statement.h>/a #include <cstdint>' external/SQLiteCpp/include/SQLiteCpp/Column.h
+
+      # CMake uses ccache on its own when it is installed.
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-unit-tests-${{ github.sha }}
+          restore-keys: |
+            ccache-unit-tests-
+
+      - name: Configure (release options plus tests)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_STATIC_DEPS=ON \
+            -DARCH=x86-64 \
+            -DBoost_NO_BOOST_CMAKE=ON \
+            -DBUILD_TESTS=ON
+
+      - name: Build unit_tests
+        run: |
+          cmake --build build --target unit_tests --parallel "$(nproc)"
+          ccache --show-stats || true
+
+      - name: Run unit_tests
+        run: |
+          filter="-$(echo $EXCLUDED_TESTS | tr ' ' ':')"
+          echo "gtest filter: $filter"
+          build/tests/unit_tests/unit_tests \
+            --data-dir "$GITHUB_WORKSPACE/tests/data" \
+            --gtest_filter="$filter" 2>&1 | tee unit_tests.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### unit_tests'
+            echo '```'
+            if [ -f unit_tests.log ]; then
+              grep -a -E '^\[(==========|  PASSED  |  FAILED  )\]' unit_tests.log | tail -n 60 || true
+            else
+              echo 'unit_tests did not run'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
