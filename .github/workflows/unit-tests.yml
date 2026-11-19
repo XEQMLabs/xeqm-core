@@ -43,8 +43,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y \
+          # Retries cover a mirror that answers 503 for a moment.
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y \
             git build-essential cmake pkg-config ccache curl zip unzip tar \
             gperf \
             libssl-dev libzmq3-dev libsodium-dev libunbound-dev \
