@@ -393,7 +393,8 @@ core::core() :
         m_last_srouter_ping{0},
         m_pad_transactions(false),
         ss_version{0},
-        lokinet_version{0} {
+        lokinet_version{0},
+        srouter_version{0} {
 #pragma GCC diagnostic pop
     m_checkpoints_updating.clear();
 }
