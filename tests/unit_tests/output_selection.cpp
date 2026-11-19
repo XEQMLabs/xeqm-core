@@ -32,6 +32,7 @@
 
 #include "wallet/wallet2.h"
 #include "common/median.h"
+#include "common/util.h"
 #include <string>
 
 static tools::wallet2::transfer_container make_transfers_container(size_t N)
@@ -114,10 +115,24 @@ TEST(select_outputs, gamma)
 {
   std::vector<uint64_t> offsets;
 
-  MKOFFSETS(300000, 1);
+  // The gamma picker works in real spend-age seconds and converts to/from output
+  // offsets using the network's block time (TARGET_BLOCK_TIME). Two things must
+  // track that block time, or the median comes out wrong under XEQM's 1-minute
+  // block (the test was written for a 2-minute block):
+  //   1. Reconstruct ages with the same block time the picker uses.
+  //   2. Size the output history to a fixed *time* horizon, not a fixed block
+  //      count. The picker treats outputs older than num_outputs*block_time as
+  //      unspendable, so a fixed block count would clip the gamma's long tail
+  //      differently at a different block time and skew the median.
+  const double block_time =
+      tools::to_seconds(cryptonote::get_config(cryptonote::network_type::FAKECHAIN).TARGET_BLOCK_TIME);
+  // 300000 blocks x 120 s was the original ~417-day horizon; keep that span.
+  const size_t num_blocks = static_cast<size_t>(300000.0 * 120.0 / block_time);
+
+  MKOFFSETS(num_blocks, 1);
   tools::gamma_picker picker(cryptonote::network_type::FAKECHAIN, offsets);
   std::vector<double> ages(100000);
-  double age_scale = 120. * (offsets.size() / (double)n_outs);
+  double age_scale = block_time * (offsets.size() / (double)n_outs);
   for (size_t i = 0; i < ages.size(); )
   {
     uint64_t o = picker.pick();
@@ -125,7 +140,7 @@ TEST(select_outputs, gamma)
       continue;
     ages[i] = (n_outs - 1 - o) * age_scale;
     ASSERT_GE(ages[i], 0);
-    ASSERT_LE(ages[i], offsets.size() * 120);
+    ASSERT_LE(ages[i], offsets.size() * block_time);
     ++i;
   }
   double median = tools::median(std::move(ages));
