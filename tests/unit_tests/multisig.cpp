@@ -37,23 +37,23 @@ struct addr_spendkey { std::string_view address, spendkey; };
 constexpr std::array test_addresses =
 {
   addr_spendkey{
-    "T6SkvQ3GyyNRnY5UAw3sMZLTExBSCLvpCAP8sdPuPhJ2BjfsUoBes3eGUJx2fZf7S8Fsa7urJ7LamRTt4uucAtqk1wiLrE6zj",
+    "XEQTEq8DtFjBJPiy9KphQcZC3mTZrDxaxKGZboSdGNJbgME9Yfa7NUuPyaT7c1jWuuihyvBtk3oMHhaFFLyAW7ue8rvBb5hXGH",
     "2dd6e34a234c3e8b5d29a371789e4601e96dee4ea6f7ef79224d1a2d91164c01"
   },
   addr_spendkey{
-    "T6TfbGiuGXA1Fz3USjnSYJcb771AkkNmqgmoAiHAu5713pewPFyAA9wcmemSiYxWtqcvARA3r4L6QUD7VXodxC7n2WQS5M3q1",
+    "XEQTSmFB5eWNaXAgtut7oqUQNHuHHvR957BFrF3Qibt9GQ9xoFwVKdJLD3ioMmbcA1Aqoys2WhwnegkMxgBYge362jR2aJyeHj",
     "fac47aecc948ce9d3531aa042abb18235b1df632087c55a361b632ffdd6ede0c"
   },
   addr_spendkey{
-    "T6SLoeEpwLA6emvHeethY1JkPzMHbAAHjQ4hH3zpo5JZBwZX8UxmjPjQG8tyg5HJaKVK6eWHENbPA4fKPw9eEkG71Jgj85miT",
+    "XEQT9NDhsnrADrFvkaKJ39QpbjtVe22Dt4mesSvkrnTyaq8eLSwtjKRjaPX2aQYTvvRCPuC1A8Jw8UcY6H3XzxLW4398LT9UHb",
     "bbd3175ef9fd9f5eefdc43035f882f74ad14c4cf1799d8b6f9001bc197175d02"
   },
   addr_spendkey{
-    "T6TrTRFMVcKUFcmoSBScYXdhie6sp2b4zaV5VLHFFJv488jRD62zgYcYzzJWeSz2MP1J9g6kDTDNr674CVuWFy1o2JcQW9Zxq",
+    "XEQTVE1hYS4hFUYdgT7dT5XvM4FCcKHhNaR8rt4FtCe2AZb5UwASgzRYjndUPiNyyB5MJNidPY9VM4CUrccd7S421Z5LacF1Zq",
     "f2efae45bef1917a7430cda8fcffc4ee010e3178761aa41d4628e23b1fe2d501"
   },
   addr_spendkey{
-    "T6ShAAdn81gb2eeTyHSuiuLdEedYwnGMK3PxqRekb2Nj3RXNzB7mjxKGt5aucMN3BRJHAstbGdqsi1oL6Es5tTju362tAWn3N",
+    "XEQTDygXfppDgJc2WpcxSFXX5Jf5fv11ZjVfLbJYQ9k193D8Epee6aBWW251DsAVWYQV6E6NPcfutbHwPeXZ1WZt6oB5CL6MPH",
     "a4cef54ed3fd61cd78a2ceb82ecf85a903ad2db9a86fb77ff56c35c56016280a"
   }
 };
