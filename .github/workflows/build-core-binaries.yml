@@ -162,6 +162,9 @@ jobs:
             ./build/bin/xeqm-d --version
             ./build/bin/xeqm-wallet --version
             ./build/bin/xeqm-rpc --version
+            printf "\\nGetting started:\\n"
+            printf "  Quick start and full docs: https://github.com/XEQMLabs/xeqm-core#readme\\n"
+            printf "  Service node operator guide: https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide\\n"
           } > "$PKG/README.txt"
 
           tar -czf "${PKG}.tar.gz" "$PKG"
@@ -295,6 +298,9 @@ jobs:
             ./build/bin/xeqm-d --version
             ./build/bin/xeqm-wallet --version
             ./build/bin/xeqm-rpc --version
+            printf "\\nGetting started:\\n"
+            printf "  Quick start and full docs: https://github.com/XEQMLabs/xeqm-core#readme\\n"
+            printf "  Service node operator guide: https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide\\n"
           } > "$PKG/README.txt"
 
           tar -czf "${PKG}.tar.gz" "$PKG"
@@ -450,6 +456,9 @@ jobs:
             wine "$BIN_DIR/xeqm-d.exe" --version || true
             wine "$BIN_DIR/xeqm-wallet.exe" --version || true
             wine "$BIN_DIR/xeqm-rpc.exe" --version || true
+            printf "\nGetting started:\n"
+            printf "  Quick start and full docs: https://github.com/XEQMLabs/xeqm-core#readme\n"
+            printf "  Service node operator guide: https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide\n"
           } > "$PKG/README.txt"
 
           zip -r "${PKG}.zip" "$PKG"
@@ -689,6 +698,9 @@ jobs:
             ./build-macos-arm64/bin/xeqm-d --version
             ./build-macos-arm64/bin/xeqm-wallet --version
             ./build-macos-arm64/bin/xeqm-rpc --version
+            printf "\nGetting started:\n"
+            printf "  Quick start and full docs: https://github.com/XEQMLabs/xeqm-core#readme\n"
+            printf "  Service node operator guide: https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide\n"
           } > "$PKG/README.txt"
 
           tar -czf "${PKG}.tar.gz" "$PKG"
@@ -946,6 +958,9 @@ jobs:
             ./build-macos-x86_64/bin/xeqm-d --version
             ./build-macos-x86_64/bin/xeqm-wallet --version
             ./build-macos-x86_64/bin/xeqm-rpc --version
+            printf "\nGetting started:\n"
+            printf "  Quick start and full docs: https://github.com/XEQMLabs/xeqm-core#readme\n"
+            printf "  Service node operator guide: https://xeqmlabs.gitbook.io/docs/documentation/sn-operator-guide\n"
           } > "$PKG/README.txt"
 
           tar -czf "${PKG}.tar.gz" "$PKG"

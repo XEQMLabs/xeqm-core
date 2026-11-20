@@ -290,6 +290,19 @@ Key fields to watch:
 
 ---
 
+## Shared chain storage
+
+Several daemons on one host can share a single copy of the chain instead of each
+keeping its own: one **writer** advances it and the others follow read-only. It cuts
+disk and sync to about that of a single node, and the readers can fail over for the
+writer so the host upgrades with a rolling restart and no chain stall. Off by
+default; nothing changes unless you pass `--shared-chain-dir`.
+
+See **[Shared chain storage](docs/shared-chain.md)** for deployment, systemd unit
+examples, the failover and exit-code model, and the step-by-step upgrade procedure.
+
+---
+
 ## Troubleshooting
 
 ### "Segfault on startup" / "GLIBC_2.x not found"
