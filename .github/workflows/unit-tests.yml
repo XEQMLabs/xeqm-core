@@ -21,8 +21,6 @@ env:
   # Tests left out of the gate. The reason for each one is in issue #98.
   EXCLUDED_TESTS: >-
     BLS.signatures
-    block_reward_and_already_generated_coins.correctly_steps_from_2_to_1
-    block_reward_and_already_generated_coins.handles_max
     node_server.bind_same_p2p_port
     notify.works
 
