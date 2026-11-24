@@ -44,6 +44,9 @@ backend. If your shared chain is SQLite, set the environment variable
 alike. Without it the daemon opens the default LMDB backend and will not find a
 SQLite chain. In a systemd unit this is an `Environment=` line (see the examples).
 
+The SQLite backend is experimental in v1.1.4 and logs a warning at startup. LMDB is
+the default and needs no environment variable.
+
 ## Failover and reclaim
 
 Readers can take over if the writer stops, and the writer can take the chain back
@@ -94,6 +97,7 @@ Reader (`/etc/systemd/system/xeqm-reader@.service`, one instance per node):
 
 ```ini
 [Service]
+# Only if the shared chain is SQLite; omit for the default LMDB backend.
 Environment=XEQM_DB_BACKEND=sqlite
 ExecStart=/usr/local/bin/xeqm-d --non-interactive \
   --data-dir=/var/lib/xeqm/%i \
@@ -117,13 +121,16 @@ uses only `systemctl` and a binary copy.
 1. **Pre-flight.** Confirm the new binary accepts the flags your units already pass
    (`xeqm-d --help`). Optionally canary it read-only first, without touching anything:
    run the new binary P2P-isolated against the live shared chain and confirm it opens
-   and reaches the current tip, then stop it.
+   and reaches the current tip, then stop it. Give the canary its own p2p and admin
+   RPC ports, as below: with the default p2p port it cannot bind next to a running
+   daemon and exits with `Failed to bind IPv4`.
 
    ```bash
    # SQLite shared chain: keep the env var, or it opens LMDB and fails.
    XEQM_DB_BACKEND=sqlite /path/to/new/xeqm-d --non-interactive \
      --data-dir=/tmp/canary --shared-chain-dir=/var/lib/xeqm/shared \
-     --db-readonly --out-peers=0 --in-peers=0 --rpc-admin=127.0.0.1:19999
+     --db-readonly --out-peers=0 --in-peers=0 \
+     --p2p-bind-port=19998 --rpc-admin=127.0.0.1:19999
    ```
 
 2. **Back up the shared chain directory.** It is the one copy on the host.
