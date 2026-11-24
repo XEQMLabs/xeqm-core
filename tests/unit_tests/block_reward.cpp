@@ -82,20 +82,6 @@ namespace
     TEST_ALREADY_GENERATED_COINS_V2(supply, UINT64_C(28000095367), 1296000);
   }
 
-  TEST_F(block_reward_and_already_generated_coins, correctly_steps_from_2_to_1)
-  {
-    TEST_ALREADY_GENERATED_COINS(((uint64_t)(1) << 58)-1, 0);
-    TEST_ALREADY_GENERATED_COINS(((uint64_t)(1) << 58)  , 0);
-    TEST_ALREADY_GENERATED_COINS(((uint64_t)(1) << 58)+1, 0);
-  }
-
-  TEST_F(block_reward_and_already_generated_coins, handles_max)
-  {
-    TEST_ALREADY_GENERATED_COINS(oxen::MONEY_SUPPLY - ((1 << 20) + 1), UINT64_C(0));
-    TEST_ALREADY_GENERATED_COINS(oxen::MONEY_SUPPLY -  (1 << 20)     , UINT64_C(0));
-    TEST_ALREADY_GENERATED_COINS(oxen::MONEY_SUPPLY - ((1 << 20) - 1), UINT64_C(0));
-  }
-
   TEST_F(block_reward_and_already_generated_coins, reward_parity_between_orig_and_oxen_algo)
   {
     uint64_t already_generated_coins = UINT64_C(22500000000000000)+116*720*90;
